@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import Stripe from "stripe";
+import crypto from "crypto";
 import * as orderRepo from "../repositories/orderRepository.js";
 import * as restaurantRepo from "../repositories/restaurantRepository.js";
 import * as userRepo from "../repositories/userRepository.js";
@@ -9,7 +9,34 @@ import { computeUnitPrice } from "../utils/foodOptions.js";
 import { calculateShippingQuote, computeOrderTotals } from "../config/fees.js";
 import { recordAudit } from "../utils/auditLog.js";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const VNPAY_DEFAULT_URL = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
+
+const vnpayDate = (date) =>
+  new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+  }).formatToParts(date).reduce((value, part) =>
+    ["year", "month", "day", "hour", "minute", "second"].includes(part.type)
+      ? value + part.value : value, "");
+
+const signedVnpayQuery = (params, secret) => {
+  const query = new URLSearchParams(
+    Object.entries(params)
+      .filter(([, value]) => value !== undefined && value !== null && value !== "")
+      .sort(([a], [b]) => a.localeCompare(b))
+  ).toString();
+  return crypto.createHmac("sha512", secret).update(query, "utf8").digest("hex");
+};
+
+const vnpayConfig = () => {
+  const tmnCode = process.env.VNPAY_TMN_CODE;
+  const hashSecret = process.env.VNPAY_HASH_SECRET;
+  const returnUrl = process.env.VNPAY_RETURN_URL;
+  if (!tmnCode || !hashSecret || !returnUrl) {
+    throw new AppError("VNPay is not configured. Set VNPAY_TMN_CODE, VNPAY_HASH_SECRET and VNPAY_RETURN_URL.", 503);
+  }
+  return { tmnCode, hashSecret, returnUrl, paymentUrl: process.env.VNPAY_PAYMENT_URL || VNPAY_DEFAULT_URL };
+};
 
 export const quoteDelivery = async (user, { address, deliveryMethod }) => {
   const cart = await cartRepo.findByUserId(user._id);
@@ -28,8 +55,8 @@ export const quoteDelivery = async (user, { address, deliveryMethod }) => {
   });
 };
 
-export const placeOrder = async (user, orderData) => {
-  const { address, paymentMethod, paymentDetails, deliveryMethod } = orderData;
+export const placeOrder = async (user, orderData, clientIp) => {
+  const { address, paymentMethod, deliveryMethod } = orderData;
 
   if (!address) {
     throw new AppError("Shipping address is required.", 400);
@@ -126,70 +153,83 @@ export const placeOrder = async (user, orderData) => {
     shippingPrice: totals.deliveryFee,
     serviceFee: totals.serviceFee,
     restaurantId: restaurantId,
-    isPaid: paymentMethod === "PayPal" && paymentDetails ? true : false,
-    paidAt: paymentMethod === "PayPal" && paymentDetails ? Date.now() : null,
+    isPaid: false,
+    paidAt: null,
     orderStatus: "pending",
-    ...(paymentDetails?.paypalOrderId && { 
-      paypalOrderId: paymentDetails.paypalOrderId 
-    }),
-    ...(paymentDetails && {
-      paymentResult: {
-        id: paymentDetails.paypalOrderId,
-        status: paymentDetails.paypalStatus,
-        email_address: paymentDetails.paypalPayerId,
-      }
-    }),
   };
   const newOrder = await orderRepo.create(newOrderData);
   await cartRepo.deleteByUserId(user._id);
   await userRepo.updateById(user._id, { cart: [] });
 
-  let sessionUrl = null;
-  
-  if (paymentMethod === "Card") {
-    const line_items = orderItems.map((item) => ({
-      price_data: {
-        // VND is a Stripe zero-decimal currency: send the VND amount itself,
-        // never multiply it by 100.
-        currency: "vnd",
-        product_data: { name: item.name },
-        unit_amount: Math.round(item.price),
-      },
-      quantity: item.quantity,
-    }));
-    line_items.push({
-      price_data: {
-        currency: "vnd",
-        product_data: { name: "Delivery" },
-        unit_amount: Math.round(totals.deliveryFee),
-      },
-      quantity: 1,
-    });
-    const session = await stripe.checkout.sessions.create({
-      line_items,
-      mode: "payment",
-      success_url: `${process.env.FRONTEND_URL}/verify?success=true&orderId=${newOrder._id}`,
-      cancel_url: `${process.env.FRONTEND_URL}/verify?success=false&orderId=${newOrder._id}`,
-    });
-    sessionUrl = session.url;
+  let paymentUrl = null;
+  if (paymentMethod === "VNPAY") {
+    const { tmnCode, hashSecret, returnUrl, paymentUrl: gatewayUrl } = vnpayConfig();
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 15 * 60 * 1000);
+    const params = {
+      vnp_Amount: String(Math.round(totals.total) * 100),
+      vnp_Command: "pay",
+      vnp_CreateDate: vnpayDate(now),
+      vnp_CurrCode: "VND",
+      vnp_ExpireDate: vnpayDate(expiresAt),
+      vnp_IpAddr: clientIp || "127.0.0.1",
+      vnp_Locale: "vn",
+      vnp_OrderInfo: `Thanh toan don hang ${newOrder._id}`,
+      vnp_OrderType: "other",
+      vnp_ReturnUrl: returnUrl,
+      vnp_TmnCode: tmnCode,
+      vnp_TxnRef: String(newOrder._id),
+      vnp_Version: "2.1.0",
+    };
+    const secureHash = signedVnpayQuery(params, hashSecret);
+    paymentUrl = `${gatewayUrl}?${new URLSearchParams({ ...params, vnp_SecureHash: secureHash }).toString()}`;
+    await orderRepo.updateById(newOrder._id, { vnpTxnRef: params.vnp_TxnRef });
   }
 
   return {
     success: true,
-    ...(sessionUrl && { session_url: sessionUrl }),
+    ...(paymentUrl && { paymentUrl }),
     orderId: newOrder._id,
     restaurantId: restaurantId.toString(),
     deliveryMethod,
     message:
       paymentMethod === "COD"
         ? "Order placed with COD"
-        : paymentMethod === "PayPal"
-        ? "Order placed with PayPal"
+        : paymentMethod === "VNPAY"
+        ? "Order created. Redirecting to VNPay."
         : "Order created",
   };
 };
 
-export const verifyOrder = async (user, orderId, success) => {
+export const handleVnpayReturn = async (query) => {
+  const { hashSecret } = vnpayConfig();
+  const receivedHash = query.vnp_SecureHash;
+  const signedParams = Object.fromEntries(
+    Object.entries(query).filter(([key]) => key !== "vnp_SecureHash" && key !== "vnp_SecureHashType")
+  );
+  const calculatedHash = signedVnpayQuery(signedParams, hashSecret);
+  const hashIsValid = typeof receivedHash === "string" && receivedHash.length === calculatedHash.length &&
+    crypto.timingSafeEqual(Buffer.from(receivedHash, "utf8"), Buffer.from(calculatedHash, "utf8"));
+  const orderId = query.vnp_TxnRef;
+  const order = orderId && await orderRepo.findById(orderId);
+  const paid = hashIsValid && order && query.vnp_ResponseCode === "00" &&
+    Number(query.vnp_Amount) === Math.round(order.totalPrice) * 100;
+
+  if (paid && !order.isPaid) {
+    await orderRepo.updateById(orderId, {
+      isPaid: true,
+      paidAt: Date.now(),
+      vnpTransactionNo: query.vnp_TransactionNo || null,
+      paymentResult: { id: query.vnp_TransactionNo, status: query.vnp_ResponseCode, update_time: query.vnp_PayDate },
+    });
+  }
+  if (hashIsValid && order && !paid && !order.isPaid) {
+    await orderRepo.updateById(orderId, { orderStatus: "cancelled", reason: "VNPay payment failed or was cancelled" });
+  }
+  return { orderId, paid: Boolean(paid) };
+};
+
+export const verifyOrder = async (user, orderId) => {
   const order = await orderRepo.findById(orderId);
   if (!order) {
     throw new AppError("Order not found", 404);
@@ -198,16 +238,7 @@ export const verifyOrder = async (user, orderId, success) => {
     throw new AppError("Unauthorized: Not your order", 403);
   }
 
-  if (success === true || success === "true") {
-    await orderRepo.updateById(orderId, { isPaid: true, paidAt: Date.now() });
-    return { success: true, message: "Paid" };
-  } else {
-    await orderRepo.updateById(orderId, {
-      orderStatus: "cancelled",
-      reason: "Payment failed",
-    });
-    return { success: false, message: "Not Paid" };
-  }
+  return { success: order.isPaid, message: order.isPaid ? "Paid" : "Payment has not been confirmed" };
 };
 
 export const userOrders = async (userId) => {

@@ -1,118 +1,116 @@
-.floating-cart-bar {
+/* ============================================================
+   Apple Floating Sticky Bar (DESIGN-apple.md)
+   Parchment 80% with backdrop-filter blur(20px)
+   Height 64px · 12px 32px padding · Hairline top border
+   Running total in 17px body · Action Blue pill button
+   ============================================================ */
+
+.apple-floating-sticky-bar {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 60;
+  z-index: 99;
+  height: 64px;
+  background-color: rgba(245, 245, 247, 0.84);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-top: 1px solid var(--apple-hairline-soft);
   display: flex;
-  justify-content: center;
-  padding: 0 var(--container-pad) 20px;
-  pointer-events: none;
-  transform: translateY(140%);
+  align-items: center;
+  transform: translateY(100%);
   opacity: 0;
-  transition: transform 0.28s ease, opacity 0.28s ease;
+  pointer-events: none;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.24s ease;
 }
 
-.floating-cart-bar.visible {
+.apple-floating-sticky-bar.visible {
   transform: translateY(0);
   opacity: 1;
   pointer-events: auto;
 }
 
-.floating-cart-inner {
+.dark-mode .apple-floating-sticky-bar {
+  background-color: rgba(26, 26, 28, 0.84);
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+.apple-sticky-bar-inner {
+  width: 100%;
+  max-width: var(--container-max);
+  margin-inline: auto;
+  padding-inline: var(--container-pad);
   display: flex;
   align-items: center;
-  gap: 16px;
-  width: 100%;
-  max-width: 520px;
-  padding: 13px 16px 13px 18px;
-  border: 1px solid var(--accent-color);
-  border-radius: var(--radius-lg);
-  background: var(--card-bg);
-  box-shadow: var(--shadow-lg);
-  color: var(--text-color);
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.18s ease, border-color 0.18s ease;
+  justify-content: space-between;
 }
 
-.floating-cart-inner:hover {
-  background: var(--accent-bg);
+.apple-sticky-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
-.floating-cart-inner:focus-visible {
-  outline: 2px solid var(--accent-color);
-  outline-offset: 3px;
-}
-
-.floating-cart-icon {
+.apple-sticky-bag-icon {
   position: relative;
-  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: var(--apple-canvas);
+  border: 1px solid var(--apple-hairline);
+  display: flex;
   align-items: center;
-  color: var(--accent-color);
-  flex: none;
+  justify-content: center;
+  color: var(--apple-primary);
 }
 
-.floating-cart-count {
+.dark-mode .apple-sticky-bag-icon {
+  background-color: var(--apple-surface-tile-1);
+}
+
+.apple-sticky-bag-badge {
   position: absolute;
-  top: -7px;
-  right: -9px;
-  min-width: 17px;
-  height: 17px;
-  padding: 0 4px;
-  border-radius: 9px;
-  background: var(--accent-color);
+  top: -4px;
+  right: -4px;
+  background-color: var(--apple-primary);
   color: #fff;
-  font-size: 10px;
-  line-height: 17px;
-  text-align: center;
-}
-
-.floating-cart-text {
-  display: inline-flex;
+  font-size: 9px;
+  font-weight: 600;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  flex: 1;
-  font-size: 14px;
-  white-space: nowrap;
+  justify-content: center;
 }
 
-.floating-cart-sep {
-  color: var(--text-muted);
+.apple-sticky-bar-pricing {
+  display: flex;
+  flex-direction: column;
 }
 
-.floating-cart-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: none;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--accent-color);
+.apple-sticky-item-count {
+  font-family: var(--font-text);
+  font-size: 12px;
+  color: var(--apple-body-muted);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .floating-cart-bar {
-    transition: opacity 0.2s ease;
-    transform: none;
-  }
+/* 17px Weight 600 running total */
+.apple-sticky-total {
+  font-family: var(--font-text);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.374px;
+  color: var(--apple-ink);
 }
 
-@media (max-width: 480px) {
-  .floating-cart-inner {
-    gap: 12px;
-    padding: 12px 14px;
-  }
+.apple-sticky-cta {
+  padding: 9px 20px !important;
+  font-size: 14px !important;
+}
 
-  .floating-cart-text {
-    font-size: 13px;
-  }
-
-  /* Tight screens keep just the arrow. */
-  .floating-cart-cta-label {
+@media (max-width: 520px) {
+  .apple-sticky-item-count {
     display: none;
   }
 }

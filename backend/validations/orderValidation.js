@@ -20,10 +20,10 @@ export const placeOrderSchema = Joi.object({
   }),
   amount: Joi.number().optional(),
   paymentMethod: Joi.string()
-    .valid("COD", "Card", "PayPal")
+    .valid("COD", "VNPAY")
     .required()
     .messages({
-      "any.only": "Phương thức thanh toán không hợp lệ (COD, Card, PayPal)",
+      "any.only": "Phương thức thanh toán không hợp lệ (COD, VNPAY)",
       "any.required": "Phương thức thanh toán là bắt buộc",
     }),
   deliveryMethod: Joi.string().valid("shipper", "drone").required().messages({
@@ -33,7 +33,6 @@ export const placeOrderSchema = Joi.object({
   restaurantId: Joi.alternatives()
     .try(Joi.string().trim(), Joi.object())
     .optional(),
-  paymentDetails: Joi.object().allow(null),
 });
 
 export const deliveryQuoteSchema = Joi.object({
@@ -62,10 +61,4 @@ export const verifyOrderSchema = Joi.object({
   orderId: Joi.string().trim().required().messages({
     "any.required": "orderId là bắt buộc",
   }),
-  success: Joi.alternatives()
-    .try(Joi.boolean(), Joi.string().valid("true", "false"))
-    .required()
-    .messages({
-      "any.required": "success là bắt buộc",
-    }),
 });

@@ -3,7 +3,7 @@ import { emitCustomerOrderUpdate } from "../utils/orderRealtime.js";
 
 export const placeOrder = async (req, res) => {
   try {
-    const result = await orderService.placeOrder(req.user, req.body);
+    const result = await orderService.placeOrder(req.user, req.body, req.ip);
 
     const restaurantId = result.restaurantId;
     if (req.app.get("io") && restaurantId) {
@@ -46,14 +46,25 @@ export const quoteDelivery = async (req, res) => {
 
 export const verifyOrder = async (req, res) => {
   try {
-    const { orderId, success } = req.body;
-    const isSuccess = success === true || success === "true";
-    const result = await orderService.verifyOrder(req.user, orderId, isSuccess);
+    const result = await orderService.verifyOrder(req.user, req.body.orderId);
     res.json(result);
   } catch (error) {
     res
       .status(error.statusCode || 500)
       .json({ success: false, message: error.message });
+  }
+};
+
+export const vnpayReturn = async (req, res) => {
+  try {
+    const result = await orderService.handleVnpayReturn(req.query);
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const redirect = new URL("/verify", frontendUrl);
+    if (result.orderId) redirect.searchParams.set("orderId", result.orderId);
+    redirect.searchParams.set("vnpay", result.paid ? "success" : "failed");
+    res.redirect(302, redirect.toString());
+  } catch {
+    res.status(400).send("Invalid VNPay payment response.");
   }
 };
 

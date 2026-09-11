@@ -116,7 +116,7 @@ const orderSchema = new mongoose.Schema(
     paymentMethod: {
       type: String,
       // required: true,
-      enum: ["Card", "COD", "PayPal"],
+      enum: ["COD", "VNPAY"],
     },
     paymentResult: {
       id: String,
@@ -169,16 +169,12 @@ const orderSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    stripeSessionId: String,
+    vnpTxnRef: { type: String, default: null },
+    vnpTransactionNo: { type: String, default: null },
     restaurantId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Restaurant",
       required: true,
-    },
-    paypalOrderId: {
-      // THÊM: Lưu trữ Order ID từ PayPal
-      type: String,
-      default: null,
     },
     qrCode: {
       type: String,

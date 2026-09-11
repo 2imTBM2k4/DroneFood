@@ -7,7 +7,7 @@ export const registerSchema = Joi.object({
     "string.max": "Tên không được quá 50 ký tự",
     "any.required": "Tên là bắt buộc",
   }),
-  email: Joi.string().trim().email().required().messages({
+  email: Joi.string().trim().lowercase().email().required().messages({
     "string.email": "Email không hợp lệ",
     "any.required": "Email là bắt buộc",
   }),
@@ -34,7 +34,7 @@ export const registerSchema = Joi.object({
 });
 
 export const loginSchema = Joi.object({
-  email: Joi.string().trim().email().required().messages({
+  email: Joi.string().trim().lowercase().email().required().messages({
     "string.email": "Email không hợp lệ",
     "any.required": "Email là bắt buộc",
   }),

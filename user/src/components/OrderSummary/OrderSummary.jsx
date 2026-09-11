@@ -1,4 +1,4 @@
-import React, { useContext, useState } from "react";
+import { useContext, useState } from "react";
 import { ChevronUp } from "lucide-react";
 import "./OrderSummary.css";
 import { StoreContext } from "../../context/StoreContext";

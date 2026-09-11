@@ -3,6 +3,7 @@ import {
   placeOrder,
   quoteDelivery,
   verifyOrder,
+  vnpayReturn,
   userOrders,
   listOrders,
   updateStatus,
@@ -20,6 +21,7 @@ import {
 const router = express.Router();
 
 router.post("/quote", protect, validate(deliveryQuoteSchema), quoteDelivery);
+router.get("/vnpay-return", vnpayReturn);
 router.post("/place", protect, validate(placeOrderSchema), placeOrder);
 router.post("/verify", protect, validate(verifyOrderSchema), verifyOrder);
 router.get("/userorders", protect, userOrders);

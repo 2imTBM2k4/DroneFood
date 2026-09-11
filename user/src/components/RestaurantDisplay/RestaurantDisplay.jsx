@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import { useContext } from 'react';
 import { Store } from 'lucide-react';
 import './RestaurantDisplay.css';
 import { StoreContext } from '../../context/StoreContext';

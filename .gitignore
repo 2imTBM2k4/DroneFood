@@ -125,3 +125,6 @@ dist
 
 # Claude Code local config (dev-specific, không chia sẻ)
 .claude/
+
+# Agent skills & configs
+.agents/

@@ -1,4 +1,4 @@
-import React, { useContext } from "react";
+import { useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import { UtensilsCrossed } from "lucide-react";
 import "./FoodDisplay.css";
@@ -69,6 +69,7 @@ const FoodDisplay = ({
               description={item.description}
               price={item.price}
               image={item.image}
+              optionGroups={item.optionGroups || []}
             />
           </Reveal>
         ))}

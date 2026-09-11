@@ -1,142 +1,145 @@
-.footer {
-  background-color: var(--card-bg);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 15px;
-  padding: 56px 6vw 28px;
-  margin-top: 80px;
-  border-top: 1px solid var(--accent-color);
-}
+/* ============================================================
+   Apple Footer (DESIGN-apple.md)
+   Parchment canvas (#f5f5f7) · 48px vertical padding
+   Dense link columns with relaxed line-height
+   13px / 600 column heads · 12px / 400 legal fine print
+   ============================================================ */
 
-.footer-content {
+.apple-footer {
+  background-color: var(--apple-canvas-parchment);
+  color: var(--apple-ink-muted-80);
+  padding: 48px 0 32px;
   width: 100%;
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
-  gap: 60px;
+  border-top: 1px solid var(--apple-hairline-soft);
+  margin-top: 48px;
 }
 
-.footer-content-left,
-.footer-content-right,
-.footer-content-center {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
+.dark-mode .apple-footer {
+  background-color: #1a1a1c;
+  border-top-color: rgba(255, 255, 255, 0.08);
 }
 
-.footer-logo {
-  font-family: var(--font-serif);
-  font-size: 26px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  color: var(--text-color);
+.apple-footer-inner {
+  max-width: 980px;
+  margin-inline: auto;
+  padding-inline: var(--container-pad);
 }
 
-.footer-content-left p {
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--text-secondary);
-  max-width: 320px;
-}
-
-.footer-content-left li,
-.footer-content-right li,
-.footer-content-center li {
-  list-style: none;
-  margin-bottom: 6px;
-  cursor: default;
-  font-size: 14px;
-  color: var(--text-secondary);
-  transition: color 0.2s ease;
-}
-
-.footer-content-center li a {
-  color: var(--text-secondary);
-  transition: color 0.2s ease;
-}
-
-.footer-content-center li a:hover {
-  color: var(--accent-color);
-}
-
-.footer-content-right h2,
-.footer-content-center h2 {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  margin-bottom: 10px;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-}
-
-.footer-social-icons {
-  display: flex;
-  gap: 12px;
-  margin-top: 4px;
-}
-
-.footer-social-icons a {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: transform 0.2s ease, color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
-}
-
-.footer-social-icons a img {
-  width: 18px;
-  height: 18px;
-  opacity: 0.75;
-  filter: brightness(0);
-  transition: opacity 0.2s ease, filter 0.2s ease;
-}
-
-.dark-mode .footer-social-icons a img {
-  filter: brightness(0) invert(1);
-}
-
-.footer-social-icons a:hover {
-  transform: translateY(-3px);
-  background-color: var(--accent-color);
-  border-color: var(--accent-color);
-}
-
-.footer-social-icons a:hover img {
-  opacity: 1;
-  filter: brightness(0) invert(1);
-}
-
-.footer hr {
-  width: 100%;
+.apple-footer-divider {
   height: 1px;
-  margin: 15px 0;
-  background-color: var(--border-color);
-  border: none;
+  background-color: var(--apple-hairline-soft);
+  margin: 16px 0;
 }
 
-.footer-copyright {
+/* 4-column directory layout */
+.apple-footer-directory {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 32px;
+  padding: 8px 0 12px;
+}
+
+/* 13px / 600 Caption-Strong Header */
+.apple-footer-heading {
+  font-family: var(--font-text);
   font-size: 13px;
-  text-align: center;
-  color: var(--text-secondary);
+  font-weight: 600;
+  letter-spacing: -0.224px;
+  color: var(--apple-ink);
+  margin-bottom: 10px;
 }
 
-@media (max-width: 750px) {
-  .footer-content {
-    grid-template-columns: 1fr;
-    gap: 30px;
+.apple-footer-links {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Relaxed leading for clean readability */
+.apple-footer-links li a {
+  font-family: var(--font-text);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 2.1;
+  color: var(--apple-ink-muted-80);
+  transition: color 0.18s ease;
+  white-space: nowrap;
+}
+
+.apple-footer-links li a:hover {
+  color: var(--apple-primary);
+  text-decoration: underline;
+}
+
+/* 12px / 400 Legal bar */
+.apple-footer-legal-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-family: var(--font-text);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.0;
+  letter-spacing: -0.12px;
+  color: var(--apple-ink-muted-48);
+  padding-top: 8px;
+}
+
+.apple-legal-links {
+  display: flex;
+  align-items: center;
+  list-style: none;
+  gap: 14px;
+}
+
+.apple-legal-links li {
+  display: flex;
+  align-items: center;
+}
+
+.apple-legal-links li:not(:last-child)::after {
+  content: "|";
+  margin-left: 14px;
+  color: var(--apple-hairline);
+}
+
+.apple-legal-links li a {
+  color: var(--apple-ink-muted-48);
+  transition: color 0.18s ease;
+}
+
+.apple-legal-links li a:hover {
+  color: var(--apple-ink);
+  text-decoration: underline;
+}
+
+.apple-legal-country {
+  color: var(--apple-ink);
+  font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  .apple-footer-directory {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
   }
 
-  .footer-content-left,
-  .footer-content-right,
-  .footer-content-center {
-    align-items: center;
-    text-align: center;
+  .apple-footer-legal-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .apple-legal-links {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .apple-footer-directory {
+    grid-template-columns: 1fr;
   }
 }

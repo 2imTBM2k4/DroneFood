@@ -1,11 +1,46 @@
 @import "../../shared/tokens.css";
 
-/* Reusable responsive container — centers content and adds fluid side padding */
+/* Apple Museum-like Gallery Layout Container */
 .container {
   width: 100%;
   max-width: var(--container-max);
   margin-inline: auto;
   padding-inline: var(--container-pad);
+}
+
+.container-narrow {
+  width: 100%;
+  max-width: 980px;
+  margin-inline: auto;
+  padding-inline: var(--container-pad);
+}
+
+.container-wide {
+  width: 100%;
+  max-width: 1440px;
+  margin-inline: auto;
+  padding-inline: var(--container-pad);
+}
+
+/* Edge-to-edge section container */
+.section-tile {
+  width: 100%;
+  padding-block: var(--space-section);
+}
+
+.section-tile.light {
+  background-color: var(--apple-canvas);
+  color: var(--apple-ink);
+}
+
+.section-tile.parchment {
+  background-color: var(--apple-canvas-parchment);
+  color: var(--apple-ink);
+}
+
+.section-tile.dark {
+  background-color: var(--apple-surface-tile-1);
+  color: var(--apple-body-on-dark);
 }
 
 @keyframes fadeIn {

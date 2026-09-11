@@ -35,7 +35,7 @@ const StoreContextProvider = (props) => {
   // direct hit on /checkout bounces before the session is restored.
   const [isHydrated, setIsHydrated] = useState(false);
 
-  const fetchFoodList = async () => {
+  const fetchFoodList = useCallback(async () => {
     try {
       setIsLoadingFoods(true);
       const res = await axios.get(`${url}/api/food/list`);
@@ -49,9 +49,9 @@ const StoreContextProvider = (props) => {
     } finally {
       setIsLoadingFoods(false);
     }
-  };
+  }, [url]);
 
-  const fetchRestaurantList = async () => {
+  const fetchRestaurantList = useCallback(async () => {
     try {
       setIsLoadingRestaurants(true);
       setRestaurantError(null);
@@ -67,11 +67,11 @@ const StoreContextProvider = (props) => {
     } finally {
       setIsLoadingRestaurants(false);
     }
-  };
+  }, [url]);
 
   // The rate card comes from the server. A delivery price is intentionally not
   // known until checkout has both delivery coordinates and a chosen method.
-  const fetchFees = async () => {
+  const fetchFees = useCallback(async () => {
     try {
       const res = await axios.get(`${url}/api/config/fees`);
       if (res.data.success) {
@@ -87,7 +87,7 @@ const StoreContextProvider = (props) => {
     } catch (err) {
       console.error("Fetch fees error:", err);
     }
-  };
+  }, [url]);
 
   const fetchSingleFood = async (itemId) => {
     const res = await axios.get(`${url}/api/food/${itemId}`);
@@ -98,17 +98,17 @@ const StoreContextProvider = (props) => {
   };
 
   /** Every cart endpoint returns the whole cart; this is the single sink. */
-  const applyCartResponse = (data) => {
+  const applyCartResponse = useCallback((data) => {
     setCartLines(data?.items || []);
     setCartRestaurantId(data?.restaurantId || null);
-  };
+  }, []);
 
-  const clearLocalCart = () => {
+  const clearLocalCart = useCallback(() => {
     setCartLines([]);
     setCartRestaurantId(null);
-  };
+  }, []);
 
-  const loadCartData = async (authToken) => {
+  const loadCartData = useCallback(async (authToken) => {
     try {
       const res = await axios.get(`${url}/api/cart/get`, {
         headers: { token: authToken },
@@ -122,9 +122,9 @@ const StoreContextProvider = (props) => {
       console.error("Load cart error:", err);
       clearLocalCart();
     }
-  };
+  }, [applyCartResponse, clearLocalCart, url]);
 
-  const fetchUserInfo = async (authToken) => {
+  const fetchUserInfo = useCallback(async (authToken) => {
     try {
       const res = await axios.get(`${url}/api/user/me`, {
         headers: { token: authToken },
@@ -133,7 +133,7 @@ const StoreContextProvider = (props) => {
     } catch (err) {
       console.error(err);
     }
-  };
+  }, [url]);
 
   /**
    * Add a dish, optionally with option picks and a kitchen note. The server
@@ -253,7 +253,7 @@ const StoreContextProvider = (props) => {
       }
     }
     init();
-  }, []);
+  }, [fetchFees, fetchFoodList, fetchRestaurantList]);
 
   // `watchPosition` continues to report movement after the initial browser
   // permission prompt. Starting it at app level means both the home page and
@@ -324,7 +324,7 @@ const StoreContextProvider = (props) => {
       localStorage.removeItem("cartItems");
       localStorage.removeItem("cartRestaurantId");
     }
-  }, [token]);
+  }, [clearLocalCart, fetchUserInfo, loadCartData, token]);
 
   const contextValue = {
     food_list,

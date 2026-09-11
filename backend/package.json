@@ -43,5 +43,9 @@
     "mongodb-memory-server": "^11.2.0",
     "supertest": "^7.2.2",
     "vitest": "^4.1.10"
+  },
+  "allowScripts": {
+    "bcrypt@5.1.1": true,
+    "mongodb-memory-server@11.2.0": true
   }
 }

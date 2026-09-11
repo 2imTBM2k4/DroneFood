@@ -1,18 +1,18 @@
-import React, { useEffect } from "react";
+import { useCallback, useEffect, useContext } from "react";
 import "./Verify.css";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useContext } from "react";
 import { StoreContext } from "../../context/StoreContext";
 import axios from "axios";
+import { toast } from "react-toastify";
 
 const Verify = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const success = searchParams.get("success");
   const orderId = searchParams.get("orderId");
   const { url, token } = useContext(StoreContext); // THÊM: token
   const navigate = useNavigate();
 
-  const verifyPayment = async () => {
+  const verifyPayment = useCallback(async () => {
     if (!orderId) {
       toast.error("Invalid order");
       navigate("/");
@@ -44,13 +44,13 @@ const Verify = () => {
       toast.error("Verification error");
       navigate("/");
     }
-  };
+  }, [navigate, orderId, success, token, url]);
 
   useEffect(() => {
     if (orderId) {
       verifyPayment();
     }
-  }, [orderId]);
+  }, [orderId, verifyPayment]);
 
   return (
     <div className="verify">

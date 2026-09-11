@@ -1,26 +1,65 @@
-.home-section {
-  margin-top: clamp(32px, 5vw, 56px);
+/* ============================================================
+   Apple Home Flow (DESIGN-apple.md)
+   Clean, balanced spacing · Alternating Light / Parchment
+   Zero clutter · High photography focus
+   ============================================================ */
+
+.apple-home-flow {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
-.home-section-head {
-  margin-bottom: 22px;
+/* ── Parchment Section (#f5f5f7) ──────────────────────────── */
+.apple-tile-parchment {
+  background-color: var(--apple-canvas-parchment);
+  color: var(--apple-ink);
+  padding: 56px 0 64px;
+  border-top: 1px solid var(--apple-hairline-soft);
+  border-bottom: 1px solid var(--apple-hairline-soft);
 }
 
-.home-section-title,
-.home-section h2 {
-  font-family: var(--font-serif);
-  font-weight: 300;
-  font-size: clamp(24px, 3.4vw, 38px);
-  line-height: 1.1;
-  letter-spacing: 0.005em;
-  color: var(--text-color);
+.dark-mode .apple-tile-parchment {
+  background-color: #19191b;
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.apple-section-header {
+  margin-bottom: 32px;
   text-align: left;
-  margin: 0;
 }
 
-.home-section-sub {
-  margin-top: 6px;
-  font-family: var(--font-sans);
-  font-size: 15px;
-  color: var(--text-secondary);
+/* 34px / 600 Headline with -0.015em tracking */
+.apple-tile-headline {
+  font-family: var(--font-display);
+  font-size: clamp(26px, 3.4vw, 36px);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  color: var(--apple-ink);
+  margin-bottom: 6px;
+}
+
+/* 16px Body Subcopy */
+.apple-tile-sub {
+  font-family: var(--font-text);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: -0.2px;
+  color: var(--apple-body-muted);
+}
+
+/* ── Light Section (#ffffff) ──────────────────────────────── */
+.apple-tile-light {
+  background-color: var(--apple-canvas);
+  color: var(--apple-ink);
+  padding: 56px 0 64px;
+}
+
+@media (max-width: 640px) {
+  .apple-tile-parchment,
+  .apple-tile-light {
+    padding: 40px 0;
+  }
 }

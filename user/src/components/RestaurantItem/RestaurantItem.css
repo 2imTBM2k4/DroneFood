@@ -1,177 +1,183 @@
-.restaurant-item {
+/* ============================================================
+   Apple Store Utility Card — RestaurantItem (DESIGN-apple.md)
+   White canvas · Hairline border (1px) · 18px radius (rounded.lg)
+   24px padding · Product shadow on image · NO shadow on card
+   17px / 600 title · Action Blue link with Chevron
+   ============================================================ */
+
+.apple-store-utility-card.restaurant-item {
   width: 100%;
-  margin: auto;
+  background-color: var(--apple-canvas);
+  border: 1px solid var(--apple-hairline);
   border-radius: var(--radius-lg);
-  background-color: var(--card-bg);
-  border: 1px solid var(--border-color);
-  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
-  animation: fadeIn 0.5s ease;
-  overflow: hidden;
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
   cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  box-shadow: none; /* No shadow on card */
 }
 
-.restaurant-item:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--card-shadow-hover);
-  border-color: var(--accent-border);
+.apple-store-utility-card.restaurant-item:hover {
+  border-color: rgba(0, 0, 0, 0.22);
 }
 
-.restaurant-item-img-container {
+.dark-mode .apple-store-utility-card.restaurant-item:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.apple-store-utility-card.restaurant-item:focus-visible {
+  border-color: var(--apple-primary-focus);
+  outline: 2px solid var(--apple-primary-focus);
+  outline-offset: 2px;
+}
+
+/* Restaurant browse can render without the dish-menu bundle, so keep its
+   layout primitives local instead of depending on FoodItem's global CSS. */
+.restaurant-item .apple-card-image-wrapper {
   position: relative;
   width: 100%;
+  aspect-ratio: 4 / 3;
+  margin-bottom: 16px;
   overflow: hidden;
+  border-radius: var(--radius-sm);
+  background-color: var(--apple-canvas-parchment);
 }
 
-.restaurant-item-image {
-  width: 100%;
-  aspect-ratio: 16 / 10;
-  object-fit: cover;
-  transition: transform 0.4s ease;
+.restaurant-item .apple-card-image {
   display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  transition: transform 0.25s ease;
 }
 
-.restaurant-item:hover .restaurant-item-image {
-  transform: scale(1.06);
+.restaurant-item:hover .apple-card-image {
+  transform: scale(1.03);
 }
 
-/* Delivery ETA badge — frosted glass overlay */
-.restaurant-eta-badge {
+.restaurant-item .apple-card-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.restaurant-item .apple-card-header,
+.restaurant-item .apple-card-footer {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.restaurant-item .apple-card-header {
+  margin-bottom: 6px;
+}
+
+.restaurant-item .apple-card-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-text);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.24;
+  letter-spacing: -0.02em;
+  color: var(--apple-ink);
+}
+
+.restaurant-item .apple-card-rating {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  color: var(--apple-body-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.restaurant-item .apple-card-rating svg {
+  color: #ff9500;
+}
+
+.restaurant-item .apple-card-footer {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--apple-hairline-soft);
+}
+
+.restaurant-item .apple-card-footer .apple-text-link {
+  color: var(--apple-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Translucent ETA pill floating over photography */
+.apple-eta-chip {
   position: absolute;
   bottom: 10px;
   left: 10px;
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 9px;
-  border-radius: var(--radius);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-color);
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-
-.restaurant-open-badge {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  padding: 4px 9px;
-  border-radius: var(--radius);
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--success-text);
-  background: var(--success-bg);
-}
-
-.restaurant-item-info {
-  padding: 16px 18px 18px;
-}
-
-.restaurant-name-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.restaurant-name {
-  font-family: var(--font-serif);
-  font-size: 21px;
-  font-weight: 500;
-  color: var(--text-color);
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.restaurant-rating {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-  font-family: var(--font-mono);
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-text);
   font-size: 11px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--accent-color);
+  font-weight: 500;
+  color: var(--apple-ink);
+  background: var(--apple-surface-chip-translucent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
-.restaurant-address,
-.restaurant-phone {
-  display: flex;
-  align-items: flex-start;
-  gap: 7px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.5;
-  margin-bottom: 6px;
-}
-
-/* Distance + ETA — the GrabFood-style delivery meta line. */
-.restaurant-delivery-meta {
+.apple-restaurant-meta {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 8px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  color: var(--text-color);
+  margin-bottom: 6px;
+  font-family: var(--font-text);
+  font-size: 13px;
+  color: var(--apple-body-muted);
 }
 
-.restaurant-delivery-meta .restaurant-meta-icon {
-  margin-top: 0;
-  color: var(--accent-color);
+.apple-meta-zap {
+  color: var(--apple-primary);
+  flex-shrink: 0;
 }
 
-.restaurant-meta-dot {
-  color: var(--text-muted);
+.apple-meta-dot {
+  color: var(--apple-hairline);
 }
 
-.restaurant-address span,
-.restaurant-phone span {
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
+.apple-restaurant-address {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--apple-body-muted);
+  line-height: 1.4;
+  margin-bottom: 16px;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
 }
 
-.restaurant-meta-icon {
+.apple-meta-pin {
   flex-shrink: 0;
-  margin-top: 2px;
-  color: var(--text-muted);
+  color: var(--apple-body-muted);
 }
 
-.restaurant-view-menu {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-light);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+.apple-status-text {
+  font-size: 13px;
+  color: var(--success-text);
   font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--accent-color);
-}
-
-.restaurant-view-menu svg {
-  transition: transform 0.2s ease;
-}
-
-.restaurant-item:hover .restaurant-view-menu svg {
-  transform: translateX(4px);
 }

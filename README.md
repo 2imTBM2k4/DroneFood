@@ -166,8 +166,8 @@ cancelled  cancelled
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/2imTBM2k4/CNPM.git
-cd CNPM
+git clone https://github.com/2imTBM2k4/DroneFood.git
+cd DroneFood
 ```
 
 ### 2. Setup Backend

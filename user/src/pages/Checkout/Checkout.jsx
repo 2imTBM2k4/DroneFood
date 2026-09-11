@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-toastify";
@@ -219,7 +219,7 @@ const Checkout = () => {
     setStep(1);
   };
 
-  const placeOrder = async (paymentDetails = null) => {
+  const placeOrder = useCallback(async (paymentDetails = null) => {
     setPlacing(true);
     try {
       const response = await axios.post(
@@ -257,7 +257,7 @@ const Checkout = () => {
     } finally {
       setPlacing(false);
     }
-  };
+  }, [address, clearCart, deliveryMethod, navigate, paymentMethod, token, url]);
 
   // Load the PayPal SDK once, the first time PayPal is selected.
   useEffect(() => {
@@ -306,7 +306,7 @@ const Checkout = () => {
         /* already torn down with the node */
       }
     };
-  }, [step, paymentMethod, sdkReady, total]);
+  }, [step, paymentMethod, sdkReady, total, placeOrder]);
 
   const goToStep = (target) => {
     // Never jump forward past a step that isn't satisfied yet.
