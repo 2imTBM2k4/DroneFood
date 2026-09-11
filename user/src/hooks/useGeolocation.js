@@ -19,43 +19,71 @@ const messageForError = (error) => {
   }
 };
 
+/** Request one browser location fix with the supplied accuracy preference. */
+const requestPosition = (options) =>
+  new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, options);
+  });
+
 export default function useGeolocation() {
   const [loading, setLoading] = useState(false);
   const [coords, setCoords] = useState(null);
   const [error, setError] = useState(null);
 
-  const locate = useCallback(() => {
-    return new Promise((resolve) => {
-      if (!("geolocation" in navigator)) {
-        const message = "Geolocation is not supported by this browser.";
-        setError(message);
-        resolve({ error: message });
-        return;
+  const locate = useCallback(async () => {
+    if (!("geolocation" in navigator)) {
+      const message = "Geolocation is not supported by this browser.";
+      setError(message);
+      return { error: message };
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      let position;
+      let usedApproximateLocation = false;
+
+      try {
+        // GPS can take a long time indoors. Give it a short opportunity first
+        // so a precise delivery pin remains the preferred result.
+        position = await requestPosition({
+          enableHighAccuracy: true,
+          timeout: 6000,
+          maximumAge: 0,
+        });
+      } catch (highAccuracyError) {
+        if (
+          highAccuracyError.code !== highAccuracyError.TIMEOUT &&
+          highAccuracyError.code !== highAccuracyError.POSITION_UNAVAILABLE
+        ) {
+          throw highAccuracyError;
+        }
+
+        // A network-based fix is normally much quicker. The map still lets
+        // customers refine its pin before they submit the delivery address.
+        position = await requestPosition({
+          enableHighAccuracy: false,
+          timeout: 5000,
+          maximumAge: 60000,
+        });
+        usedApproximateLocation = true;
       }
 
-      setLoading(true);
-      setError(null);
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const next = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-            accuracy: position.coords.accuracy,
-          };
-          setCoords(next);
-          setLoading(false);
-          resolve({ coords: next });
-        },
-        (geoError) => {
-          const message = messageForError(geoError);
-          setError(message);
-          setLoading(false);
-          resolve({ error: message });
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      );
-    });
+      const next = {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+      };
+      setCoords(next);
+      return { coords: next, usedApproximateLocation };
+    } catch (geoError) {
+      const message = messageForError(geoError);
+      setError(message);
+      return { error: message };
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   return { loading, coords, error, locate };

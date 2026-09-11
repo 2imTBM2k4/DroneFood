@@ -70,7 +70,7 @@ function CustomerApp() {
   const [selectedFood, setSelectedFood] = useState<Food | null>(null);
   const [optionPicks, setOptionPicks] = useState<Record<string, string[]>>({});
   const [address, setAddress] = useState<Address>(defaultAddress);
-  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("drone");
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("shipper");
   const [deliveryQuotes, setDeliveryQuotes] = useState<Partial<Record<DeliveryMethod, Quote>>>({});
   const [quoting, setQuoting] = useState(false);
   const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
@@ -165,7 +165,9 @@ function CustomerApp() {
     const timer = setTimeout(async () => {
       try {
         setQuoting(true);
-        const methods: DeliveryMethod[] = ["drone", "shipper"];
+        // This mobile checkout currently offers COD only, which is restricted
+        // to human shippers by the payment policy.
+        const methods: DeliveryMethod[] = ["shipper"];
         const results = await Promise.allSettled(methods.map((method) => axios.post<{ data: Quote }>(`${API_URL}/api/order/quote`, { address: { ...address, lat, lng }, deliveryMethod: method }, { headers: authHeaders(token) })));
         if (!active) return;
         const next: Partial<Record<DeliveryMethod, Quote>> = {};
@@ -391,10 +393,9 @@ function CheckoutScreen({ cart, loading, address, quotes, selectedMethod, quotin
     <SecondaryButton label="Dùng vị trí GPS hiện tại" onPress={onLocation} disabled={working} />
     <LocationPreview address={address} onCoordinates={onCoordinates} />
     <Text style={styles.sectionTitle}>Phương thức giao hàng</Text>
-    <DeliveryMethodChoice method="drone" title="Drone" detail="Đường chim bay · 7.000 ₫/km" quote={quotes.drone} active={selectedMethod === "drone"} loading={quoting} onPress={() => onMethod("drone")} />
     <DeliveryMethodChoice method="shipper" title="Shipper" detail="Đường bộ · 5.000 ₫/km" quote={quotes.shipper} active={selectedMethod === "shipper"} loading={quoting} onPress={() => onMethod("shipper")} />
     {quotes[selectedMethod] ? <View style={styles.quote}><Text style={styles.cardTitle}>Tổng COD: {formatVnd(cart.subtotal + quotes[selectedMethod]!.shippingPrice)}</Text><Text>Phí giao: {formatVnd(quotes[selectedMethod]!.shippingPrice)} · {quotes[selectedMethod]!.billedDistanceKm.toFixed(3)} km</Text></View> : <Text style={styles.hint}>Hoàn thiện địa chỉ và vị trí để hệ thống tự tính phí giao.</Text>}
-    <PrimaryButton label={`Xác nhận đặt đơn COD bằng ${selectedMethod === "drone" ? "Drone" : "Shipper"}`} onPress={onPlace} disabled={working || quoting || !quotes[selectedMethod]} />
+    <PrimaryButton label="Xác nhận đặt đơn COD bằng Shipper" onPress={onPlace} disabled={working || quoting || !quotes[selectedMethod]} />
   </ScrollView>;
 }
 

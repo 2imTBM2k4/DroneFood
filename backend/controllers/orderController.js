@@ -1,18 +1,33 @@
 import * as orderService from "../services/orderService.js";
 import { emitCustomerOrderUpdate } from "../utils/orderRealtime.js";
 
+const notifyPaidOrder = async (req, result) => {
+  if (!result.newlyPaid || !req.app.get("io")) return;
+  const { Order } = await import("../models/index.cjs");
+  const { nearbyAvailableShipperIds } = await import("../services/shipperService.js");
+  const order = await Order.findById(result.orderId).select("restaurantId deliveryMethod pickupLocation shipperAssignmentDeadlineAt");
+  if (!order) return;
+  req.app.get("io").to(`restaurant_${order.restaurantId}`).emit("newOrder", result.orderId);
+  if (order.deliveryMethod === "shipper") {
+    const shipperIds = await nearbyAvailableShipperIds(order.pickupLocation);
+    shipperIds.forEach((shipperId) => req.app.get("io").to(`shipper_${shipperId}`).emit("shipperOrderOffer", {
+      orderId: result.orderId, expiresAt: order.shipperAssignmentDeadlineAt,
+    }));
+  }
+};
+
 export const placeOrder = async (req, res) => {
   try {
     const result = await orderService.placeOrder(req.user, req.body, req.ip);
 
     const restaurantId = result.restaurantId;
-    if (req.app.get("io") && restaurantId) {
+    if (result.paymentMethod !== "VNPAY" && req.app.get("io") && restaurantId) {
       req.app
         .get("io")
         .to(`restaurant_${restaurantId}`)
         .emit("newOrder", result.orderId);
     }
-    if (result.deliveryMethod === "shipper" && req.app.get("io")) {
+    if (result.paymentMethod !== "VNPAY" && result.deliveryMethod === "shipper" && req.app.get("io")) {
       const { Order } = await import("../models/index.cjs");
       const { nearbyAvailableShipperIds } = await import("../services/shipperService.js");
       const order = await Order.findById(result.orderId).select("pickupLocation shipperAssignmentDeadlineAt");
@@ -58,6 +73,7 @@ export const verifyOrder = async (req, res) => {
 export const vnpayReturn = async (req, res) => {
   try {
     const result = await orderService.handleVnpayReturn(req.query);
+    await notifyPaidOrder(req, result);
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
     const redirect = new URL("/verify", frontendUrl);
     if (result.orderId) redirect.searchParams.set("orderId", result.orderId);
@@ -65,6 +81,16 @@ export const vnpayReturn = async (req, res) => {
     res.redirect(302, redirect.toString());
   } catch {
     res.status(400).send("Invalid VNPay payment response.");
+  }
+};
+
+export const vnpayIpn = async (req, res) => {
+  try {
+    const result = await orderService.handleVnpayIpn(req.query);
+    await notifyPaidOrder(req, result);
+    res.json({ RspCode: result.RspCode, Message: result.Message });
+  } catch {
+    res.json({ RspCode: "99", Message: "Unknown error" });
   }
 };
 

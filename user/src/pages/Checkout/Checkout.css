@@ -257,12 +257,12 @@
   color: var(--text-color);
 }
 
-.checkout-paypal {
+.checkout-vnpay {
   flex: 1 1 260px;
   min-width: 240px;
 }
 
-.checkout-paypal-loading {
+.checkout-payment-message {
   margin: 0;
   font-size: 13px;
   color: var(--text-secondary);

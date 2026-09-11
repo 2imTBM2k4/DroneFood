@@ -12,10 +12,12 @@ import {
   Alert,
   AppState,
   FlatList,
+  Linking,
   Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -32,9 +34,19 @@ type Coordinates = { latitude: number; longitude: number };
 type Registration = { name: string; email: string; phone: string; address: string; password: string };
 type Profile = { status: ShipperStatus; approvalStatus: "pending" | "approved" | "rejected"; vehicleType: string; locationUpdatedAt?: string; currentOrder?: string | null };
 type User = { name: string; email: string; role: string };
+type WalletSummary = {
+  depositBalance: number; earningsBalance: number; reservedCodLiability: number;
+  warningThreshold: number; lockThreshold: number; isEarlyWarning: boolean; isAcceptanceLocked: boolean;
+};
+type WalletTransaction = { _id: string; amount: number; transactionType: string; createdAt: string };
+type EarningsReport = {
+  totalEarned: number;
+  daily: { period: string; amount: number; deliveries: number }[];
+  monthly: { period: string; amount: number; deliveries: number }[];
+};
 type Order = {
   _id: string; orderStatus: "pending" | "preparing" | "delivering" | "delivered" | "cancelled";
-  totalPrice: number; shippingPrice: number; createdAt: string; deliveryMethod: "shipper";
+  totalPrice: number; shippingPrice: number; paymentMethod: "COD" | "VNPAY"; createdAt: string; deliveryMethod: "shipper";
   shippingAddress: { fullName: string; address: string; city: string; state: string; phone: string; lat?: number; lng?: number };
   restaurantId?: { name: string; address: string; phone?: string; lat?: number; lng?: number };
   orderItems: { name: string; quantity: number; selectedOptions?: { groupName: string; optionName: string }[]; note?: string }[];
@@ -42,6 +54,7 @@ type Order = {
 };
 
 const formatVnd = (value = 0) => `${Math.round(value).toLocaleString("vi-VN")} ₫`;
+const formatVietnamDate = (value: string) => new Date(value).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
 const apiError = (error: unknown, fallback = "Có lỗi xảy ra") => axios.isAxiosError(error) ? error.response?.data?.message || fallback : fallback;
 const authHeaders = (token: string) => ({ Authorization: `Bearer ${token}` });
 const statusLabel: Record<ShipperStatus, string> = { offline: "Ngoại tuyến", available: "Sẵn sàng nhận đơn", assigned: "Đã nhận đơn", delivering: "Đang giao" };
@@ -81,9 +94,11 @@ function ShipperApp() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
+  const [locationSyncError, setLocationSyncError] = useState("");
   const [tab, setTab] = useState<"offers" | "delivery" | "account">("offers");
   const [working, setWorking] = useState(false);
   const watcher = useRef<Location.LocationSubscription | null>(null);
+  const locationTrackingStarted = useRef(false);
 
   useEffect(() => { SecureStore.getItemAsync(TOKEN_KEY).then(setToken); }, []);
 
@@ -110,15 +125,35 @@ function ShipperApp() {
     queryFn: async () => (await axios.get<{ data: Order | null }>(`${API_URL}/api/shippers/me/orders/current`, { headers: authHeaders(token!) })).data.data,
     refetchInterval: profile.data?.currentOrder ? 15000 : false,
   });
+  const wallet = useQuery({
+    queryKey: ["shipper-wallet", token],
+    enabled: Boolean(token),
+    queryFn: async () => (await axios.get<{ data: WalletSummary }>(`${API_URL}/api/wallet/shipper/me`, { headers: authHeaders(token!) })).data.data,
+    refetchInterval: 30000,
+  });
+  const walletTransactions = useQuery({
+    queryKey: ["shipper-wallet-transactions", token],
+    enabled: Boolean(token),
+    queryFn: async () => (await axios.get<{ data: WalletTransaction[] }>(`${API_URL}/api/wallet/shipper/transactions`, { headers: authHeaders(token!) })).data.data || [],
+  });
+  const earningsReport = useQuery({
+    queryKey: ["shipper-earnings-report", token],
+    enabled: Boolean(token),
+    queryFn: async () => (await axios.get<{ data: EarningsReport }>(`${API_URL}/api/wallet/shipper/earnings-report`, { headers: authHeaders(token!) })).data.data,
+  });
 
   const isApproved = profile.data?.approvalStatus === "approved";
   const isWorking = profile.data?.status === "assigned" || profile.data?.status === "delivering";
+  const offersError = locationSyncError || (offers.isError ? apiError(offers.error, "Không thể tải đơn gần bạn.") : "");
 
   const refreshViews = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["shipper-profile", token] }),
       queryClient.invalidateQueries({ queryKey: ["shipper-offers", token] }),
       queryClient.invalidateQueries({ queryKey: ["shipper-current-order", token] }),
+      queryClient.invalidateQueries({ queryKey: ["shipper-wallet", token] }),
+      queryClient.invalidateQueries({ queryKey: ["shipper-wallet-transactions", token] }),
+      queryClient.invalidateQueries({ queryKey: ["shipper-earnings-report", token] }),
     ]);
   };
 
@@ -160,6 +195,35 @@ function ShipperApp() {
       // Foreground updates continue when background tracking is unavailable.
     }
   };
+
+  /** Restores live location updates when an available shipper reopens the app. */
+  useEffect(() => {
+    if (!token || profile.data?.status !== "available") {
+      locationTrackingStarted.current = false;
+      return undefined;
+    }
+    if (locationTrackingStarted.current) return undefined;
+
+    let active = true;
+    locationTrackingStarted.current = true;
+    (async () => {
+      try {
+        const location = await getCurrentLocation();
+        if (!active) return;
+        await beginLocationTracking(location);
+        if (!active) return;
+        setLocationSyncError("");
+        await refreshViews();
+      } catch (error) {
+        locationTrackingStarted.current = false;
+        if (active) {
+          setLocationSyncError(apiError(error, "Không thể cập nhật vị trí hiện tại. Hãy kiểm tra quyền vị trí rồi thử lại."));
+        }
+      }
+    })();
+
+    return () => { active = false; };
+  }, [token, profile.data?.status]);
 
   useEffect(() => () => watcher.current?.remove(), []);
   useEffect(() => {
@@ -213,6 +277,7 @@ function ShipperApp() {
   };
   const logout = async () => {
     watcher.current?.remove();
+    locationTrackingStarted.current = false;
     if (await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK)) await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
     await SecureStore.deleteItemAsync(TOKEN_KEY); await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
     queryClient.clear(); setToken(null); setTab("offers");
@@ -225,14 +290,18 @@ function ShipperApp() {
         const initialLocation = await getCurrentLocation();
         await axios.put(`${API_URL}/api/shippers/me/status`, { status: "available" }, { headers: authHeaders(token) });
         try {
+          locationTrackingStarted.current = true;
           await beginLocationTracking(initialLocation);
+          setLocationSyncError("");
         } catch (error) {
+          locationTrackingStarted.current = false;
           await axios.put(`${API_URL}/api/shippers/me/status`, { status: "offline" }, { headers: authHeaders(token) }).catch(() => undefined);
           throw error;
         }
       } else {
         await axios.put(`${API_URL}/api/shippers/me/status`, { status: "offline" }, { headers: authHeaders(token) });
         watcher.current?.remove(); watcher.current = null;
+        locationTrackingStarted.current = false;
         if (await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK)) await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
       }
       await refreshViews();
@@ -258,6 +327,39 @@ function ShipperApp() {
     } catch (error) { Alert.alert("Không thể cập nhật đơn", apiError(error)); }
     finally { setWorking(false); }
   };
+  /** Creates a separate VNPay deposit payment and opens the gateway safely. */
+  const topUpDeposit = async (amount: number) => {
+    if (!token) return;
+    try {
+      setWorking(true);
+      const response = await axios.post<{ paymentUrl?: string }>(
+        `${API_URL}/api/wallet/shipper/deposit/vnpay`,
+        { amount },
+        { headers: authHeaders(token) }
+      );
+      if (!response.data.paymentUrl) throw new Error("Không tạo được liên kết thanh toán VNPAY.");
+      const supported = await Linking.canOpenURL(response.data.paymentUrl);
+      if (!supported) throw new Error("Thiết bị không thể mở trang thanh toán VNPAY.");
+      await Linking.openURL(response.data.paymentUrl);
+      Alert.alert("Tiếp tục thanh toán", "Sau khi VNPAY xác nhận, hãy quay lại app và bấm “Làm mới số dư”.");
+    } catch (error) { Alert.alert("Không thể nạp ký quỹ", apiError(error, error instanceof Error ? error.message : "Có lỗi xảy ra")); }
+    finally { setWorking(false); }
+  };
+  /** Sends a fresh GPS point and restarts foreground tracking on demand. */
+  const refreshLocation = async () => {
+    if (!token || profile.data?.status !== "available" || working) return;
+    try {
+      setWorking(true);
+      const location = await getCurrentLocation();
+      locationTrackingStarted.current = true;
+      await beginLocationTracking(location);
+      setLocationSyncError("");
+      await refreshViews();
+    } catch (error) {
+      locationTrackingStarted.current = false;
+      setLocationSyncError(apiError(error, "Không thể cập nhật vị trí hiện tại. Hãy kiểm tra quyền vị trí rồi thử lại."));
+    } finally { setWorking(false); }
+  };
 
   if (!token) return <LoginScreen email={email} password={password} error={loginError} working={working} onEmail={setEmail} onPassword={setPassword} onLogin={login} onRegister={register} />;
   if (user.isLoading || profile.isLoading) return <Loading />;
@@ -267,9 +369,9 @@ function ShipperApp() {
     <StatusBar style="dark" />
     <View style={styles.header}><View><Text style={styles.brand}>Drone Food Shipper</Text><Text style={styles.muted}>{user.data.name} · {statusLabel[profile.data?.status || "offline"]}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Đăng xuất" onPress={logout}><Text style={styles.link}>Thoát</Text></Pressable></View>
     {!isApproved ? <ApprovalScreen status={profile.data?.approvalStatus || "pending"} /> : <>
-      {tab === "offers" && <OffersScreen orders={offers.data || []} loading={offers.isLoading} online={profile.data?.status === "available"} working={working} onRefresh={refreshViews} onAccept={acceptOrder} />}
+      {tab === "offers" && <OffersScreen orders={offers.data || []} loading={offers.isLoading} online={profile.data?.status === "available"} working={working} isWorking={isWorking} error={offersError} onRefresh={refreshViews} onRefreshLocation={refreshLocation} onToggle={changeStatus} onAccept={acceptOrder} />}
       {tab === "delivery" && <DeliveryScreen order={currentOrder.data || null} loading={currentOrder.isLoading} working={working} onAdvance={advanceDelivery} />}
-      {tab === "account" && <AccountScreen profile={profile.data} working={working} isWorking={isWorking} onToggle={changeStatus} />}
+      {tab === "account" && <AccountScreen user={user.data} profile={profile.data} wallet={wallet.data} transactions={walletTransactions.data || []} report={earningsReport.data} walletLoading={wallet.isLoading || earningsReport.isLoading} working={working} isWorking={isWorking} onToggle={changeStatus} onRefresh={refreshViews} onTopUp={topUpDeposit} />}
       <BottomNav active={tab} onChange={setTab} hasDelivery={Boolean(currentOrder.data)} />
     </>}
   </SafeAreaView>;
@@ -286,9 +388,8 @@ function LoginScreen({ email, password, error, working, onEmail, onPassword, onL
 
 function ApprovalScreen({ status }: { status: string }) { return <View style={styles.center}><Text style={styles.screenTitle}>Chờ xác minh tài khoản</Text><Text style={styles.muted}>{status === "rejected" ? "Tài khoản Shipper chưa được duyệt. Hãy liên hệ quản trị viên." : "Admin đang duyệt hồ sơ Shipper của bạn."}</Text></View>; }
 
-function OffersScreen({ orders, loading, online, working, onRefresh, onAccept }: { orders: Order[]; loading: boolean; online: boolean; working: boolean; onRefresh: () => void; onAccept: (order: Order) => void }) {
-  if (!online) return <View style={styles.center}><Text style={styles.screenTitle}>Bạn đang ngoại tuyến</Text><Text style={styles.muted}>Mở tab Tài khoản và bật trạng thái sẵn sàng để chia sẻ vị trí, sau đó hệ thống mới tìm đơn trong bán kính tối đa 5 km.</Text></View>;
-  return <FlatList contentContainerStyle={styles.list} data={orders} keyExtractor={(item) => item._id} refreshing={loading} onRefresh={onRefresh} ListHeaderComponent={<><Text style={styles.screenTitle}>Đơn gần bạn</Text><Text style={styles.muted}>Chỉ hiển thị đơn còn hạn nhận và nhà hàng trong phạm vi tối đa 5 km từ vị trí mới nhất của bạn.</Text></>} ListEmptyComponent={<Text style={styles.emptyText}>Chưa có đơn phù hợp quanh bạn.</Text>} renderItem={({ item }) => <OrderCard order={item} action="Nhận đơn" working={working} onPress={() => onAccept(item)} />} />;
+function OffersScreen({ orders, loading, online, working, isWorking, error, onRefresh, onRefreshLocation, onToggle, onAccept }: { orders: Order[]; loading: boolean; online: boolean; working: boolean; isWorking: boolean; error: string; onRefresh: () => void; onRefreshLocation: () => void; onToggle: () => void; onAccept: (order: Order) => void }) {
+  return <FlatList contentContainerStyle={styles.list} data={online ? orders : []} keyExtractor={(item) => item._id} refreshing={loading} onRefresh={onRefresh} ListHeaderComponent={<><Text style={styles.screenTitle}>Đơn gần bạn</Text><View style={styles.activityBar}><View><Text style={styles.activityTitle}>{online ? "Đang sẵn sàng nhận đơn" : "Bạn đang ngoại tuyến"}</Text><Text style={styles.muted}>{online ? "Vị trí đang được dùng để tìm đơn trong 5 km." : "Bật để gửi vị trí và nhận đơn gần bạn."}</Text></View><Switch accessibilityLabel="Trạng thái hoạt động" value={online} disabled={working || isWorking} onValueChange={onToggle} trackColor={{ false: "#CBD5E1", true: "#86EFAC" }} thumbColor={online ? "#16A34A" : "#F8FAFC"} /></View>{online ? <Text style={styles.muted}>Chỉ hiển thị đơn còn hạn nhận và nhà hàng trong phạm vi tối đa 5 km từ vị trí mới nhất của bạn.</Text> : null}{error ? <View style={styles.locationAlert}><Text style={styles.error}>{error}</Text><SecondaryButton label="Cập nhật vị trí" disabled={working || !online} onPress={onRefreshLocation} /></View> : null}</>} ListEmptyComponent={<Text style={styles.emptyText}>{online ? "Chưa có đơn phù hợp quanh bạn." : "Bật trạng thái hoạt động để bắt đầu nhận đơn."}</Text>} renderItem={({ item }) => <OrderCard order={item} action="Nhận đơn" working={working} onPress={() => onAccept(item)} />} />;
 }
 
 function DeliveryScreen({ order, loading, working, onAdvance }: { order: Order | null; loading: boolean; working: boolean; onAdvance: () => void }) {
@@ -297,19 +398,54 @@ function DeliveryScreen({ order, loading, working, onAdvance }: { order: Order |
   const restaurant = order.restaurantId;
   const destination = order.shippingAddress;
   const canMap = Number.isFinite(restaurant?.lat) && Number.isFinite(restaurant?.lng) && Number.isFinite(destination.lat) && Number.isFinite(destination.lng);
+  const openRestaurantNavigation = async () => {
+    const restaurantDestination = Number.isFinite(restaurant?.lat) && Number.isFinite(restaurant?.lng)
+      ? `${restaurant!.lat},${restaurant!.lng}`
+      : restaurant?.address;
+    if (!restaurantDestination) return Alert.alert("Thiếu vị trí", "Nhà hàng chưa có địa chỉ để chỉ đường.");
+    const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(restaurantDestination)}&travelmode=driving`;
+    if (!(await Linking.canOpenURL(mapsUrl))) return Alert.alert("Không thể mở bản đồ", "Thiết bị không hỗ trợ mở chỉ đường.");
+    await Linking.openURL(mapsUrl);
+  };
   const action = order.orderStatus === "preparing" ? "Đã lấy hàng từ nhà hàng" : order.orderStatus === "delivering" ? "Hoàn tất giao hàng" : null;
   return <ScrollView contentContainerStyle={styles.list}><Text style={styles.screenTitle}>Đơn đang thực hiện</Text><OrderCard order={order} working={working} />
     {canMap ? <MapView style={styles.map} initialRegion={{ latitude: ((restaurant!.lat || 0) + (destination.lat || 0)) / 2, longitude: ((restaurant!.lng || 0) + (destination.lng || 0)) / 2, latitudeDelta: Math.max(Math.abs((restaurant!.lat || 0) - (destination.lat || 0)) * 1.8, 0.01), longitudeDelta: Math.max(Math.abs((restaurant!.lng || 0) - (destination.lng || 0)) * 1.8, 0.01) }}><Marker coordinate={{ latitude: restaurant!.lat!, longitude: restaurant!.lng! }} title="Nhà hàng" pinColor="#EA580C" /><Marker coordinate={{ latitude: destination.lat!, longitude: destination.lng! }} title="Khách hàng" pinColor="#2563EB" /></MapView> : null}
     {order.orderStatus === "pending" ? <Text style={styles.notice}>Đã nhận đơn. Chờ nhà hàng xác nhận và chuẩn bị món trước khi đến lấy.</Text> : null}
+    <SecondaryButton label="Chỉ đường đến quán" onPress={openRestaurantNavigation} />
     {action ? <PrimaryButton label={action} disabled={working} onPress={onAdvance} /> : null}
   </ScrollView>;
 }
 
-function AccountScreen({ profile, working, isWorking, onToggle }: { profile?: Profile; working: boolean; isWorking: boolean; onToggle: () => void }) { const online = profile?.status !== "offline"; return <ScrollView contentContainerStyle={styles.list}><Text style={styles.screenTitle}>Tài khoản & vị trí</Text><View style={styles.panel}><Text style={styles.cardTitle}>Trạng thái: {statusLabel[profile?.status || "offline"]}</Text><Text style={styles.muted}>Vị trí được gửi khi ứng dụng đang mở; khi đã cho phép nền, Android/iOS tiếp tục cập nhật trong lúc giao đơn.</Text>{profile?.locationUpdatedAt ? <Text style={styles.hint}>Cập nhật vị trí: {new Date(profile.locationUpdatedAt).toLocaleTimeString("vi-VN")}</Text> : null}</View><PrimaryButton label={online ? "Chuyển sang ngoại tuyến" : "Bật sẵn sàng nhận đơn"} disabled={working || isWorking} onPress={onToggle} />{isWorking ? <Text style={styles.notice}>Bạn không thể ngoại tuyến khi còn đơn được giao.</Text> : null}</ScrollView>; }
+const walletTransactionLabel: Record<string, string> = {
+  shipper_deposit_top_up: "Nạp ký quỹ", shipper_online_delivery_earnings: "Thu nhập giao hàng",
+  shipper_cod_collection: "Thu COD", shipper_closure_earnings_offset: "Đối trừ khi huỷ tài khoản",
+  shipper_closure_deposit_refund: "Hoàn ký quỹ",
+};
 
-function OrderCard({ order, action, working, onPress }: { order: Order; action?: string; working: boolean; onPress?: () => void }) { return <View style={styles.card}><Text style={styles.cardTitle}>#{order._id.slice(-6).toUpperCase()} · {order.orderStatus}</Text><Text style={styles.muted}>{order.restaurantId?.name || "Nhà hàng"}</Text><Text>{order.restaurantId?.address}</Text><Text style={styles.sectionTitle}>Giao đến</Text><Text>{order.shippingAddress.fullName} · {order.shippingAddress.phone}</Text><Text>{[order.shippingAddress.address, order.shippingAddress.city, order.shippingAddress.state].filter(Boolean).join(", ")}</Text><Text style={styles.sectionTitle}>Món</Text>{order.orderItems.map((item, index) => <Text key={`${item.name}-${index}`}>• {item.name} × {item.quantity}{item.note ? ` · ${item.note}` : ""}</Text>)}<Text style={styles.price}>Tổng COD: {formatVnd(order.totalPrice)}</Text>{action && onPress ? <PrimaryButton label={action} disabled={working} onPress={onPress} /> : null}</View>; }
+function AccountScreen({ user, profile, wallet, transactions, report, walletLoading, working, isWorking, onToggle, onRefresh, onTopUp }: { user?: User; profile?: Profile; wallet?: WalletSummary; transactions: WalletTransaction[]; report?: EarningsReport; walletLoading: boolean; working: boolean; isWorking: boolean; onToggle: () => void; onRefresh: () => void; onTopUp: (amount: number) => void }) {
+  const [view, setView] = useState<"menu" | "overview" | "deposit" | "transactions" | "report" | "deposit-history" | "profile">("menu");
+  const [depositAmount, setDepositAmount] = useState("");
+  const online = profile?.status !== "offline";
+  const minimumDeposit = wallet?.depositBalance === 0 ? 350000 : 1;
+  const depositHistory = transactions.filter((transaction) => transaction.transactionType === "shipper_deposit_top_up");
+  const submitDeposit = () => {
+    const amount = Number(depositAmount.replace(/[^0-9]/g, ""));
+    if (!Number.isSafeInteger(amount) || amount < minimumDeposit) return Alert.alert("Số tiền chưa hợp lệ", minimumDeposit === 350000 ? "Lần nạp ký quỹ đầu tiên tối thiểu là 350.000 ₫." : "Hãy nhập số tiền nạp lớn hơn 0.");
+    onTopUp(amount);
+  };
+  const detailTitle = view === "deposit" ? "Nạp ký quỹ" : view === "transactions" ? "Giao dịch" : view === "report" ? "Báo cáo thu nhập" : view === "profile" ? "Hồ sơ Shipper" : "Lịch sử nạp tiền";
+  if (view !== "menu" && view !== "overview") return <ScrollView contentContainerStyle={styles.list}><Pressable accessibilityRole="button" onPress={() => setView("menu")}><Text style={styles.backLink}>‹ Menu</Text></Pressable><Text style={styles.screenTitle}>{detailTitle}</Text>{view === "profile" ? <View style={styles.panel}><Text style={styles.cardTitle}>{user?.name || "Shipper"}</Text><Text style={styles.muted}>{user?.email}</Text><Text style={styles.muted}>Phương tiện: {profile?.vehicleType || "motorbike"}</Text><Text style={styles.muted}>Trạng thái hồ sơ: {profile?.approvalStatus === "approved" ? "Đã duyệt" : "Chờ duyệt"}</Text></View> : null}{view === "deposit" ? <View style={styles.panel}><Text style={styles.cardTitle}>Tài khoản ký quỹ</Text><Text style={styles.walletAmount}>{formatVnd(wallet?.depositBalance)}</Text><Text style={styles.muted}>Ký quỹ không âm và xác định hạn mức nhận đơn COD.</Text><View style={styles.depositForm}><Text style={styles.fieldLabel}>Số tiền nạp</Text><TextInput accessibilityLabel="Số tiền nạp ký quỹ" style={styles.input} keyboardType="number-pad" value={depositAmount} onChangeText={setDepositAmount} placeholder={minimumDeposit === 350000 ? "Tối thiểu 350.000 ₫" : "Số tiền VND"} /><PrimaryButton label="Nạp qua VNPAY" onPress={submitDeposit} disabled={working || walletLoading} /></View></View> : null}{view === "report" ? <><View style={styles.panel}><Text style={styles.muted}>Tổng thu nhập từ đơn VNPAY đã giao thành công</Text><Text style={styles.walletAmount}>{formatVnd(report?.totalEarned)}</Text></View><Text style={styles.sectionTitle}>Theo ngày</Text>{report?.daily.map((entry) => <ReportRow key={`day-${entry.period}`} label={entry.period.split("-").reverse().join("/")} amount={entry.amount} deliveries={entry.deliveries} />)}{!walletLoading && !report?.daily.length ? <Text style={styles.muted}>Chưa có thu nhập giao hàng.</Text> : null}<Text style={styles.sectionTitle}>Theo tháng</Text>{report?.monthly.map((entry) => <ReportRow key={`month-${entry.period}`} label={entry.period.split("-").reverse().join("/")} amount={entry.amount} deliveries={entry.deliveries} />)}</> : null}{view === "transactions" ? <TransactionList transactions={transactions} empty="Chưa có giao dịch ví." /> : null}{view === "deposit-history" ? <TransactionList transactions={depositHistory} empty="Chưa có giao dịch nạp ký quỹ." /> : null}</ScrollView>;
+  if (view === "menu") return <ScrollView contentContainerStyle={styles.profileMenu}><View style={styles.profileHeader}><View style={styles.profileAvatar}><Text style={styles.profileAvatarText}>{(user?.name || "S").trim().charAt(0).toUpperCase()}</Text></View><Text style={styles.profileName}>{user?.name || "Shipper"}</Text><Text style={styles.muted}>{user?.email}</Text></View><View style={styles.profileMenuList}><View style={styles.profileActivityRow}><View><Text style={styles.profileMenuTitle}>Trạng thái hoạt động</Text><Text style={styles.muted}>{online ? "Đang sẵn sàng nhận đơn" : "Đang ngoại tuyến"}</Text></View><Switch accessibilityLabel="Trạng thái hoạt động" value={online} disabled={working || isWorking} onValueChange={onToggle} trackColor={{ false: "#CBD5E1", true: "#86EFAC" }} thumbColor={online ? "#16A34A" : "#F8FAFC"} /></View><WalletMenuRow title="Hồ sơ của tôi" onPress={() => setView("profile")} /><WalletMenuRow title="Ví" subtitle={(wallet?.isEarlyWarning || wallet?.isAcceptanceLocked) ? "Cần chú ý số dư earnings" : undefined} onPress={() => setView("overview")} /><WalletMenuRow title="Thu nhập" onPress={() => setView("report")} /><WalletMenuRow title="Giao dịch" onPress={() => setView("transactions")} /></View>{isWorking ? <Text style={styles.notice}>Bạn không thể tắt hoạt động khi còn đơn được giao.</Text> : null}</ScrollView>;
+  return <ScrollView contentContainerStyle={styles.walletPage}><Pressable accessibilityRole="button" onPress={() => setView("menu")}><Text style={styles.walletBackLink}>‹ Menu</Text></Pressable><View style={styles.walletHero}><Text style={styles.walletHeroTitle}>Ví của tôi</Text><Text style={styles.walletHeroLabel}>Tài khoản chính</Text><Text style={[styles.walletHeroAmount, (wallet?.earningsBalance || 0) < 0 && styles.walletHeroDebt]}>{walletLoading ? "Đang tải…" : formatVnd(wallet?.earningsBalance)}</Text><View style={styles.walletActionBar}><Pressable accessibilityRole="button" style={styles.walletAction} onPress={() => setView("deposit")}><Text style={styles.walletActionIcon}>⊕</Text><Text style={styles.walletActionText}>Nạp tiền</Text></Pressable><View style={styles.walletDivider} /><Pressable accessibilityRole="button" style={styles.walletAction} onPress={() => Alert.alert("Chưa khả dụng", "Chưa có nghiệp vụ rút tiền từ ví earnings được thiết lập.")}><Text style={styles.walletActionIcon}>⇧</Text><Text style={styles.walletActionText}>Rút tiền</Text></Pressable></View></View><View style={styles.walletMenu}><WalletMenuRow title="Tài khoản ký quỹ" value={formatVnd(wallet?.depositBalance)} subtitle={(wallet?.depositBalance || 0) < 350000 ? "Số dư thấp" : undefined} onPress={() => setView("deposit")} /><WalletMenuRow title="Giao dịch" onPress={() => setView("transactions")} /><WalletMenuRow title="Báo cáo thu nhập" onPress={() => setView("report")} /><WalletMenuRow title="Lịch sử nạp & rút tiền" onPress={() => setView("deposit-history")} /></View><View style={styles.list}>{wallet ? <View style={[styles.walletStatus, wallet.isAcceptanceLocked ? styles.walletLocked : wallet.isEarlyWarning ? styles.walletWarning : styles.walletSafe]}><Text style={styles.cardTitle}>{wallet.isAcceptanceLocked ? "Đã khoá nhận đơn mới" : wallet.isEarlyWarning ? "Cảnh báo số dư earnings" : "Số dư an toàn"}</Text><Text style={styles.muted}>Ngưỡng cảnh báo: {formatVnd(wallet.warningThreshold)} · ngưỡng khoá: {formatVnd(wallet.lockThreshold)}</Text>{(wallet.reservedCodLiability || 0) > 0 ? <Text style={styles.walletReserve}>Đang giữ cho COD: {formatVnd(wallet.reservedCodLiability)}</Text> : null}</View> : null}<SecondaryButton label="Làm mới số dư" onPress={onRefresh} disabled={working} /></View></ScrollView>;
+}
 
-function BottomNav({ active, onChange, hasDelivery }: { active: "offers" | "delivery" | "account"; onChange: (tab: "offers" | "delivery" | "account") => void; hasDelivery: boolean }) { return <View style={styles.bottomNav}>{([ ["offers", "Đơn gần bạn"], ["delivery", hasDelivery ? "Đơn đang giao" : "Đơn giao"], ["account", "Tài khoản"] ] as const).map(([key, label]) => <Pressable key={key} accessibilityRole="tab" accessibilityState={{ selected: active === key }} style={[styles.navItem, active === key && styles.navItemActive]} onPress={() => onChange(key)}><Text style={[styles.navLabel, active === key && styles.navLabelActive]}>{label}</Text></Pressable>)}</View>; }
+function WalletMenuRow({ title, value, subtitle, onPress }: { title: string; value?: string; subtitle?: string; onPress: () => void }) { return <Pressable accessibilityRole="button" style={styles.walletMenuRow} onPress={onPress}><View><Text style={styles.walletMenuTitle}>{title}</Text>{subtitle ? <Text style={styles.walletMenuWarning}>{subtitle}</Text> : null}</View><View style={styles.walletMenuRight}>{value ? <Text style={styles.walletMenuValue}>{value}</Text> : null}<Text style={styles.walletChevron}>›</Text></View></Pressable>; }
+function ReportRow({ label, amount, deliveries }: { label: string; amount: number; deliveries: number }) { return <View style={styles.transactionRow}><View><Text style={styles.transactionTitle}>{label}</Text><Text style={styles.hint}>{deliveries} đơn hoàn thành</Text></View><Text style={styles.transactionAmount}>{formatVnd(amount)}</Text></View>; }
+function TransactionList({ transactions, empty }: { transactions: WalletTransaction[]; empty: string }) { return <View style={styles.panel}>{transactions.map((transaction) => <View key={transaction._id} style={styles.transactionRow}><View><Text style={styles.transactionTitle}>{walletTransactionLabel[transaction.transactionType] || transaction.transactionType}</Text><Text style={styles.hint}>{formatVietnamDate(transaction.createdAt)}</Text></View><Text style={[styles.transactionAmount, transaction.amount < 0 && styles.walletDebt]}>{transaction.amount > 0 ? "+" : ""}{formatVnd(transaction.amount)}</Text></View>)}{transactions.length === 0 ? <Text style={styles.muted}>{empty}</Text> : null}</View>; }
+
+function OrderCard({ order, action, working, onPress }: { order: Order; action?: string; working: boolean; onPress?: () => void }) { const isCod = order.paymentMethod === "COD"; const deliveryEarning = Math.round(order.shippingPrice * 0.85); return <View style={styles.card}><Text style={styles.cardTitle}>#{order._id.slice(-6).toUpperCase()} · {order.orderStatus}</Text><Text style={styles.muted}>{order.restaurantId?.name || "Nhà hàng"}</Text><Text>{order.restaurantId?.address}</Text><Text style={styles.sectionTitle}>Giao đến</Text><Text>{order.shippingAddress.fullName} · {order.shippingAddress.phone}</Text><Text>{[order.shippingAddress.address, order.shippingAddress.city, order.shippingAddress.state].filter(Boolean).join(", ")}</Text><Text style={styles.sectionTitle}>Món</Text>{order.orderItems.map((item, index) => <Text key={`${item.name}-${index}`}>• {item.name} × {item.quantity}{item.note ? ` · ${item.note}` : ""}</Text>)}<Text style={styles.price}>{isCod ? `Thu COD: ${formatVnd(order.totalPrice)}` : `Thu nhập phí giao: ${formatVnd(deliveryEarning)}`}</Text>{action && onPress ? <PrimaryButton label={action} disabled={working} onPress={onPress} /> : null}</View>; }
+
+function BottomNav({ active, onChange, hasDelivery }: { active: "offers" | "delivery" | "account"; onChange: (tab: "offers" | "delivery" | "account") => void; hasDelivery: boolean }) { return <View style={styles.bottomNav}>{([ ["offers", "Đơn gần bạn"], ["delivery", hasDelivery ? "Đơn đang giao" : "Đơn giao"], ["account", "Menu"] ] as const).map(([key, label]) => <Pressable key={key} accessibilityRole="tab" accessibilityState={{ selected: active === key }} style={[styles.navItem, active === key && styles.navItemActive]} onPress={() => onChange(key)}><Text style={[styles.navLabel, active === key && styles.navLabelActive]}>{label}</Text></Pressable>)}</View>; }
 function PrimaryButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) { return <Pressable accessibilityRole="button" style={[styles.primaryButton, disabled && styles.disabled]} disabled={disabled} onPress={onPress}><Text style={styles.primaryButtonText}>{label}</Text></Pressable>; }
 function SecondaryButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) { return <Pressable accessibilityRole="button" style={[styles.secondaryButton, disabled && styles.disabled]} disabled={disabled} onPress={onPress}><Text style={styles.secondaryButtonText}>{label}</Text></Pressable>; }
 function FormField({ label, value, placeholder, keyboardType, secure, onChange }: { label: string; value: string; placeholder: string; keyboardType?: "default" | "email-address" | "phone-pad"; secure?: boolean; onChange: (value: string) => void }) { return <View style={styles.formField}><Text style={styles.fieldLabel}>{label}</Text><TextInput accessibilityLabel={label} style={styles.input} placeholder={placeholder} autoCapitalize={keyboardType === "email-address" || secure ? "none" : "words"} keyboardType={keyboardType} secureTextEntry={secure} value={value} onChangeText={onChange} /></View>; }
@@ -317,5 +453,16 @@ function Loading() { return <View style={styles.center}><ActivityIndicator size=
 export default function App() { return <QueryClientProvider client={queryClient}><ShipperApp /></QueryClientProvider>; }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#EFF6FF" }, login: { flex: 1, backgroundColor: "#EFF6FF" }, authForm: { flexGrow: 1, justifyContent: "center", padding: 24, gap: 12 }, formField: { gap: 6 }, fieldLabel: { color: "#1E3A8A", fontWeight: "700" }, header: { minHeight: 64, paddingHorizontal: 18, paddingVertical: 10, flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomWidth: 1, borderColor: "#BFDBFE", backgroundColor: "#FFF" }, brand: { color: "#1E40AF", fontSize: 21, fontWeight: "800" }, subtitle: { color: "#475569", fontSize: 16, lineHeight: 24, marginBottom: 8 }, list: { padding: 18, gap: 12, paddingBottom: 100 }, center: { flex: 1, padding: 24, justifyContent: "center", alignItems: "center", gap: 10, backgroundColor: "#EFF6FF" }, screenTitle: { color: "#1E3A8A", fontSize: 24, fontWeight: "800" }, sectionTitle: { color: "#1E3A8A", fontSize: 15, fontWeight: "800", marginTop: 6 }, cardTitle: { color: "#172554", fontSize: 16, fontWeight: "800" }, muted: { color: "#475569", lineHeight: 20 }, hint: { color: "#64748B", fontSize: 12, lineHeight: 18 }, link: { color: "#2563EB", fontWeight: "800", padding: 10 }, input: { minHeight: 48, borderWidth: 1, borderColor: "#BFDBFE", borderRadius: 10, paddingHorizontal: 12, backgroundColor: "#FFF", fontSize: 16 }, primaryButton: { minHeight: 48, paddingHorizontal: 16, alignItems: "center", justifyContent: "center", borderRadius: 10, backgroundColor: "#2563EB", marginTop: 6 }, primaryButtonText: { color: "#FFF", fontWeight: "800", textAlign: "center" }, secondaryButton: { minHeight: 44, borderWidth: 1, borderColor: "#2563EB", alignItems: "center", justifyContent: "center", borderRadius: 10, paddingHorizontal: 12, marginTop: 6 }, secondaryButtonText: { color: "#1D4ED8", fontWeight: "800" }, disabled: { opacity: 0.48 }, error: { color: "#B91C1C", lineHeight: 20 }, emptyText: { textAlign: "center", color: "#64748B", marginTop: 36 }, card: { borderWidth: 1, borderColor: "#BFDBFE", borderRadius: 12, backgroundColor: "#FFF", padding: 14, gap: 5 }, price: { color: "#C2410C", fontWeight: "800", fontSize: 16, marginTop: 6 }, panel: { borderWidth: 1, borderColor: "#BFDBFE", borderRadius: 12, padding: 14, gap: 7, backgroundColor: "#FFF" }, notice: { borderLeftWidth: 4, borderColor: "#EA580C", backgroundColor: "#FFF7ED", color: "#7C2D12", padding: 12, lineHeight: 20 }, map: { height: 280, borderRadius: 12 }, bottomNav: { minHeight: 68, flexDirection: "row", backgroundColor: "#FFF", borderTopWidth: 1, borderColor: "#BFDBFE" }, navItem: { flex: 1, minHeight: 56, justifyContent: "center", alignItems: "center", paddingHorizontal: 4 }, navItemActive: { borderTopWidth: 3, borderColor: "#2563EB" }, navLabel: { color: "#64748B", fontSize: 12, fontWeight: "700", textAlign: "center" }, navLabelActive: { color: "#1D4ED8" },
+  profileMenu: { padding: 24, paddingBottom: 100, gap: 22, backgroundColor: "#FFF" },
+  profileHeader: { alignItems: "center", gap: 8, paddingTop: 18 },
+  profileAvatar: { width: 88, height: 88, borderRadius: 44, backgroundColor: "#FED7AA", justifyContent: "center", alignItems: "center" },
+  profileAvatarText: { color: "#C2410C", fontSize: 36, fontWeight: "800" },
+  profileName: { color: "#172554", fontSize: 29, fontWeight: "800" },
+  profileMenuList: { gap: 2 },
+  profileActivityRow: { minHeight: 82, flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomWidth: 1, borderBottomColor: "#E2E8F0" },
+  profileMenuTitle: { color: "#172554", fontSize: 20, fontWeight: "800" },
+  activityBar: { marginTop: 8, padding: 14, borderRadius: 12, backgroundColor: "#FFF", borderWidth: 1, borderColor: "#BFDBFE", flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
+  activityTitle: { color: "#172554", fontSize: 16, fontWeight: "800" },
+  walletBackLink: { color: "#1D4ED8", fontSize: 16, fontWeight: "800", paddingHorizontal: 18, paddingTop: 14 },
+  safe: { flex: 1, backgroundColor: "#EFF6FF" }, login: { flex: 1, backgroundColor: "#EFF6FF" }, authForm: { flexGrow: 1, justifyContent: "center", padding: 24, gap: 12 }, formField: { gap: 6 }, fieldLabel: { color: "#1E3A8A", fontWeight: "700" }, header: { minHeight: 64, paddingHorizontal: 18, paddingVertical: 10, flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomWidth: 1, borderColor: "#BFDBFE", backgroundColor: "#FFF" }, brand: { color: "#1E40AF", fontSize: 21, fontWeight: "800" }, subtitle: { color: "#475569", fontSize: 16, lineHeight: 24, marginBottom: 8 }, list: { padding: 18, gap: 12, paddingBottom: 100 }, walletPage: { paddingBottom: 100, gap: 14, backgroundColor: "#F1F5F9" }, center: { flex: 1, padding: 24, justifyContent: "center", alignItems: "center", gap: 10, backgroundColor: "#EFF6FF" }, screenTitle: { color: "#1E3A8A", fontSize: 24, fontWeight: "800" }, sectionTitle: { color: "#1E3A8A", fontSize: 15, fontWeight: "800", marginTop: 6 }, cardTitle: { color: "#172554", fontSize: 16, fontWeight: "800" }, muted: { color: "#475569", lineHeight: 20 }, hint: { color: "#64748B", fontSize: 12, lineHeight: 18 }, link: { color: "#2563EB", fontWeight: "800", padding: 10 }, backLink: { color: "#1D4ED8", fontSize: 16, fontWeight: "800" }, input: { minHeight: 48, borderWidth: 1, borderColor: "#BFDBFE", borderRadius: 10, paddingHorizontal: 12, backgroundColor: "#FFF", fontSize: 16 }, primaryButton: { minHeight: 48, paddingHorizontal: 16, alignItems: "center", justifyContent: "center", borderRadius: 10, backgroundColor: "#2563EB", marginTop: 6 }, primaryButtonText: { color: "#FFF", fontWeight: "800", textAlign: "center" }, secondaryButton: { minHeight: 44, borderWidth: 1, borderColor: "#2563EB", alignItems: "center", justifyContent: "center", borderRadius: 10, paddingHorizontal: 12, marginTop: 6 }, secondaryButtonText: { color: "#1D4ED8", fontWeight: "800" }, disabled: { opacity: 0.48 }, error: { color: "#B91C1C", lineHeight: 20 }, locationAlert: { marginTop: 10, gap: 4 }, emptyText: { textAlign: "center", color: "#64748B", marginTop: 36 }, card: { borderWidth: 1, borderColor: "#BFDBFE", borderRadius: 12, backgroundColor: "#FFF", padding: 14, gap: 5 }, price: { color: "#C2410C", fontWeight: "800", fontSize: 16, marginTop: 6 }, panel: { borderWidth: 1, borderColor: "#BFDBFE", borderRadius: 12, padding: 14, gap: 7, backgroundColor: "#FFF" }, depositForm: { borderTopWidth: 1, borderColor: "#E2E8F0", paddingTop: 12, marginTop: 6, gap: 4 }, walletAmount: { color: "#1D4ED8", fontSize: 25, fontWeight: "800" }, walletHero: { backgroundColor: "#FF5B39", paddingTop: 28, paddingHorizontal: 24, paddingBottom: 22, alignItems: "center", gap: 8 }, walletHeroTitle: { alignSelf: "stretch", color: "#FFF", fontSize: 29, fontWeight: "800" }, walletHeroLabel: { color: "#FFF", fontSize: 16, marginTop: 14 }, walletHeroAmount: { color: "#FFF", fontSize: 37, fontWeight: "800" }, walletHeroDebt: { color: "#FFF" }, walletActionBar: { flexDirection: "row", alignSelf: "stretch", backgroundColor: "#FFF", borderRadius: 15, marginTop: 24, paddingVertical: 13 }, walletAction: { flex: 1, alignItems: "center", gap: 3 }, walletActionIcon: { color: "#F14B32", fontSize: 31, fontWeight: "700" }, walletActionText: { color: "#F14B32", fontSize: 16, fontWeight: "700" }, walletDivider: { width: 1, backgroundColor: "#E2E8F0", marginVertical: 6 }, walletMenu: { backgroundColor: "#FFF" }, walletMenuRow: { minHeight: 78, paddingHorizontal: 24, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: 1, borderBottomColor: "#E2E8F0" }, walletMenuTitle: { color: "#172554", fontSize: 18, fontWeight: "700" }, walletMenuRight: { flexDirection: "row", alignItems: "center", gap: 12 }, walletMenuValue: { color: "#172554", fontSize: 16, fontWeight: "800" }, walletMenuWarning: { color: "#E11D48", marginTop: 3 }, walletChevron: { color: "#94A3B8", fontSize: 30, lineHeight: 30 }, walletDebt: { color: "#B91C1C" }, walletReserve: { color: "#9A3412", fontWeight: "700" }, walletStatus: { borderLeftWidth: 4, borderRadius: 10, padding: 14, gap: 5 }, walletSafe: { borderColor: "#16A34A", backgroundColor: "#F0FDF4" }, walletWarning: { borderColor: "#EA580C", backgroundColor: "#FFF7ED" }, walletLocked: { borderColor: "#DC2626", backgroundColor: "#FEF2F2" }, transactionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderTopWidth: 1, borderColor: "#E2E8F0", paddingTop: 10, marginTop: 3, gap: 10 }, transactionTitle: { color: "#334155", fontWeight: "700", flexShrink: 1 }, transactionAmount: { color: "#15803D", fontWeight: "800" }, notice: { borderLeftWidth: 4, borderColor: "#EA580C", backgroundColor: "#FFF7ED", color: "#7C2D12", padding: 12, lineHeight: 20 }, map: { height: 280, borderRadius: 12 }, bottomNav: { minHeight: 68, flexDirection: "row", backgroundColor: "#FFF", borderTopWidth: 1, borderColor: "#BFDBFE" }, navItem: { flex: 1, minHeight: 56, justifyContent: "center", alignItems: "center", paddingHorizontal: 4 }, navItemActive: { borderTopWidth: 3, borderColor: "#2563EB" }, navLabel: { color: "#64748B", fontSize: 12, fontWeight: "700", textAlign: "center" }, navLabelActive: { color: "#1D4ED8" },
 });

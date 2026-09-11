@@ -98,6 +98,27 @@ const orderSchema = new mongoose.Schema(
       default: "air",
     },
     deliveryRatePerKm: { type: Number, default: 0, min: 0 },
+    // Financial terms are immutable at checkout. Settlement must use these
+    // values instead of any current platform configuration.
+    financialSnapshot: {
+      restaurantSharePercent: { type: Number, default: 80 },
+      platformFoodCommissionPercent: { type: Number, default: 20 },
+      shipperDeliverySharePercent: { type: Number, default: 85 },
+      platformDeliverySharePercent: { type: Number, default: 15 },
+      restaurantPayoutAmount: { type: Number, default: 0 },
+      shipperOnlineEarningsAmount: { type: Number, default: 0 },
+      codLiabilityAmount: { type: Number, default: 0 },
+    },
+    // A reservation is exposure, not a wallet balance. It is released once
+    // the COD delivery is settled or the order is cancelled before delivery.
+    codReservationStatus: {
+      type: String,
+      enum: ["none", "reserved", "released"],
+      default: "none",
+    },
+    codReservedLiability: { type: Number, default: 0, min: 0 },
+    restaurantSettlementTransaction: { type: mongoose.Schema.Types.ObjectId, ref: "WalletTransaction", default: null },
+    shipperSettlementTransaction: { type: mongoose.Schema.Types.ObjectId, ref: "WalletTransaction", default: null },
     pickupLocation: {
       type: { type: String, enum: ["Point"], default: undefined },
       coordinates: { type: [Number], default: undefined },
@@ -162,7 +183,7 @@ const orderSchema = new mongoose.Schema(
     },
     orderStatus: {
       type: String,
-      enum: ["pending", "preparing", "delivering", "delivered", "cancelled"],
+      enum: ["pending_payment", "pending", "preparing", "delivering", "delivered", "cancelled"],
       default: "pending",
     },
     reason: {
@@ -171,6 +192,10 @@ const orderSchema = new mongoose.Schema(
     },
     vnpTxnRef: { type: String, default: null },
     vnpTransactionNo: { type: String, default: null },
+    vnpCreateDate: { type: String, default: null },
+    refundStatus: { type: String, enum: ["not_required", "requested", "failed"], default: "not_required" },
+    refundRequestId: { type: String, default: null },
+    refundRequestedAt: { type: Date, default: null },
     restaurantId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Restaurant",

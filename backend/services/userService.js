@@ -318,6 +318,9 @@ export const deleteUser = async (userId) => {
   if (!user) {
     throw new AppError("User not found", 404);
   }
+  if (user.role === "shipper") {
+    throw new AppError("Shipper accounts must use the account closure workflow", 409);
+  }
   await userRepo.deleteById(userId);
   return { success: true, message: "User deleted successfully" };
 };

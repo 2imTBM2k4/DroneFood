@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@paypal/react-paypal-js": "^8.9.2",
     "axios": "^1.7.2",
     "html5-qrcode": "^2.3.8",
     "jsqr": "^1.4.0",

@@ -7,9 +7,9 @@ import { toast } from "react-toastify";
 
 const Verify = () => {
   const [searchParams] = useSearchParams();
-  const success = searchParams.get("success");
+  const vnpayResult = searchParams.get("vnpay");
   const orderId = searchParams.get("orderId");
-  const { url, token } = useContext(StoreContext); // THÊM: token
+  const { url, token, clearCart, isHydrated } = useContext(StoreContext);
   const navigate = useNavigate();
 
   const verifyPayment = useCallback(async () => {
@@ -18,21 +18,22 @@ const Verify = () => {
       navigate("/");
       return;
     }
+    if (!token) {
+      toast.error("Please sign in again to verify this payment.");
+      navigate("/");
+      return;
+    }
 
     try {
-      // Normalize success
-      const isSuccess = success === "true";
       const response = await axios.post(
         `${url}/api/order/verify`,
+        { orderId },
         {
-          success: isSuccess, // Boolean
-          orderId,
-        },
-        {
-          headers: token ? { token } : {}, // THÊM: Token nếu có
+          headers: { Authorization: `Bearer ${token}` },
         }
       );
       if (response.data.success) {
+        await clearCart();
         toast.success("Payment verified! Check My Orders.");
         navigate("/myorders");
       } else {
@@ -41,21 +42,24 @@ const Verify = () => {
       }
     } catch (error) {
       console.error("Verify error:", error);
-      toast.error("Verification error");
+      toast.error(error.response?.data?.message || "Verification error");
       navigate("/");
     }
-  }, [navigate, orderId, success, token, url]);
+  }, [clearCart, navigate, orderId, token, url]);
 
   useEffect(() => {
-    if (orderId) {
+    // A VNPay redirect reloads the SPA. Wait until StoreContext has restored
+    // the saved access token, otherwise this request races with hydration and
+    // receives a 401 from the protected verification endpoint.
+    if (isHydrated && orderId) {
       verifyPayment();
     }
-  }, [orderId, verifyPayment]);
+  }, [isHydrated, orderId, verifyPayment]);
 
   return (
     <div className="verify">
       <div className="spinner"></div>
-      <p>Verifying payment...</p> {/* THÊM: UI feedback */}
+      <p>{vnpayResult === "failed" ? "Payment was not completed." : "Verifying payment..."}</p>
     </div>
   );
 };

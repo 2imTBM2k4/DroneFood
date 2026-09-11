@@ -8,6 +8,7 @@ import http from "http";
 import { v2 as cloudinary } from "cloudinary";
 import jwt from "jsonwebtoken";
 import User from "./models/userModel.cjs";
+import { startShipperExpiryScheduler } from "./services/shipperService.js";
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -64,7 +65,8 @@ io.on("connection", (socket) => {
 
 const PORT = process.env.PORT || 4000;
 
-connectDB();
+await connectDB();
+startShipperExpiryScheduler();
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

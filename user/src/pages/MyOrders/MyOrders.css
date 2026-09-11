@@ -730,3 +730,16 @@
   font-size: 15px;
   color: var(--accent-color);
 }
+.refund-status {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #eef7ff;
+  color: #155f9a;
+  font-size: 0.9rem;
+}
+
+.refund-status-failed {
+  background: #fff1f1;
+  color: #a61b1b;
+}

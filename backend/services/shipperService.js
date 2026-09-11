@@ -1,7 +1,10 @@
 import { Order, ShipperProfile } from "../models/index.cjs";
+import axios from "axios";
+import crypto from "crypto";
 import AppError from "../utils/AppError.js";
 import { recordAudit } from "../utils/auditLog.js";
 import * as orderService from "./orderService.js";
+import { getShipperWalletSummary, requireShipperCanAcceptOrders, reserveCodLiability } from "./walletService.js";
 
 const LOCATION_STALE_MS = 90 * 1000;
 const OFFER_RADIUS_METRES = 5000;
@@ -28,7 +31,11 @@ const requireFreshLocation = (profile) => {
   }
 };
 
-export const me = async (userId) => ({ success: true, data: await getProfile(userId) });
+export const me = async (userId) => ({
+  success: true,
+  data: await getProfile(userId),
+  wallet: await getShipperWalletSummary(userId),
+});
 
 export const updateLocation = async (userId, { lat, lng, pushToken }) => {
   const profile = await getProfile(userId);
@@ -69,6 +76,8 @@ export const availableOrders = async (userId) => {
   requireApproved(profile);
   requireFreshLocation(profile);
   if (profile.status !== "available") return { success: true, data: [] };
+  const wallet = await getShipperWalletSummary(userId);
+  if (wallet.isAcceptanceLocked) return { success: true, data: [], wallet };
 
   const now = new Date();
   const orders = await Order.find({
@@ -83,7 +92,15 @@ export const availableOrders = async (userId) => {
       },
     },
   }).populate("restaurantId", "name address phone");
-  return { success: true, data: orders };
+  const eligibleOrders = orders.filter((order) => {
+    if (order.paymentMethod !== "COD") return true;
+    const liability = order.financialSnapshot?.codLiabilityAmount || Math.round(
+      (order.itemsPrice || 0) + (order.shippingPrice || 0) * 0.15
+    );
+    return liability <= wallet.depositBalance &&
+      wallet.earningsBalance - wallet.reservedCodLiability - liability > wallet.lockThreshold;
+  });
+  return { success: true, data: eligibleOrders, wallet };
 };
 
 export const currentOrder = async (userId) => {
@@ -114,6 +131,7 @@ export const acceptOrder = async (user, orderId) => {
   const profile = await getProfile(user._id);
   requireApproved(profile);
   requireFreshLocation(profile);
+  await requireShipperCanAcceptOrders(user._id);
   if (profile.status !== "available" || profile.currentOrder) {
     throw new AppError("Shipper is not available", 409);
   }
@@ -147,6 +165,20 @@ export const acceptOrder = async (user, orderId) => {
   if (!order) {
     await ShipperProfile.findByIdAndUpdate(profile._id, { $set: { status: "available", currentOrder: null } });
     throw new AppError("Order is no longer available", 409);
+  }
+  if (order.paymentMethod === "COD") {
+    try {
+      await reserveCodLiability(order._id, user._id);
+    } catch (error) {
+      await Promise.all([
+        Order.updateOne(
+          { _id: order._id, shipperId: user._id, shipperAssignmentStatus: "accepted" },
+          { $set: { shipperId: null, shipperAssignmentStatus: "unassigned", shipperAcceptedAt: null } }
+        ),
+        ShipperProfile.findByIdAndUpdate(profile._id, { $set: { status: "available", currentOrder: null } }),
+      ]);
+      throw error;
+    }
   }
   await recordAudit({ actor: user, action: "shipper.order_accepted", targetType: "order", targetId: order._id });
   return { success: true, data: order };
@@ -209,25 +241,78 @@ export const listProfiles = async () => ({
     .sort({ updatedAt: -1 }),
 });
 
+const vnpayDate = (date) => {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+  }).formatToParts(date).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  return `${parts.year}${parts.month}${parts.day}${parts.hour}${parts.minute}${parts.second}`;
+};
+
+export const requestVnpayRefund = async (order) => {
+  const tmnCode = process.env.VNPAY_TMN_CODE;
+  const hashSecret = process.env.VNPAY_HASH_SECRET;
+  const createBy = process.env.VNPAY_REFUND_CREATE_BY;
+  if (!tmnCode || !hashSecret || !createBy || !order.vnpTransactionNo) {
+    throw new Error("VNPay refund is not configured or the original transaction is missing");
+  }
+  const requestId = `RF${Date.now()}${String(order._id).slice(-8)}`;
+  const createDate = vnpayDate(new Date());
+  const transactionDate = order.vnpCreateDate || vnpayDate(order.createdAt);
+  const ipAddr = process.env.VNPAY_REFUND_IP_ADDR || "127.0.0.1";
+  const orderInfo = `Hoan tien don hang ${order._id}`;
+  const data = [requestId, "2.1.0", "refund", tmnCode, "02", order.vnpTxnRef,
+    Math.round(order.totalPrice) * 100, order.vnpTransactionNo, transactionDate,
+    createBy, createDate, ipAddr, orderInfo].join("|");
+  const vnp_SecureHash = crypto.createHmac("sha512", hashSecret).update(data, "utf8").digest("hex");
+  const response = await axios.post(
+    process.env.VNPAY_REFUND_API_URL || "https://sandbox.vnpayment.vn/merchant_webapi/api/transaction",
+    {
+      vnp_RequestId: requestId, vnp_Version: "2.1.0", vnp_Command: "refund", vnp_TmnCode: tmnCode,
+      vnp_TransactionType: "02", vnp_TxnRef: order.vnpTxnRef,
+      vnp_Amount: Math.round(order.totalPrice) * 100, vnp_OrderInfo: orderInfo,
+      vnp_TransactionNo: order.vnpTransactionNo, vnp_TransactionDate: transactionDate,
+      vnp_CreateBy: createBy, vnp_CreateDate: createDate, vnp_IpAddr: ipAddr, vnp_SecureHash,
+    },
+    { timeout: 15000 }
+  );
+  if (response.data?.vnp_ResponseCode !== "00") {
+    throw new Error(`VNPay refund rejected: ${response.data?.vnp_Message || response.data?.vnp_ResponseCode || "unknown error"}`);
+  }
+  return requestId;
+};
+
 export const expireUnacceptedOrders = async () => {
   const now = new Date();
-  const result = await Order.updateMany(
-    {
-      deliveryMethod: "shipper",
-      shipperAssignmentStatus: "unassigned",
-      orderStatus: { $in: DISPATCHABLE_ORDER_STATUSES },
-      shipperAssignmentDeadlineAt: { $lte: now },
-    },
-    {
-      $set: {
-        orderStatus: "cancelled",
-        shipperAssignmentStatus: "expired",
-        cancellationCode: "NO_SHIPPER_AVAILABLE",
-        reason: "No shipper accepted this order within 15 minutes.",
-      },
+  const overdueOrders = await Order.find({
+    deliveryMethod: "shipper", shipperAssignmentStatus: "unassigned",
+    orderStatus: { $in: DISPATCHABLE_ORDER_STATUSES }, shipperAssignmentDeadlineAt: { $lte: now },
+  });
+  let cancelledCount = 0;
+  for (const order of overdueOrders) {
+    try {
+      let refund = {};
+      if (order.paymentMethod === "VNPAY" && order.isPaid) {
+        const refundRequestId = await requestVnpayRefund(order);
+        refund = { refundStatus: "requested", refundRequestId, refundRequestedAt: new Date() };
+      }
+      const result = await Order.updateOne(
+        { _id: order._id, shipperAssignmentStatus: "unassigned", orderStatus: { $in: DISPATCHABLE_ORDER_STATUSES } },
+        { $set: { orderStatus: "cancelled", shipperAssignmentStatus: "expired", cancellationCode: "NO_SHIPPER_AVAILABLE", reason: "No shipper accepted this order within 15 minutes.", ...refund } }
+      );
+      cancelledCount += result.modifiedCount;
+    } catch (error) {
+      await Order.updateOne({ _id: order._id }, { $set: { refundStatus: "failed" } });
+      console.error(`Could not expire order ${order._id}: ${error.message}`);
     }
-  );
-  return { cancelledCount: result.modifiedCount };
+  }
+  return { cancelledCount };
+};
+
+export const startShipperExpiryScheduler = () => {
+  const run = () => expireUnacceptedOrders().catch((error) => console.error("Shipper expiry job failed:", error.message));
+  run();
+  return setInterval(run, 60 * 1000);
 };
 
 export { LOCATION_STALE_MS, OFFER_RADIUS_METRES };

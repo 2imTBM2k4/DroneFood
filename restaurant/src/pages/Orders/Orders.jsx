@@ -119,6 +119,7 @@ const Orders = ({ url }) => {
   useEffect(() => {
     fetchAllOrders();
 
+    const token = localStorage.getItem("token");
     const socket = io(url, { auth: { token } });
     const restaurantId = localStorage.getItem("restaurantId");
     if (restaurantId) {
@@ -364,7 +365,7 @@ const Orders = ({ url }) => {
                     </button>
                   </div>
                 )}
-                {order.orderStatus === "preparing" && (
+                {order.orderStatus === "preparing" && order.deliveryMethod !== "shipper" && (
                   <div className="status-buttons">
                     <button
                       className="btn-deliver"

@@ -33,7 +33,11 @@ export const calculateShippingQuote = async ({ deliveryMethod, origin, destinati
     ratePerKm = DRONE_RATE_PER_KM;
     distanceType = "air";
   } else if (deliveryMethod === "shipper") {
-    distanceKm = await getRoadDistanceKm(origin, destination);
+    // A pickup and drop-off at the exact same coordinates costs no road
+    // distance and does not require an external routing lookup.
+    distanceKm = origin.lat === destination.lat && origin.lng === destination.lng
+      ? 0
+      : await getRoadDistanceKm(origin, destination);
     ratePerKm = SHIPPER_RATE_PER_KM;
     distanceType = "road";
   } else {

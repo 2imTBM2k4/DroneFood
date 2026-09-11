@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Order, ShipperProfile } from "../../models/index.cjs";
+import { Order, ShipperProfile, ShipperDeposit } from "../../models/index.cjs";
 import { createRestaurantOwner, createUser } from "../helpers.js";
 import * as shipperService from "../../services/shipperService.js";
 import * as orderService from "../../services/orderService.js";
@@ -15,6 +15,7 @@ const makeShipper = async (suffix, coordinates = [106.7009, 10.7769]) => {
     currentLocation: point(...coordinates),
     locationUpdatedAt: new Date(),
   });
+  await ShipperDeposit.create({ user: user._id, shipper: user._id, balance: 350000 });
   return user;
 };
 
@@ -26,11 +27,21 @@ const makeOrder = async (userId, restaurantId, overrides = {}) =>
     shippingAddress: { fullName: "Customer", address: "A", city: "HCM", state: "HCM", country: "VN", phone: "0900000000" },
     paymentMethod: "COD",
     itemsPrice: 50000,
+    shippingPrice: 5000,
     totalPrice: 55000,
     deliveryMethod: "shipper",
     pickupLocation: point(106.701, 10.777),
     shipperAssignmentStatus: "unassigned",
     shipperAssignmentDeadlineAt: new Date(Date.now() + 15 * 60 * 1000),
+    financialSnapshot: {
+      restaurantSharePercent: 80,
+      platformFoodCommissionPercent: 20,
+      shipperDeliverySharePercent: 85,
+      platformDeliverySharePercent: 15,
+      restaurantPayoutAmount: 40000,
+      shipperOnlineEarningsAmount: 4250,
+      codLiabilityAmount: 50750,
+    },
     ...overrides,
   });
 

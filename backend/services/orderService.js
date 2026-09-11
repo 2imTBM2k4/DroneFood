@@ -1,4 +1,3 @@
-import mongoose from "mongoose";
 import crypto from "crypto";
 import * as orderRepo from "../repositories/orderRepository.js";
 import * as restaurantRepo from "../repositories/restaurantRepository.js";
@@ -8,16 +7,23 @@ import AppError from "../utils/AppError.js";
 import { computeUnitPrice } from "../utils/foodOptions.js";
 import { calculateShippingQuote, computeOrderTotals } from "../config/fees.js";
 import { recordAudit } from "../utils/auditLog.js";
+import { releaseCodLiability, settleDeliveredOrder } from "./walletService.js";
 
 const VNPAY_DEFAULT_URL = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
 
-const vnpayDate = (date) =>
-  new Intl.DateTimeFormat("en-GB", {
+const vnpayDate = (date) => {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
     timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
-  }).formatToParts(date).reduce((value, part) =>
-    ["year", "month", "day", "hour", "minute", "second"].includes(part.type)
-      ? value + part.value : value, "");
+  }).formatToParts(date).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  // VNPay requires yyyyMMddHHmmss, regardless of the display locale's date order.
+  return `${parts.year}${parts.month}${parts.day}${parts.hour}${parts.minute}${parts.second}`;
+};
+
+const vnpayIpAddress = (ip) => {
+  const normalized = String(ip || "127.0.0.1").replace(/^::ffff:/, "");
+  return normalized === "::1" ? "127.0.0.1" : normalized;
+};
 
 const signedVnpayQuery = (params, secret) => {
   const query = new URLSearchParams(
@@ -61,6 +67,12 @@ export const placeOrder = async (user, orderData, clientIp) => {
   if (!address) {
     throw new AppError("Shipping address is required.", 400);
   }
+  if (paymentMethod === "COD" && deliveryMethod !== "shipper") {
+    throw new AppError("COD is only available for shipper delivery", 400);
+  }
+  // Fail before creating an order or changing the cart when credentials are
+  // absent. Otherwise a customer could lose their cart without a payment URL.
+  const vnpay = paymentMethod === "VNPAY" ? vnpayConfig() : null;
 
   // The server's cart is the only source of truth for what is being bought
   // and what it costs. Whatever `items`, `amount` or `restaurantId` the client
@@ -119,6 +131,15 @@ export const placeOrder = async (user, orderData, clientIp) => {
     destination: { lat: address.lat, lng: address.lng },
   });
   const totals = computeOrderTotals(subtotal, deliveryQuote.shippingPrice);
+  const financialSnapshot = {
+    restaurantSharePercent: 80,
+    platformFoodCommissionPercent: 20,
+    shipperDeliverySharePercent: 85,
+    platformDeliverySharePercent: 15,
+    restaurantPayoutAmount: Math.round(totals.subtotal * 0.8),
+    shipperOnlineEarningsAmount: Math.round(totals.deliveryFee * 0.85),
+    codLiabilityAmount: Math.round(totals.subtotal + totals.deliveryFee * 0.15),
+  };
 
   const newOrderData = {
     user: user._id,
@@ -140,6 +161,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
     deliveryDistanceKm: deliveryQuote.billedDistanceKm,
     deliveryDistanceType: deliveryQuote.distanceType,
     deliveryRatePerKm: deliveryQuote.ratePerKm,
+    financialSnapshot,
     ...(deliveryMethod === "shipper" && {
       pickupLocation: {
         type: "Point",
@@ -155,15 +177,13 @@ export const placeOrder = async (user, orderData, clientIp) => {
     restaurantId: restaurantId,
     isPaid: false,
     paidAt: null,
-    orderStatus: "pending",
+    orderStatus: paymentMethod === "VNPAY" ? "pending_payment" : "pending",
   };
   const newOrder = await orderRepo.create(newOrderData);
-  await cartRepo.deleteByUserId(user._id);
-  await userRepo.updateById(user._id, { cart: [] });
 
   let paymentUrl = null;
   if (paymentMethod === "VNPAY") {
-    const { tmnCode, hashSecret, returnUrl, paymentUrl: gatewayUrl } = vnpayConfig();
+    const { tmnCode, hashSecret, returnUrl, paymentUrl: gatewayUrl } = vnpay;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 15 * 60 * 1000);
     const params = {
@@ -172,7 +192,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
       vnp_CreateDate: vnpayDate(now),
       vnp_CurrCode: "VND",
       vnp_ExpireDate: vnpayDate(expiresAt),
-      vnp_IpAddr: clientIp || "127.0.0.1",
+      vnp_IpAddr: vnpayIpAddress(clientIp),
       vnp_Locale: "vn",
       vnp_OrderInfo: `Thanh toan don hang ${newOrder._id}`,
       vnp_OrderType: "other",
@@ -183,7 +203,13 @@ export const placeOrder = async (user, orderData, clientIp) => {
     };
     const secureHash = signedVnpayQuery(params, hashSecret);
     paymentUrl = `${gatewayUrl}?${new URLSearchParams({ ...params, vnp_SecureHash: secureHash }).toString()}`;
-    await orderRepo.updateById(newOrder._id, { vnpTxnRef: params.vnp_TxnRef });
+    await orderRepo.updateById(newOrder._id, {
+      vnpTxnRef: params.vnp_TxnRef,
+      vnpCreateDate: params.vnp_CreateDate,
+    });
+  } else {
+    await cartRepo.deleteByUserId(user._id);
+    await userRepo.updateById(user._id, { cart: [] });
   }
 
   return {
@@ -192,6 +218,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
     orderId: newOrder._id,
     restaurantId: restaurantId.toString(),
     deliveryMethod,
+    paymentMethod,
     message:
       paymentMethod === "COD"
         ? "Order placed with COD"
@@ -201,7 +228,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
   };
 };
 
-export const handleVnpayReturn = async (query) => {
+const verifyVnpayResponse = async (query) => {
   const { hashSecret } = vnpayConfig();
   const receivedHash = query.vnp_SecureHash;
   const signedParams = Object.fromEntries(
@@ -212,21 +239,46 @@ export const handleVnpayReturn = async (query) => {
     crypto.timingSafeEqual(Buffer.from(receivedHash, "utf8"), Buffer.from(calculatedHash, "utf8"));
   const orderId = query.vnp_TxnRef;
   const order = orderId && await orderRepo.findById(orderId);
-  const paid = hashIsValid && order && query.vnp_ResponseCode === "00" &&
-    Number(query.vnp_Amount) === Math.round(order.totalPrice) * 100;
+  return { orderId, order, hashIsValid, amountMatches: Boolean(order) && Number(query.vnp_Amount) === Math.round(order.totalPrice) * 100 };
+};
+
+const recordVnpayResult = async (query) => {
+  const result = await verifyVnpayResponse(query);
+  const { orderId, order, hashIsValid, amountMatches } = result;
+  const paid = hashIsValid && amountMatches && query.vnp_ResponseCode === "00";
 
   if (paid && !order.isPaid) {
     await orderRepo.updateById(orderId, {
       isPaid: true,
       paidAt: Date.now(),
+      orderStatus: "pending",
       vnpTransactionNo: query.vnp_TransactionNo || null,
       paymentResult: { id: query.vnp_TransactionNo, status: query.vnp_ResponseCode, update_time: query.vnp_PayDate },
     });
+    return { ...result, paid: true, newlyPaid: true };
   }
   if (hashIsValid && order && !paid && !order.isPaid) {
     await orderRepo.updateById(orderId, { orderStatus: "cancelled", reason: "VNPay payment failed or was cancelled" });
   }
-  return { orderId, paid: Boolean(paid) };
+  return { ...result, paid: Boolean(paid || order?.isPaid), newlyPaid: false };
+};
+
+export const handleVnpayReturn = async (query) => recordVnpayResult(query);
+
+export const handleVnpayIpn = async (query) => {
+  const result = await verifyVnpayResponse(query);
+  if (!result.hashIsValid) return { RspCode: "97", Message: "Invalid signature" };
+  if (!result.order) return { RspCode: "01", Message: "Order not found" };
+  if (!result.amountMatches) return { RspCode: "04", Message: "Invalid amount" };
+
+  const recorded = await recordVnpayResult(query);
+  if (recorded.newlyPaid || query.vnp_ResponseCode !== "00") {
+    return { RspCode: "00", Message: "Confirm Success", ...recorded };
+  }
+  if (recorded.order?.vnpTransactionNo === query.vnp_TransactionNo) {
+    return { RspCode: "00", Message: "Confirm Success", ...recorded };
+  }
+  return { RspCode: "02", Message: "Order already confirmed", ...recorded };
 };
 
 export const verifyOrder = async (user, orderId) => {
@@ -256,7 +308,11 @@ export const listOrders = async (user, { page, limit } = {}) => {
         restId = restaurant._id;
       }
     }
-    filter.restaurantId = restId;
+    filter = {
+      restaurantId: restId,
+      // A VNPay order is not actionable until the gateway has confirmed it.
+      $or: [{ paymentMethod: { $ne: "VNPAY" } }, { isPaid: true }],
+    };
   } else if (user.role !== "admin") {
     throw new AppError("Unauthorized", 403);
   }
@@ -421,6 +477,17 @@ export const updateStatus = async (user, updateData) => {
   const updateDataObj = { orderStatus: status };
   if (status === "cancelled" && reason) {
     updateDataObj.reason = reason.trim();
+
+    // A paid VNPay order is cancelled only after the gateway has accepted the
+    // full-refund request. This prevents the UI from claiming a refund that
+    // was never submitted.
+    if (order.paymentMethod === "VNPAY" && order.isPaid) {
+      const { requestVnpayRefund } = await import("./shipperService.js");
+      const refundRequestId = await requestVnpayRefund(order);
+      updateDataObj.refundStatus = "requested";
+      updateDataObj.refundRequestId = refundRequestId;
+      updateDataObj.refundRequestedAt = new Date();
+    }
     
     // Giải phóng drone khi đơn hàng bị hủy
     if (order.droneId) {
@@ -466,71 +533,20 @@ export const updateStatus = async (user, updateData) => {
       }
     }
 
-    if (!order.isDelivered && (updateDataObj.isPaid || order.isPaid)) {
-      const restaurant = await restaurantRepo.findById(order.restaurantId);
-      const admin = await userRepo.findAdmin();
-      if (!admin) {
-        throw new AppError("Admin account not found. Cannot process balance update.", 500);
-      }
-      if (restaurant && admin) {
-        // Split the FOOD subtotal only — the delivery and service fees are the
-        // platform's, so paying the restaurant a cut of them would overpay it.
-        // Older orders predate `itemsPrice`, so fall back to the item snapshot.
-        const itemsSubtotal =
-          typeof order.itemsPrice === "number" && order.itemsPrice > 0
-            ? order.itemsPrice
-            : (order.orderItems || []).reduce(
-                (sum, item) => sum + item.price * item.quantity,
-                0
-              );
-        const platformFees =
-          (order.shippingPrice || 0) + (order.serviceFee || 0);
-
-        const restaurantShare = itemsSubtotal * 0.8;
-        const adminShare = itemsSubtotal * 0.2 + platformFees;
-
-        try {
-          const session = await mongoose.startSession();
-          try {
-            await session.withTransaction(async () => {
-              await restaurantRepo.updateById(
-                restaurant._id,
-                { $inc: { balance: restaurantShare } },
-                { session }
-              );
-              await userRepo.updateById(
-                admin._id,
-                { $inc: { balance: adminShare } },
-                undefined,
-                { session }
-              );
-            });
-          } finally {
-            await session.endSession();
-          }
-        } catch (txnError) {
-          if (
-            txnError.message?.includes("Transaction") ||
-            txnError.message?.includes("replica set") ||
-            txnError.codeName === "IllegalOperation"
-          ) {
-            await Promise.all([
-              restaurantRepo.updateById(restaurant._id, {
-                $inc: { balance: restaurantShare },
-              }),
-              userRepo.updateById(admin._id, {
-                $inc: { balance: adminShare },
-              }),
-            ]);
-          } else {
-            throw txnError;
-          }
-        }
-      }
-    }
   }
 
-  await orderRepo.updateById(orderId, updateDataObj);
+  if (status === "delivered") {
+    await settleDeliveredOrder(orderId, {
+      deliveredAt: updateDataObj.deliveredAt,
+      paidAt: updateDataObj.paidAt,
+      shipperCompletedAt: updateDataObj.shipperCompletedAt,
+    });
+  } else {
+    await orderRepo.updateById(orderId, updateDataObj);
+    if (status === "cancelled" && order.codReservationStatus === "reserved") {
+      await releaseCodLiability(orderId);
+    }
+  }
   // Every status change is recorded, whoever made it. Admin overrides carry the
   // mandatory reason; the customer's and restaurant's own actions are logged
   // too so the order's history is complete.

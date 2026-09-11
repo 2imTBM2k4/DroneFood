@@ -66,7 +66,7 @@ backend/
 - **Authentication**: JWT (30-minute access token + 7-day refresh token)
 - **Validation**: Joi (with `stripUnknown` for mass-assignment protection)
 - **Real-time**: Socket.io (order notifications to restaurants)
-- **Payments**: Stripe, PayPal
+- **Payments**: VNPay
 - **Image hosting**: Cloudinary
 - **File upload**: Multer (JPEG/PNG/GIF/WebP, 5MB limit)
 - **Email**: Nodemailer (password reset)
@@ -84,7 +84,7 @@ backend/
 - **Icons**: Lucide React
 - **Maps**: Leaflet / React-Leaflet + TrackAsia GL
 - **QR**: qrcode.react + html5-qrcode
-- **Payments**: @paypal/react-paypal-js (user app)
+- **Payments**: VNPay redirect checkout (user app)
 - **Charts**: Chart.js + Recharts (admin app)
 
 ### Infrastructure
@@ -98,7 +98,7 @@ backend/
 - Pick exact delivery location on map (Geolocation + TrackAsia)
 - View restaurant menu with food option groups (sizes, toppings)
 - Add to cart (single-restaurant restriction) with item customization
-- Place orders (COD, Card via Stripe, PayPal)
+- Place orders (COD, online via VNPay)
 - Track drone delivery in real-time
 - Scan QR code to open drone cargo bay and confirm receipt
 - Cancel pending orders with reason
@@ -160,8 +160,7 @@ cancelled  cancelled
 - Node.js 18+
 - MongoDB (local or Atlas)
 - Cloudinary account
-- Stripe account (for card payments)
-- PayPal developer account (for PayPal payments)
+- VNPay merchant account (sandbox or production)
 
 ### 1. Clone the repository
 
@@ -188,8 +187,18 @@ CLOUDINARY_CLOUD_NAME=your-cloud-name
 CLOUDINARY_API_KEY=your-api-key
 CLOUDINARY_API_SECRET=your-api-secret
 
-STRIPE_SECRET_KEY=sk_test_...
-PAYPAL_CLIENT_ID=your-paypal-client-id
+VNPAY_TMN_CODE=your_vnpay_tmn_code
+VNPAY_HASH_SECRET=your_vnpay_hash_secret
+# Must point to the backend callback endpoint registered with VNPay.
+VNPAY_RETURN_URL=http://localhost:4000/api/order/vnpay-return
+VNPAY_PAYMENT_URL=https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
+VNPAY_REFUND_API_URL=https://sandbox.vnpayment.vn/merchant_webapi/api/transaction
+VNPAY_REFUND_CREATE_BY=system
+VNPAY_REFUND_IP_ADDR=127.0.0.1
+
+# Register this public endpoint as the VNPay IPN URL.
+# It confirms payments even if the buyer does not reach the return page.
+# https://your-backend/api/order/vnpay-ipn
 
 FRONTEND_URL=http://localhost:5173
 ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174,http://localhost:5175
@@ -376,7 +385,6 @@ npm run test:coverage
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/api/config/fees` | - | Get delivery/service fees |
-| GET | `/api/config/paypal` | - | Get PayPal client ID |
 
 ### Audit
 | Method | Endpoint | Auth | Description |

@@ -25,7 +25,7 @@ const ADDRESS = {
 
 describe("Order API", () => {
   describe("POST /api/order/place", () => {
-    it("should place a COD order from the server-side cart", async () => {
+    it("should place a COD shipper order from the server-side cart", async () => {
       const { restaurant } = await createRestaurantOwner();
       const user = await createUser({ email: "orderer@test.com" });
       const token = generateToken(user._id);
@@ -39,7 +39,7 @@ describe("Order API", () => {
       const res = await request(app)
         .post("/api/order/place")
         .set("Authorization", `Bearer ${token}`)
-        .send({ address: ADDRESS, paymentMethod: "COD", deliveryMethod: "drone" });
+        .send({ address: ADDRESS, paymentMethod: "COD", deliveryMethod: "shipper" });
 
       expect(res.body.success).toBe(true);
       expect(res.body.orderId).toBeDefined();
@@ -49,7 +49,7 @@ describe("Order API", () => {
       expect(order.orderStatus).toBe("pending");
       expect(order.restaurantId.toString()).toBe(restaurant._id.toString());
       expect(order.currency).toBe("VND");
-      expect(order.deliveryMethod).toBe("drone");
+      expect(order.deliveryMethod).toBe("shipper");
       expect(order.shippingPrice).toBe(0);
       expect(order.totalPrice).toBe(food.price * 2);
     });
@@ -71,7 +71,7 @@ describe("Order API", () => {
         .send({
           address: ADDRESS,
           paymentMethod: "COD",
-          deliveryMethod: "drone",
+          deliveryMethod: "shipper",
           amount: 0.01,
           items: [{ _id: food._id, name: "Free lunch", quantity: 1, price: 0 }],
         });
@@ -115,7 +115,7 @@ describe("Order API", () => {
       const res = await request(app)
         .post("/api/order/place")
         .set("Authorization", `Bearer ${token}`)
-        .send({ address: ADDRESS, paymentMethod: "COD", deliveryMethod: "drone" });
+      .send({ address: ADDRESS, paymentMethod: "COD", deliveryMethod: "shipper" });
 
       const order = await Order.findById(res.body.orderId);
       expect(order.orderItems[0].selectedOptions).toHaveLength(1);

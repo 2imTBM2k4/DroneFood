@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-toastify";
@@ -46,7 +46,6 @@ const Checkout = () => {
     setUser,
     clearCart,
     cartLines,
-    getTotalCartAmount,
     isHydrated,
   } = useContext(StoreContext);
   const navigate = useNavigate();
@@ -58,11 +57,7 @@ const Checkout = () => {
   const [deliveryQuote, setDeliveryQuote] = useState(null);
   const [quoteError, setQuoteError] = useState("");
   const [placing, setPlacing] = useState(false);
-  const [sdkReady, setSdkReady] = useState(false);
-  const paypalRef = useRef(null);
 
-  const subtotal = getTotalCartAmount();
-  const total = subtotal + (deliveryQuote?.shippingPrice || 0);
 
   // Nothing to check out — send them back to the cart. Wait for hydration
   // first, or a direct visit bounces before the session is restored.
@@ -219,7 +214,11 @@ const Checkout = () => {
     setStep(1);
   };
 
-  const placeOrder = useCallback(async (paymentDetails = null) => {
+  const placeOrder = useCallback(async () => {
+    if (paymentMethod === "COD" && deliveryMethod !== "shipper") {
+      toast.error("Cash on delivery is only available with a human shipper.");
+      return;
+    }
     setPlacing(true);
     try {
       const response = await axios.post(
@@ -238,12 +237,15 @@ const Checkout = () => {
           },
           paymentMethod,
           deliveryMethod,
-          ...(paymentDetails && { paymentDetails }),
         },
         { headers: { token } }
       );
 
       if (response.data.success) {
+        if (paymentMethod === "VNPAY" && response.data.paymentUrl) {
+          window.location.assign(response.data.paymentUrl);
+          return;
+        }
         await clearCart();
         toast.success("Order placed successfully!");
         navigate("/myorders");
@@ -258,55 +260,6 @@ const Checkout = () => {
       setPlacing(false);
     }
   }, [address, clearCart, deliveryMethod, navigate, paymentMethod, token, url]);
-
-  // Load the PayPal SDK once, the first time PayPal is selected.
-  useEffect(() => {
-    if (paymentMethod !== "PayPal" || window.paypal) {
-      if (window.paypal) setSdkReady(true);
-      return;
-    }
-    const script = document.createElement("script");
-    script.src =
-      "https://www.paypal.com/sdk/js?client-id=AciP_05xSaGGzcHyWO3UCQ2kMlUMj_EsbBRgINfSc1nikIMx_-f7h1V0tmEXnnpHxcw7ZJ74GXWuBYrn&currency=VND";
-    script.async = true;
-    script.onload = () => setSdkReady(true);
-    document.body.appendChild(script);
-  }, [paymentMethod]);
-
-  // The buttons render into a node that unmounts whenever the step changes,
-  // so re-render them every time the container reappears rather than once.
-  useEffect(() => {
-    const container = paypalRef.current;
-    if (step !== 2 || paymentMethod !== "PayPal" || !sdkReady || !container) {
-      return;
-    }
-
-    container.innerHTML = "";
-    const buttons = window.paypal.Buttons({
-      createOrder: (data, actions) =>
-        actions.order.create({
-          purchase_units: [{ amount: { currency_code: "VND", value: String(Math.round(total)) } }],
-        }),
-      onApprove: async (data, actions) => {
-        const details = await actions.order.capture();
-        await placeOrder({
-          paypalOrderId: details.id,
-          paypalPayerId: details.payer?.payer_id,
-          paypalStatus: details.status,
-        });
-      },
-      onError: () => toast.error("PayPal payment failed"),
-    });
-    buttons.render(container);
-
-    return () => {
-      try {
-        buttons.close();
-      } catch {
-        /* already torn down with the node */
-      }
-    };
-  }, [step, paymentMethod, sdkReady, total, placeOrder]);
 
   const goToStep = (target) => {
     // Never jump forward past a step that isn't satisfied yet.
@@ -446,44 +399,46 @@ const Checkout = () => {
                   <span><strong>Shipper</strong><small>5.000đ/km, calculated by road route.</small></span>
                 </label>
                 <label className={`checkout-method ${deliveryMethod === "drone" ? "picked" : ""}`}>
-                  <input type="radio" value="drone" checked={deliveryMethod === "drone"} onChange={(e) => setDeliveryMethod(e.target.value)} />
+                  <input type="radio" value="drone" checked={deliveryMethod === "drone"} onChange={(e) => { setDeliveryMethod(e.target.value); if (paymentMethod === "COD") setPaymentMethod("VNPAY"); }} />
                   <span><strong>Drone</strong><small>7.000đ/km, calculated by straight-line distance.</small></span>
                 </label>
               </div>
               {deliveryQuote && <p className="checkout-review-block">Delivery: {formatVND(deliveryQuote.shippingPrice)} ({deliveryQuote.billedDistanceKm} km)</p>}
-              {quoteError && <p className="checkout-paypal-loading">{quoteError}</p>}
+              {quoteError && <p className="checkout-payment-message">{quoteError}</p>}
               <h2>Payment method</h2>
               <div className="checkout-methods">
                 <label
                   className={`checkout-method ${
                     paymentMethod === "COD" ? "picked" : ""
                   }`}
+                  style={deliveryMethod === "drone" ? { opacity: 0.55 } : undefined}
                 >
                   <input
                     type="radio"
                     value="COD"
                     checked={paymentMethod === "COD"}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    disabled={deliveryMethod === "drone"}
+                    onChange={(e) => { setPaymentMethod(e.target.value); setDeliveryMethod("shipper"); }}
                   />
                   <span>
                     <strong>Cash on delivery</strong>
-                    <small>Pay the drone when your food lands.</small>
+                    <small>Available only with a human shipper.</small>
                   </span>
                 </label>
                 <label
                   className={`checkout-method ${
-                    paymentMethod === "PayPal" ? "picked" : ""
+                    paymentMethod === "VNPAY" ? "picked" : ""
                   }`}
                 >
                   <input
                     type="radio"
-                    value="PayPal"
-                    checked={paymentMethod === "PayPal"}
+                    value="VNPAY"
+                    checked={paymentMethod === "VNPAY"}
                     onChange={(e) => setPaymentMethod(e.target.value)}
                   />
                   <span>
-                    <strong>PayPal / card</strong>
-                    <small>Pay now with PayPal, credit or debit card.</small>
+                    <strong>VNPay</strong>
+                    <small>Pay securely by bank card, QR code, or mobile banking.</small>
                   </span>
                 </label>
               </div>
@@ -538,7 +493,7 @@ const Checkout = () => {
                 <p>
                   {paymentMethod === "COD"
                     ? "Cash on delivery"
-                    : "PayPal / card"}
+                    : "VNPay"}
                 </p>
               </section>
 
@@ -565,15 +520,14 @@ const Checkout = () => {
                     {placing ? "Placing order…" : "Place order"}
                   </button>
                 ) : (
-                  <div className="checkout-paypal">
-                    {!sdkReady ? (
-                      <p className="checkout-paypal-loading">
-                        Loading PayPal…
-                      </p>
-                    ) : (
-                      <div ref={paypalRef} />
-                    )}
-                  </div>
+                  <button
+                    type="button"
+                    className="checkout-next"
+                    onClick={placeOrder}
+                    disabled={placing}
+                  >
+                    {placing ? "Creating payment…" : "Pay with VNPay"}
+                  </button>
                 )}
               </div>
             </div>

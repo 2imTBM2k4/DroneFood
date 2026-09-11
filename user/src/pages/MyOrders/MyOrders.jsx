@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import axios from "axios";
 import { StoreContext } from "../../context/StoreContext";
 import { toast } from "react-toastify";
@@ -138,8 +138,6 @@ const MyOrders = () => {
   const [showCancelModal, setShowCancelModal] = useState(null);
   const [cancelReason, setCancelReason] = useState("");
   const [now, setNow] = useState(() => Date.now());
-  const hasLoadedOrders = useRef(false);
-  const notifiedExpiredOrderIds = useRef(new Set());
   const hasShipperAwaitingAcceptance = orders.some((order) => order.deliveryMethod === "shipper" && ["pending", "preparing"].includes(order.orderStatus) && order.shipperAssignmentStatus === "unassigned");
 
   const fetchOrders = useCallback(async ({ background = false } = {}) => {
@@ -157,19 +155,6 @@ const MyOrders = () => {
       });
       if (response.data.success) {
         const nextOrders = response.data.data;
-        if (hasLoadedOrders.current) {
-          nextOrders
-            .filter((order) => order.cancellationCode === "NO_SHIPPER_AVAILABLE")
-            .forEach((order) => {
-              if (!notifiedExpiredOrderIds.current.has(order._id)) {
-                notifiedExpiredOrderIds.current.add(order._id);
-                toast.error(`Đơn #${order._id.slice(-8).toUpperCase()} đã bị hủy vì chưa có Shipper nhận đơn. Bạn có thể đặt lại bằng Drone.`, {
-                  autoClose: 6000,
-                });
-              }
-            });
-        }
-        hasLoadedOrders.current = true;
         setOrders(nextOrders);
       } else {
         throw new Error(response.data.message || "Failed to load orders");
@@ -289,11 +274,6 @@ const MyOrders = () => {
   };
 
   useEffect(() => {
-    hasLoadedOrders.current = false;
-    notifiedExpiredOrderIds.current.clear();
-  }, [token]);
-
-  useEffect(() => {
     fetchOrders();
     if (!token) return undefined;
     // The expiry job runs outside the API process, so polling is required to
@@ -392,7 +372,7 @@ const MyOrders = () => {
                     <span>
                       {order.paymentMethod === "COD"
                         ? "Cash on delivery"
-                        : "Credit card"}
+                        : "VNPay"}
                     </span>
                   </div>
                   <div className="summary-row">
@@ -410,6 +390,17 @@ const MyOrders = () => {
                 </div>
               </div>
 
+              {order.refundStatus === "requested" && (
+                <p className="refund-status" role="status">
+                  Hoàn tiền VNPay đã được yêu cầu. Mã yêu cầu: {order.refundRequestId}.
+                </p>
+              )}
+              {order.refundStatus === "failed" && (
+                <p className="refund-status refund-status-failed" role="alert">
+                  Chưa thể gửi yêu cầu hoàn tiền. Vui lòng liên hệ hỗ trợ.
+                </p>
+              )}
+
               <OrderStatusTimeline order={order} now={now} />
 
               {order.orderStatus === "pending" && (
@@ -425,12 +416,14 @@ const MyOrders = () => {
 
               {order.orderStatus === "delivering" && (
                 <div className="order-actions">
-                  <button
-                    onClick={() => handleViewDelivery(order)}
-                    className="view-delivery-btn"
-                  >
-                    View delivery details
-                  </button>
+                  {order.deliveryMethod !== "shipper" && (
+                    <button
+                      onClick={() => handleViewDelivery(order)}
+                      className="view-delivery-btn"
+                    >
+                      View delivery details
+                    </button>
+                  )}
                   <button
                     onClick={() => confirmReceived(order._id)}
                     className={`confirm-received-btn ${
@@ -449,9 +442,6 @@ const MyOrders = () => {
                     <strong>Không tìm được Shipper</strong>
                     <p>{order.reason || "Đơn đã tự hủy sau 15 phút vì chưa có Shipper nào nhận."}</p>
                   </div>
-                  <button type="button" className="reorder-drone-btn" onClick={() => navigate("/restaurants")}>
-                    Tìm quán để đặt lại bằng Drone
-                  </button>
                 </div>
               )}
 
@@ -510,7 +500,7 @@ const MyOrders = () => {
       )}
 
       {/* Drone Delivery Modal */}
-      {showDroneModal && selectedOrder && (
+      {showDroneModal && selectedOrder && selectedOrder.deliveryMethod !== "shipper" && (
         <div
           className="drone-modal-overlay"
           onClick={() => setShowDroneModal(false)}
