@@ -38,7 +38,10 @@ export const addFood = async (user, foodData, file) => {
 };
 
 // SỬA: Cho phép user thường xem món ăn theo restaurantId
-export const listFood = async (user, restaurantId, { page, limit } = {}) => {
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+export const listFood = async (user, query = {}) => {
+  const { restaurantId, q, category, minPrice, maxPrice, page, limit, sort } = query;
   let filter = {};
 
   if (restaurantId) {
@@ -47,8 +50,19 @@ export const listFood = async (user, restaurantId, { page, limit } = {}) => {
     filter.restaurantId = user.restaurantId;
   }
 
-  const result = await foodRepo.findAll(filter, { page, limit });
-  return { success: true, data: result.data, ...(result.pagination && { pagination: result.pagination }) };
+  if (q) {
+    const search = new RegExp(escapeRegex(q), "i");
+    filter.$or = [{ name: search }, { description: search }];
+  }
+  if (category) filter.category = category;
+  if (minPrice !== undefined || maxPrice !== undefined) {
+    filter.price = {};
+    if (minPrice !== undefined) filter.price.$gte = minPrice;
+    if (maxPrice !== undefined) filter.price.$lte = maxPrice;
+  }
+
+  const result = await foodRepo.findAll(filter, { page, limit, sort });
+  return { success: true, data: result.data, pagination: result.pagination };
 };
 
 export const removeFood = async (user, id) => {

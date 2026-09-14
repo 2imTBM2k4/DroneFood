@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { User, MapPin, Shield, Camera, LogIn, Loader2 } from "lucide-react";
@@ -6,6 +6,7 @@ import { StoreContext } from "../../context/StoreContext";
 import Avatar from "../../components/Avatar/Avatar";
 import { EmptyState } from "../../../../shared/components/StateBlock";
 import "./Profile.css";
+import AddressBookManager from "../../components/AddressBookManager/AddressBookManager";
 
 const TABS = [
   { id: "info", label: "Profile", icon: User },
@@ -23,17 +24,6 @@ const Profile = () => {
   const [info, setInfo] = useState({ name: "", email: "", phone: "" });
   const [savingInfo, setSavingInfo] = useState(false);
 
-  const [address, setAddress] = useState({
-    fullName: "",
-    phone: "",
-    address: "",
-    city: "",
-    state: "",
-    country: "",
-    zipCode: "",
-  });
-  const [savingAddress, setSavingAddress] = useState(false);
-
   const [password, setPassword] = useState({
     currentPassword: "",
     newPassword: "",
@@ -50,18 +40,12 @@ const Profile = () => {
       email: user.email || "",
       phone: user.phone || "",
     });
-    setAddress({
-      fullName: user.address?.fullName || "",
-      phone: user.address?.phone || "",
-      address: user.address?.address || "",
-      city: user.address?.city || "",
-      state: user.address?.state || "",
-      country: user.address?.country || "",
-      zipCode: user.address?.zipCode || "",
-    });
   }, [user]);
 
   const authConfig = { headers: { token } };
+  const handleAddressBookChange = useCallback((addressBook) => {
+    setUser((current) => current ? { ...current, addressBook } : current);
+  }, [setUser]);
 
   const handleAvatarPick = () => fileInputRef.current?.click();
 
@@ -110,28 +94,6 @@ const Profile = () => {
       toast.error(err.response?.data?.message || "Update failed");
     } finally {
       setSavingInfo(false);
-    }
-  };
-
-  const handleSaveAddress = async (e) => {
-    e.preventDefault();
-    try {
-      setSavingAddress(true);
-      const res = await axios.put(
-        `${url}/api/user/update-address`,
-        address,
-        authConfig
-      );
-      if (res.data.success) {
-        setUser(res.data.data);
-        toast.success("Address saved");
-      } else {
-        toast.error(res.data.message || "Update failed");
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.message || "Update failed");
-    } finally {
-      setSavingAddress(false);
     }
   };
 
@@ -276,105 +238,7 @@ const Profile = () => {
         )}
 
         {activeTab === "address" && (
-          <form className="profile-form" onSubmit={handleSaveAddress}>
-            <div className="profile-field-row">
-              <div className="profile-field">
-                <label htmlFor="pf-fullname">Recipient name</label>
-                <input
-                  id="pf-fullname"
-                  type="text"
-                  value={address.fullName}
-                  onChange={(e) =>
-                    setAddress({ ...address, fullName: e.target.value })
-                  }
-                  placeholder="Recipient"
-                />
-              </div>
-              <div className="profile-field">
-                <label htmlFor="pf-addr-phone">Phone</label>
-                <input
-                  id="pf-addr-phone"
-                  type="tel"
-                  value={address.phone}
-                  onChange={(e) =>
-                    setAddress({ ...address, phone: e.target.value })
-                  }
-                  placeholder="Contact phone"
-                />
-              </div>
-            </div>
-            <div className="profile-field">
-              <label htmlFor="pf-address">Street address</label>
-              <input
-                id="pf-address"
-                type="text"
-                value={address.address}
-                onChange={(e) =>
-                  setAddress({ ...address, address: e.target.value })
-                }
-                placeholder="House number, street, ward..."
-              />
-            </div>
-            <div className="profile-field-row">
-              <div className="profile-field">
-                <label htmlFor="pf-city">City</label>
-                <input
-                  id="pf-city"
-                  type="text"
-                  value={address.city}
-                  onChange={(e) =>
-                    setAddress({ ...address, city: e.target.value })
-                  }
-                  placeholder="City"
-                />
-              </div>
-              <div className="profile-field">
-                <label htmlFor="pf-state">State / Province</label>
-                <input
-                  id="pf-state"
-                  type="text"
-                  value={address.state}
-                  onChange={(e) =>
-                    setAddress({ ...address, state: e.target.value })
-                  }
-                  placeholder="State or province"
-                />
-              </div>
-            </div>
-            <div className="profile-field-row">
-              <div className="profile-field">
-                <label htmlFor="pf-country">Country</label>
-                <input
-                  id="pf-country"
-                  type="text"
-                  value={address.country}
-                  onChange={(e) =>
-                    setAddress({ ...address, country: e.target.value })
-                  }
-                  placeholder="Country"
-                />
-              </div>
-              <div className="profile-field">
-                <label htmlFor="pf-zip">Zip code</label>
-                <input
-                  id="pf-zip"
-                  type="text"
-                  value={address.zipCode}
-                  onChange={(e) =>
-                    setAddress({ ...address, zipCode: e.target.value })
-                  }
-                  placeholder="Postal code"
-                />
-              </div>
-            </div>
-            <button
-              type="submit"
-              className="profile-save"
-              disabled={savingAddress}
-            >
-              {savingAddress ? "Saving..." : "Save address"}
-            </button>
-          </form>
+          <AddressBookManager url={url} token={token} onChange={handleAddressBookChange} />
         )}
 
         {activeTab === "security" && (

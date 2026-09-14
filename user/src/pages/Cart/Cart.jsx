@@ -24,6 +24,7 @@ const Cart = () => {
   } = useContext(StoreContext);
   const navigate = useNavigate();
   const [pendingRemoval, setPendingRemoval] = useState(null);
+  const [isRemoving, setIsRemoving] = useState(false);
   const [editingLine, setEditingLine] = useState(null);
 
   const subtotal = getTotalCartAmount();
@@ -51,9 +52,18 @@ const Cart = () => {
   };
 
   const handleConfirmRemove = async () => {
-    const removed = await removeLine(pendingRemoval.lineKey);
-    if (removed) toast.success("Item removed from cart");
-    setPendingRemoval(null);
+    if (!pendingRemoval || isRemoving) return;
+
+    setIsRemoving(true);
+    try {
+      const removed = await removeLine(pendingRemoval.lineKey);
+      if (removed) {
+        toast.success("Item removed from cart");
+        setPendingRemoval(null);
+      }
+    } finally {
+      setIsRemoving(false);
+    }
   };
 
   const openEditor = (line) => {
@@ -88,16 +98,30 @@ const Cart = () => {
     <div className="cart">
       {pendingRemoval && (
         <div className="confirm-dialog-overlay">
-          <div className="confirm-dialog">
-            <h3>Confirm removal</h3>
-            <p>Remove “{pendingRemoval.name}” from your cart?</p>
+          <div
+            className="confirm-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="remove-line-title"
+            aria-describedby="remove-line-description"
+            aria-busy={isRemoving}
+          >
+            <h3 id="remove-line-title">Confirm removal</h3>
+            <p id="remove-line-description">Remove “{pendingRemoval.name}” from your cart?</p>
             <div className="confirm-dialog-buttons">
-              <button className="confirm-btn" onClick={handleConfirmRemove}>
-                Yes, remove it
+              <button
+                type="button"
+                className="confirm-btn"
+                onClick={handleConfirmRemove}
+                disabled={isRemoving}
+              >
+                {isRemoving ? "Removing…" : "Yes, remove it"}
               </button>
               <button
+                type="button"
                 className="cancel-btn"
                 onClick={() => setPendingRemoval(null)}
+                disabled={isRemoving}
               >
                 No, keep it
               </button>

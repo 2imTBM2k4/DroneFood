@@ -45,4 +45,7 @@ const foodSchema = new mongoose.Schema({
     optionGroups: { type: [optionGroupSchema], default: [] }
 });
 
+// Supports the canonical restaurant-menu filters without a collection scan.
+foodSchema.index({ restaurantId: 1, category: 1, price: 1 });
+
 module.exports = mongoose.models.Food || mongoose.model('Food', foodSchema);

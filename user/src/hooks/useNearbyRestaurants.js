@@ -16,7 +16,7 @@ import {
  * Without a saved location we fall back to the major cities.
  */
 export default function useNearbyRestaurants() {
-  const { restaurant_list, food_list, user, liveLocation } =
+  const { restaurant_list, food_list, user, liveLocation, fees } =
     useContext(StoreContext);
 
   const customer = useMemo(() => {
@@ -52,10 +52,23 @@ export default function useNearbyRestaurants() {
           customer && typeof r.lat === "number" && typeof r.lng === "number"
             ? haversineKm(customer, { lat: r.lat, lng: r.lng })
             : null;
+        const configuredDroneRate = fees?.rates?.droneRatePerKm;
+        const estimatedDeliveryFee =
+          typeof distanceKm === "number" &&
+          typeof configuredDroneRate === "number"
+            ? Math.ceil(distanceKm * configuredDroneRate)
+            : null;
+        const rawRating = Number(r.averageRating ?? r.rating);
+        const rating =
+          Number.isFinite(rawRating) && rawRating >= 0 && rawRating <= 5
+            ? rawRating
+            : null;
         return {
           ...r,
           distanceKm,
           etaMin: estimateEtaMinutes(distanceKm),
+          estimatedDeliveryFee,
+          rating,
           categories: [...(categoriesByRestaurant.get(String(r._id)) || [])],
         };
       })
@@ -69,7 +82,7 @@ export default function useNearbyRestaurants() {
 
     if (customer) annotated.sort((a, b) => a.distanceKm - b.distanceKm);
     return annotated;
-  }, [restaurant_list, categoriesByRestaurant, customer]);
+  }, [restaurant_list, categoriesByRestaurant, customer, fees]);
 
   // Cuisines offered by the restaurants on show, nearest-first order.
   const categories = useMemo(() => {

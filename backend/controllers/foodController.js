@@ -13,9 +13,7 @@ export const addFood = async (req, res) => {
 
 export const listFood = async (req, res) => {
   try {
-    const { restaurantId, page, limit } = req.query;
-    const pagination = page && limit ? { page: parseInt(page), limit: parseInt(limit) } : {};
-    const result = await foodService.listFood(req.user, restaurantId, pagination);
+    const result = await foodService.listFood(req.user, req.query);
     res.json(result);
   } catch (error) {
     res

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, X, Store } from "lucide-react";
+import { Search, X, SlidersHorizontal, Store } from "lucide-react";
 import "./RestaurantsPage.css";
 import useNearbyRestaurants from "../../hooks/useNearbyRestaurants";
 import RestaurantItem from "../../components/RestaurantItem/RestaurantItem";
@@ -25,6 +25,9 @@ const RestaurantsPage = () => {
     searchParams.get("category") || "All"
   );
   const [search, setSearch] = useState(() => getSearchParam(searchParams));
+  const minimumRating = searchParams.get("minRating") || "";
+  const maximumDeliveryFee = searchParams.get("maxDeliveryFee") || "";
+  const maximumEta = searchParams.get("maxEta") || "";
 
   // Keep state in step with the URL (arriving from the home hero or strip,
   // and the back button).
@@ -52,6 +55,12 @@ const RestaurantsPage = () => {
     writeParam("category", value);
   };
 
+  const clearFilters = () => {
+    setSearch("");
+    setCategory("All");
+    setSearchParams({}, { replace: true });
+  };
+
   const query = search.trim().toLowerCase();
   const visible = restaurants.filter((r) => {
     const matchesCategory =
@@ -61,8 +70,31 @@ const RestaurantsPage = () => {
       r.name?.toLowerCase().includes(query) ||
       r.address?.toLowerCase().includes(query) ||
       r.categories.some((c) => c.toLowerCase().includes(query));
-    return matchesCategory && matchesQuery;
+    const matchesRating =
+      !minimumRating ||
+      (typeof r.rating === "number" && r.rating >= Number(minimumRating));
+    const matchesDeliveryFee =
+      !maximumDeliveryFee ||
+      (typeof r.estimatedDeliveryFee === "number" &&
+        r.estimatedDeliveryFee <= Number(maximumDeliveryFee));
+    const matchesEta =
+      !maximumEta ||
+      (typeof r.etaMin === "number" && r.etaMin <= Number(maximumEta));
+    return (
+      matchesCategory &&
+      matchesQuery &&
+      matchesRating &&
+      matchesDeliveryFee &&
+      matchesEta
+    );
   });
+  const hasFilters = Boolean(
+    query ||
+      category !== "All" ||
+      minimumRating ||
+      maximumDeliveryFee ||
+      maximumEta
+  );
 
   return (
     <div className="restaurants-page">
@@ -101,6 +133,59 @@ const RestaurantsPage = () => {
         </div>
       </div>
 
+      <section className="restaurants-filters" aria-label="Lọc nhà hàng">
+        <div className="restaurants-filter-heading">
+          <SlidersHorizontal size={18} aria-hidden="true" />
+          <h2>Bộ lọc</h2>
+        </div>
+        <div className="restaurants-filter-fields">
+          <label className="restaurants-filter-field" htmlFor="minimum-rating">
+            <span>Đánh giá</span>
+            <select
+              id="minimum-rating"
+              value={minimumRating}
+              onChange={(event) => writeParam("minRating", event.target.value)}
+            >
+              <option value="">Tất cả</option>
+              <option value="4.5">Từ 4,5 sao</option>
+              <option value="4">Từ 4 sao</option>
+              <option value="3">Từ 3 sao</option>
+            </select>
+          </label>
+          <label className="restaurants-filter-field" htmlFor="maximum-delivery-fee">
+            <span>Phí giao hàng ước tính</span>
+            <select
+              id="maximum-delivery-fee"
+              value={maximumDeliveryFee}
+              onChange={(event) => writeParam("maxDeliveryFee", event.target.value)}
+            >
+              <option value="">Tất cả</option>
+              <option value="20000">Tối đa 20.000 ₫</option>
+              <option value="40000">Tối đa 40.000 ₫</option>
+              <option value="60000">Tối đa 60.000 ₫</option>
+            </select>
+          </label>
+          <label className="restaurants-filter-field" htmlFor="maximum-eta">
+            <span>Thời gian giao ước tính</span>
+            <select
+              id="maximum-eta"
+              value={maximumEta}
+              onChange={(event) => writeParam("maxEta", event.target.value)}
+            >
+              <option value="">Tất cả</option>
+              <option value="15">Tối đa 15 phút</option>
+              <option value="25">Tối đa 25 phút</option>
+              <option value="35">Tối đa 35 phút</option>
+            </select>
+          </label>
+        </div>
+        {hasFilters && (
+          <button type="button" className="restaurants-filter-clear" onClick={clearFilters}>
+            Xóa bộ lọc
+          </button>
+        )}
+      </section>
+
       {categories.length > 0 && (
         <div className="restaurants-catalog">
           <div className="catalog-list">
@@ -129,6 +214,8 @@ const RestaurantsPage = () => {
               image={item.image}
               distanceKm={item.distanceKm}
               etaMin={item.etaMin}
+              estimatedDeliveryFee={item.estimatedDeliveryFee}
+              rating={item.rating}
             />
           </Reveal>
         ))}
@@ -137,14 +224,16 @@ const RestaurantsPage = () => {
       {visible.length === 0 && (
         <EmptyState
           icon={Store}
-          title={query || category !== "All" ? "No matches" : "Nothing nearby"}
+          title={hasFilters ? "No matches" : "Nothing nearby"}
           description={
-            query || category !== "All"
-              ? "No restaurant here matches that. Try another search or cuisine."
+            hasFilters
+              ? "No restaurant here matches those filters. Try widening your search."
               : customer
               ? `No restaurants deliver within ${NEARBY_RADIUS_KM} km of your address yet.`
               : "No restaurants are delivering right now. Please check back soon."
           }
+          actionLabel={hasFilters ? "Clear filters" : undefined}
+          onAction={hasFilters ? clearFilters : undefined}
         />
       )}
     </div>

@@ -17,14 +17,19 @@ export const create = async (foodData) => {
 };
 
 // ✅ FIX: Không populate cho user view, chỉ populate cho admin/owner nếu cần
-export const findAll = async (filter = {}, { page, limit } = {}) => {
-  let query = Food.find(filter);
-  let total;
+export const findAll = async (filter = {}, { page = 1, limit = 20, sort } = {}) => {
+  const sortBy = {
+    price_asc: { price: 1, _id: 1 },
+    price_desc: { price: -1, _id: 1 },
+    name_asc: { name: 1, _id: 1 },
+    name_desc: { name: -1, _id: 1 },
+  }[sort] || { _id: 1 };
 
-  if (page && limit) {
-    total = await Food.countDocuments(filter);
-    query = query.skip((page - 1) * limit).limit(limit);
-  }
+  const total = await Food.countDocuments(filter);
+  const query = Food.find(filter)
+    .sort(sortBy)
+    .skip((page - 1) * limit)
+    .limit(limit);
 
   const foods = await query.lean();
   const data = foods.map(food => ({
@@ -32,10 +37,7 @@ export const findAll = async (filter = {}, { page, limit } = {}) => {
     restaurantId: food.restaurantId?.toString() || food.restaurantId
   }));
 
-  if (page && limit) {
-    return { data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
-  }
-  return { data };
+  return { data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
 };
 
 export const findById = async (id) => {

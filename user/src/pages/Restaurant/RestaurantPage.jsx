@@ -36,12 +36,13 @@ const RestaurantPage = () => {
     setRestaurant(found || null);
   }, [id, restaurant_list]);
 
-  const fetchFoods = useCallback(async () => {
+  const fetchFoods = useCallback(async (signal) => {
     if (!id) return;
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${url}/api/food/list?restaurantId=${id}`);
+      const params = new URLSearchParams({ restaurantId: id, limit: "100" });
+      const response = await fetch(`${url}/api/food/list?${params}`, { signal });
       if (!response.ok) {
         throw new Error(`Request failed (${response.status})`);
       }
@@ -52,15 +53,18 @@ const RestaurantPage = () => {
         throw new Error(data.message || "Could not load this menu");
       }
     } catch (err) {
+      if (err.name === "AbortError") return;
       setError(err.message);
       setRestaurantFoods([]);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }, [id, url]);
 
   useEffect(() => {
-    fetchFoods();
+    const controller = new AbortController();
+    fetchFoods(controller.signal);
+    return () => controller.abort();
   }, [fetchFoods]);
 
   // Categories in the order the kitchen listed them, deduplicated.
@@ -199,6 +203,13 @@ const RestaurantPage = () => {
 
 
   const deliveryFee = fees?.deliveryFee;
+  const rawRestaurantRating = Number(restaurant?.averageRating ?? restaurant?.rating);
+  const restaurantRating =
+    Number.isFinite(rawRestaurantRating) &&
+    rawRestaurantRating >= 0 &&
+    rawRestaurantRating <= 5
+      ? rawRestaurantRating
+      : null;
 
   // The restaurant list may still be loading — don't call it missing yet.
   if (!restaurant && restaurant_list.length === 0) {
@@ -240,10 +251,14 @@ const RestaurantPage = () => {
           <div className="restaurant-hero-card">
             <div className="restaurant-hero-top">
               <h1>{restaurant.name}</h1>
-              <span className="restaurant-hero-rating">
-                <Star size={14} fill="currentColor" strokeWidth={0} />
-                4.8
-              </span>
+              {typeof restaurantRating === "number" && (
+                <span className="restaurant-hero-rating">
+                  <Star size={14} fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                  <span aria-label={`Rating ${restaurantRating.toFixed(1)} out of 5`}>
+                    {restaurantRating.toFixed(1)}
+                  </span>
+                </span>
+              )}
             </div>
 
             {restaurant.description && (

@@ -279,6 +279,7 @@
     white-space: nowrap;
     transform-origin: center;
   }
+
 }
 
 @media (max-width: 750px) {

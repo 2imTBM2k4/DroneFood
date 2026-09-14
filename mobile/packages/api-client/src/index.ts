@@ -1,4 +1,4 @@
-import type { ApiFailure, ApiResponse, DeliveryFees } from "@drone-food/contracts";
+import type { AddressBookEntry, ApiFailure, ApiResponse, DeliveryFees, FoodListQuery } from "@drone-food/contracts";
 
 export interface DroneFoodApiClientOptions {
   baseUrl: string;
@@ -31,6 +31,19 @@ export class DroneFoodApiClient {
 
   async getDeliveryFees(): Promise<DeliveryFees> {
     return this.request<DeliveryFees>("/api/config/fees");
+  }
+
+  async listAddressBook(): Promise<AddressBookEntry[]> {
+    return this.request<AddressBookEntry[]>("/api/address-book");
+  }
+
+  async listFood<T>(query: FoodListQuery = {}): Promise<T> {
+    const params = new URLSearchParams();
+    Object.entries(query).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") params.set(key, String(value));
+    });
+    const suffix = params.size ? `?${params}` : "";
+    return this.request<T>(`/api/food/list${suffix}`);
   }
 
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {

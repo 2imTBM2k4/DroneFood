@@ -79,6 +79,77 @@
   color: var(--accent-color);
 }
 
+/* ── Restaurant filters ─────────────────────────────────────────────── */
+
+.restaurants-filters {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px 20px;
+  align-items: end;
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+}
+
+.restaurants-filter-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  color: var(--text-color);
+}
+
+.restaurants-filter-heading h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.restaurants-filter-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.restaurants-filter-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.restaurants-filter-field select {
+  min-height: 44px;
+  width: 100%;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--background-secondary);
+  color: var(--text-color);
+  font: inherit;
+  font-size: 14px;
+}
+
+.restaurants-filter-field select:focus-visible,
+.restaurants-filter-clear:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+.restaurants-filter-clear {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--accent-color);
+  font: inherit;
+  cursor: pointer;
+}
+
 /* ── Cuisine chips ──────────────────────────────────────────────────── */
 
 .restaurants-catalog {
@@ -127,6 +198,15 @@
 }
 
 @media (max-width: 560px) {
+  .restaurants-filters {
+    grid-template-columns: 1fr auto;
+  }
+
+  .restaurants-filter-fields {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr;
+  }
+
   .restaurants-catalog .catalog-list {
     gap: 8px;
   }

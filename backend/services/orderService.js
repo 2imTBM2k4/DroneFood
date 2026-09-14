@@ -12,6 +12,7 @@ import { recordAudit } from "../utils/auditLog.js";
 import { releaseCodLiability, settleDeliveredOrder } from "./walletService.js";
 import * as voucherService from "./voucherService.js";
 import * as voucherRepo from "../repositories/voucherRepository.js";
+import { resolveAddressSnapshot } from "./addressBookService.js";
 
 const VNPAY_DEFAULT_URL = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
 const SHIPPER_ASSIGNMENT_WINDOW_MS = 10 * 60 * 1000;
@@ -89,7 +90,14 @@ const orderPaymentDescription = (orderId, date = new Date()) =>
 // suffix stays below JavaScript's safe-integer limit and avoids collisions.
 const newPayosOrderCode = () => Number(`${Math.floor(Date.now() / 1000)}${crypto.randomInt(10000, 100000)}1`);
 
-export const quoteDelivery = async (user, { address, deliveryMethod, voucherCode }) => {
+const resolveShippingAddress = async (userId, { address, addressEntryId }) => {
+  if (addressEntryId) return resolveAddressSnapshot(userId, addressEntryId);
+  if (address) return { ...address };
+  throw new AppError("Shipping address is required.", 400);
+};
+
+export const quoteDelivery = async (user, { address, addressEntryId, deliveryMethod, voucherCode }) => {
+  const shippingAddress = await resolveShippingAddress(user._id, { address, addressEntryId });
   const cart = await cartRepo.findByUserId(user._id);
   const firstLine = (cart?.items || []).find((line) => line.foodId);
   if (!firstLine?.foodId?.restaurantId) {
@@ -102,7 +110,7 @@ export const quoteDelivery = async (user, { address, deliveryMethod, voucherCode
   const deliveryQuote = await calculateShippingQuote({
     deliveryMethod,
     origin: { lat: restaurant.lat, lng: restaurant.lng },
-    destination: { lat: address.lat, lng: address.lng },
+    destination: { lat: shippingAddress.lat, lng: shippingAddress.lng },
   });
   if (!voucherCode) return deliveryQuote;
 
@@ -128,11 +136,8 @@ export const quoteDelivery = async (user, { address, deliveryMethod, voucherCode
 };
 
 export const placeOrder = async (user, orderData, clientIp) => {
-  const { address, paymentMethod, deliveryMethod, voucherCode } = orderData;
-
-  if (!address) {
-    throw new AppError("Shipping address is required.", 400);
-  }
+  const { address, addressEntryId, paymentMethod, deliveryMethod, voucherCode } = orderData;
+  const shippingAddress = await resolveShippingAddress(user._id, { address, addressEntryId });
   if (paymentMethod === "COD" && deliveryMethod !== "shipper") {
     throw new AppError("COD is only available for shipper delivery", 400);
   }
@@ -195,7 +200,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
   const deliveryQuote = await calculateShippingQuote({
     deliveryMethod,
     origin: { lat: restaurant.lat, lng: restaurant.lng },
-    destination: { lat: address.lat, lng: address.lng },
+    destination: { lat: shippingAddress.lat, lng: shippingAddress.lng },
   });
   const totals = computeOrderTotals(subtotal, deliveryQuote.shippingPrice);
   const voucherApplication = voucherCode
@@ -222,15 +227,15 @@ export const placeOrder = async (user, orderData, clientIp) => {
     user: user._id,
     orderItems,
     shippingAddress: {
-      fullName: address.fullName,
-      address: address.address,
-      city: address.city,
-      state: address.state,
-      country: address.country,
-      zipCode: address.zipCode,
-      phone: address.phone,
-      lat: address.lat ?? null,
-      lng: address.lng ?? null,
+      fullName: shippingAddress.fullName,
+      address: shippingAddress.address,
+      city: shippingAddress.city,
+      state: shippingAddress.state,
+      country: shippingAddress.country,
+      zipCode: shippingAddress.zipCode,
+      phone: shippingAddress.phone,
+      lat: shippingAddress.lat ?? null,
+      lng: shippingAddress.lng ?? null,
     },
     paymentMethod,
     currency: "VND",
