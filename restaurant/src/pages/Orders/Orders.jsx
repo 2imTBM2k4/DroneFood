@@ -354,6 +354,8 @@ const Orders = ({ url }) => {
                     <button
                       className="btn-accept"
                       onClick={() => updateStatus(order._id, "preparing")}
+                      disabled={order.deliveryMethod === "shipper" && order.shipperAssignmentStatus !== "accepted"}
+                      aria-describedby={order.deliveryMethod === "shipper" && order.shipperAssignmentStatus !== "accepted" ? `shipper-wait-${order._id}` : undefined}
                     >
                       Accept order
                     </button>
@@ -363,6 +365,11 @@ const Orders = ({ url }) => {
                     >
                       Reject
                     </button>
+                    {order.deliveryMethod === "shipper" && order.shipperAssignmentStatus !== "accepted" && (
+                      <p id={`shipper-wait-${order._id}`} className="shipper-assignment-wait" role="status">
+                        Đang tìm Shipper. Bạn có thể bắt đầu chuẩn bị khi Shipper đã nhận đơn.
+                      </p>
+                    )}
                   </div>
                 )}
                 {order.orderStatus === "preparing" && order.deliveryMethod !== "shipper" && (

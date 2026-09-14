@@ -10,6 +10,7 @@ import {
   Bike,
   ScrollText,
   Ticket,
+  HandCoins,
 } from "lucide-react";
 
 const Sidebar = ({ mobileOpen = false, onMobileToggle }) => {
@@ -24,6 +25,7 @@ const Sidebar = ({ mobileOpen = false, onMobileToggle }) => {
     { path: "/drones", icon: Plane, label: "Drones" },
     { path: "/shippers", icon: Bike, label: "Shippers" },
     { path: "/vouchers", icon: Ticket, label: "Vouchers" },
+    { path: "/refunds", icon: HandCoins, label: "Refunds" },
     { path: "/audit", icon: ScrollText, label: "Audit Log" },
   ];
 

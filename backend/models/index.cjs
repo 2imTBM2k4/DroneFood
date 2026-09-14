@@ -36,6 +36,7 @@ const ShipperAccountClosure = require("./shipperAccountClosureModel.cjs");
 const Voucher = require("./voucherModel.cjs");
 const VoucherRedemption = require("./voucherRedemptionModel.cjs");
 const VoucherUserUsage = require("./voucherUserUsageModel.cjs");
+const RefundRequest = require("./refundRequestModel.cjs");
 
 module.exports = {
   User,
@@ -56,4 +57,5 @@ module.exports = {
   Voucher,
   VoucherRedemption,
   VoucherUserUsage,
+  RefundRequest,
 };

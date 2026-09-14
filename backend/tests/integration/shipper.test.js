@@ -107,6 +107,56 @@ describe("Shipper dispatch", () => {
     expect((await Order.findById(active._id)).orderStatus).toBe("pending");
   });
 
+  it("keeps a paid PayOS order pending and lets its customer continue searching after timeout", async () => {
+    const { restaurant } = await createRestaurantOwner();
+    const customer = await createUser({ email: "customer-continue-search@test.com" });
+    const order = await makeOrder(customer._id, restaurant._id, {
+      paymentMethod: "PAYOS",
+      isPaid: true,
+      paidAt: new Date(),
+      shipperAssignmentDeadlineAt: new Date(Date.now() - 1),
+    });
+
+    await shipperService.expireUnacceptedOrders();
+    const timedOut = await Order.findById(order._id);
+    expect(timedOut.orderStatus).toBe("pending");
+    expect(timedOut.shipperAssignmentStatus).toBe("expired");
+
+    const result = await shipperService.extendSearch(customer, order._id);
+    expect(result.data.shipperAssignmentStatus).toBe("unassigned");
+    expect(result.data.shipperAssignmentDeadlineAt.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it("normalizes an old paid shipper order without assignment fields into the customer-decision state", async () => {
+    const { restaurant } = await createRestaurantOwner();
+    const customer = await createUser({ email: "customer-legacy-timeout@test.com" });
+    const legacy = await makeOrder(customer._id, restaurant._id, {
+      paymentMethod: "PAYOS",
+      isPaid: true,
+      paidAt: new Date(),
+      orderStatus: "preparing",
+      shipperAssignmentStatus: "not_applicable",
+      shipperAssignmentDeadlineAt: null,
+    });
+
+    await shipperService.expireUnacceptedOrders();
+    const updated = await Order.findById(legacy._id);
+    expect(updated.orderStatus).toBe("pending");
+    expect(updated.shipperAssignmentStatus).toBe("expired");
+    expect(updated.cancellationCode).toBe("NO_SHIPPER_AVAILABLE");
+  });
+
+  it("requires a shipper to accept before the restaurant starts preparing", async () => {
+    const { owner, restaurant } = await createRestaurantOwner();
+    const customer = await createUser({ email: "customer-wait-shipper@test.com" });
+    const order = await makeOrder(customer._id, restaurant._id);
+
+    await expect(orderService.updateStatus(owner, {
+      orderId: order._id,
+      status: "preparing",
+    })).rejects.toThrow("Wait for a shipper");
+  });
+
   it("keeps the restaurant from marking a shipper order as picked up", async () => {
     const { owner, restaurant } = await createRestaurantOwner();
     const customer = await createUser({ email: "customer-handover@test.com" });

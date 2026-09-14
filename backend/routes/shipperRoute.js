@@ -15,5 +15,6 @@ router.post("/me/orders/:id/accept", protect, authorize("shipper"), controller.a
 router.post("/me/orders/:id/pick-up", protect, authorize("shipper"), controller.pickup);
 router.post("/me/orders/:id/complete", protect, authorize("shipper"), controller.complete);
 router.post("/me/orders/:id/decline", protect, authorize("shipper"), validate(declineSchema), controller.decline);
+router.post("/orders/:id/extend-search", protect, authorize("user"), controller.extendSearch);
 router.put("/:userId/approval", protect, authorize("admin"), validate(approvalSchema), controller.approve);
 export default router;

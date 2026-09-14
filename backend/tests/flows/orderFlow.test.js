@@ -50,9 +50,9 @@ describe("Phase 1 payment and shipper settlement flow", () => {
     expect(placed.body.success).toBe(true);
 
     const orderId = placed.body.orderId;
+    await shipperService.acceptOrder(shipper, orderId);
     await request(app).post("/api/order/status").set("Authorization", `Bearer ${generateToken(owner._id)}`)
       .send({ orderId, status: "preparing" }).expect(200);
-    await shipperService.acceptOrder(shipper, orderId);
     await shipperService.pickupOrder(shipper, orderId);
     await shipperService.completeOrder(shipper, orderId);
 

@@ -11,6 +11,7 @@ import Drones from "./pages/Drones/Drones";
 import AuditLog from "./pages/AuditLog/AuditLog";
 import Shippers from "./pages/Shippers/Shippers";
 import Vouchers from "./pages/Vouchers/Vouchers";
+import Refunds from "./pages/Refunds/Refunds";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { AuthContext } from "./context/AuthContext";
@@ -77,6 +78,7 @@ const App = () => {
               <Route path="/drones" element={<Drones url={url} />} />
               <Route path="/shippers" element={<Shippers url={url} />} />
               <Route path="/vouchers" element={<Vouchers url={url} />} />
+              <Route path="/refunds" element={<Refunds url={url} />} />
               <Route path="/audit" element={<AuditLog url={url} />} />
             </Routes>
           </PageTransition>

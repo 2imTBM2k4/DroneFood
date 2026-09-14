@@ -48,11 +48,11 @@ export const findAll = async (filter = {}, { page, limit } = {}) => {
   return { data };
 };
 
-export const updateById = async (id, updates) => {
+export const updateById = async (id, updates, { session } = {}) => {
   // Handle specific updates like orderStatus enum
   if (
     updates.orderStatus &&
-    !["pending_payment", "pending", "preparing", "delivering", "delivered", "cancelled"].includes(
+    !["pending_payment", "pending", "refund_pending", "preparing", "delivering", "delivered", "cancelled"].includes(
       updates.orderStatus
     )
   ) {
@@ -61,6 +61,7 @@ export const updateById = async (id, updates) => {
   return await Order.findByIdAndUpdate(id, updates, {
     new: true,
     runValidators: true,
+    session,
   }).populate("orderItems.product");
 };
 

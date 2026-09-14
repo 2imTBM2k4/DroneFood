@@ -27,5 +27,15 @@ export const complete = respond(async (req) => {
   return result;
 });
 export const decline = respond((req) => shipperService.declineOrder(req.user, req.params.id, req.body.reason));
+export const extendSearch = respond(async (req) => {
+  const result = await shipperService.extendSearch(req.user, req.params.id);
+  const shipperIds = await shipperService.nearbyAvailableShipperIds(result.data.pickupLocation);
+  shipperIds.forEach((shipperId) => req.app.get("io")?.to(`shipper_${shipperId}`).emit("shipperOrderOffer", {
+    orderId: result.data._id,
+    expiresAt: result.data.shipperAssignmentDeadlineAt,
+  }));
+  await emitCustomerOrderUpdate(req.app.get("io"), result.data._id);
+  return result;
+});
 export const approve = respond((req) => shipperService.approveProfile(req.user, req.params.userId, req.body.approvalStatus));
 export const list = respond(() => shipperService.listProfiles());

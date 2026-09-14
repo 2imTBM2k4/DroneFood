@@ -197,7 +197,7 @@ const orderSchema = new mongoose.Schema(
     },
     orderStatus: {
       type: String,
-      enum: ["pending_payment", "pending", "preparing", "delivering", "delivered", "cancelled"],
+      enum: ["pending_payment", "pending", "refund_pending", "preparing", "delivering", "delivered", "cancelled"],
       default: "pending",
     },
     reason: {
@@ -214,7 +214,7 @@ const orderSchema = new mongoose.Schema(
     // the sparse unique index permits any number of non-PayOS orders.
     payosOrderCode: { type: Number, default: undefined, unique: true, sparse: true },
     payosPaymentLinkId: { type: String, default: null },
-    refundStatus: { type: String, enum: ["not_required", "requested", "failed"], default: "not_required" },
+    refundStatus: { type: String, enum: ["not_required", "requested", "paid", "rejected", "failed"], default: "not_required" },
     refundRequestId: { type: String, default: null },
     refundRequestedAt: { type: Date, default: null },
     restaurantId: {

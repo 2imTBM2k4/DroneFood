@@ -14,6 +14,7 @@ import * as voucherService from "./voucherService.js";
 import * as voucherRepo from "../repositories/voucherRepository.js";
 
 const VNPAY_DEFAULT_URL = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
+const SHIPPER_ASSIGNMENT_WINDOW_MS = 10 * 60 * 1000;
 
 const vnpayDate = (date) => {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
@@ -244,7 +245,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
         coordinates: [restaurant.lng, restaurant.lat],
       },
       shipperAssignmentStatus: "unassigned",
-      shipperAssignmentDeadlineAt: new Date(Date.now() + 15 * 60 * 1000),
+      shipperAssignmentDeadlineAt: new Date(Date.now() + SHIPPER_ASSIGNMENT_WINDOW_MS),
     }),
     itemsPrice: totals.subtotal,
     totalPrice: payableTotal,
@@ -384,6 +385,10 @@ const recordVnpayResult = async (query) => {
       isPaid: true,
       paidAt: Date.now(),
       orderStatus: "pending",
+      ...(order.deliveryMethod === "shipper" && {
+        shipperAssignmentStatus: "unassigned",
+        shipperAssignmentDeadlineAt: new Date(Date.now() + SHIPPER_ASSIGNMENT_WINDOW_MS),
+      }),
       vnpTransactionNo: query.vnp_TransactionNo || null,
       paymentResult: { id: query.vnp_TransactionNo, status: query.vnp_ResponseCode, update_time: query.vnp_PayDate },
     });
@@ -439,6 +444,10 @@ export const handlePayosWebhook = async (payload) => {
     isPaid: true,
     paidAt: new Date(),
     orderStatus: "pending",
+    ...(order.deliveryMethod === "shipper" && {
+      shipperAssignmentStatus: "unassigned",
+      shipperAssignmentDeadlineAt: new Date(Date.now() + SHIPPER_ASSIGNMENT_WINDOW_MS),
+    }),
     payosPaymentLinkId: payment.paymentLinkId || order.payosPaymentLinkId,
     paymentResult: {
       id: payment.reference || payment.paymentLinkId,
@@ -588,6 +597,9 @@ export const updateStatus = async (user, updateData) => {
     // Validation rules từ gốc (status transitions)
     if (order.orderStatus !== "pending" && status === "preparing") {
       throw new AppError("Cannot accept (not pending)", 400);
+    }
+    if (order.deliveryMethod === "shipper" && status === "preparing" && order.shipperAssignmentStatus !== "accepted") {
+      throw new AppError("Wait for a shipper to accept before preparing this order", 409);
     }
     if (order.orderStatus !== "preparing" && status === "delivering") {
       throw new AppError("Cannot handover (not preparing)", 400);
