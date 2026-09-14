@@ -30,6 +30,7 @@ export const placeOrderSchema = Joi.object({
     "any.only": "Phương thức giao hàng phải là shipper hoặc drone",
     "any.required": "Phương thức giao hàng là bắt buộc",
   }),
+  voucherCode: Joi.string().trim().uppercase().pattern(/^[A-Z0-9_-]+$/).min(3).max(32).allow("", null),
   restaurantId: Joi.alternatives()
     .try(Joi.string().trim(), Joi.object())
     .optional(),
@@ -38,6 +39,7 @@ export const placeOrderSchema = Joi.object({
 export const deliveryQuoteSchema = Joi.object({
   address: placeOrderSchema.extract("address"),
   deliveryMethod: placeOrderSchema.extract("deliveryMethod"),
+  voucherCode: placeOrderSchema.extract("voucherCode"),
 });
 
 export const updateStatusSchema = Joi.object({

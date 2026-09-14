@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import mongoose from "mongoose";
 import { PayOS } from "@payos/node";
 import * as orderRepo from "../repositories/orderRepository.js";
 import * as restaurantRepo from "../repositories/restaurantRepository.js";
@@ -9,6 +10,8 @@ import { computeUnitPrice } from "../utils/foodOptions.js";
 import { calculateShippingQuote, computeOrderTotals } from "../config/fees.js";
 import { recordAudit } from "../utils/auditLog.js";
 import { releaseCodLiability, settleDeliveredOrder } from "./walletService.js";
+import * as voucherService from "./voucherService.js";
+import * as voucherRepo from "../repositories/voucherRepository.js";
 
 const VNPAY_DEFAULT_URL = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
 
@@ -85,7 +88,7 @@ const orderPaymentDescription = (orderId, date = new Date()) =>
 // suffix stays below JavaScript's safe-integer limit and avoids collisions.
 const newPayosOrderCode = () => Number(`${Math.floor(Date.now() / 1000)}${crypto.randomInt(10000, 100000)}1`);
 
-export const quoteDelivery = async (user, { address, deliveryMethod }) => {
+export const quoteDelivery = async (user, { address, deliveryMethod, voucherCode }) => {
   const cart = await cartRepo.findByUserId(user._id);
   const firstLine = (cart?.items || []).find((line) => line.foodId);
   if (!firstLine?.foodId?.restaurantId) {
@@ -95,15 +98,36 @@ export const quoteDelivery = async (user, { address, deliveryMethod }) => {
   const restaurant = await restaurantRepo.findById(firstLine.foodId.restaurantId);
   if (!restaurant) throw new AppError("Restaurant not found.", 404);
 
-  return calculateShippingQuote({
+  const deliveryQuote = await calculateShippingQuote({
     deliveryMethod,
     origin: { lat: restaurant.lat, lng: restaurant.lng },
     destination: { lat: address.lat, lng: address.lng },
   });
+  if (!voucherCode) return deliveryQuote;
+
+  const itemsPrice = (cart.items || []).reduce((sum, line) => {
+    const food = line.foodId;
+    return sum + (food ? computeUnitPrice(food, line.selectedOptions || []) * line.quantity : 0);
+  }, 0);
+  const totals = computeOrderTotals(itemsPrice, deliveryQuote.shippingPrice);
+  const voucherApplication = await voucherService.validateVoucherForOrder({
+    code: voucherCode,
+    userId: user._id,
+    itemsPrice: totals.subtotal,
+    shippingPrice: totals.deliveryFee,
+  });
+  return {
+    ...deliveryQuote,
+    itemsPrice: totals.subtotal,
+    serviceFee: totals.serviceFee,
+    discountAmount: voucherApplication.discountAmount,
+    voucher: voucherApplication.snapshot,
+    totalPrice: totals.total - voucherApplication.discountAmount,
+  };
 };
 
 export const placeOrder = async (user, orderData, clientIp) => {
-  const { address, paymentMethod, deliveryMethod } = orderData;
+  const { address, paymentMethod, deliveryMethod, voucherCode } = orderData;
 
   if (!address) {
     throw new AppError("Shipping address is required.", 400);
@@ -173,6 +197,16 @@ export const placeOrder = async (user, orderData, clientIp) => {
     destination: { lat: address.lat, lng: address.lng },
   });
   const totals = computeOrderTotals(subtotal, deliveryQuote.shippingPrice);
+  const voucherApplication = voucherCode
+    ? await voucherService.validateVoucherForOrder({
+      code: voucherCode,
+      userId: user._id,
+      itemsPrice: totals.subtotal,
+      shippingPrice: totals.deliveryFee,
+    })
+    : null;
+  const discountAmount = voucherApplication?.discountAmount || 0;
+  const payableTotal = totals.total - discountAmount;
   const financialSnapshot = {
     restaurantSharePercent: 80,
     platformFoodCommissionPercent: 20,
@@ -213,15 +247,38 @@ export const placeOrder = async (user, orderData, clientIp) => {
       shipperAssignmentDeadlineAt: new Date(Date.now() + 15 * 60 * 1000),
     }),
     itemsPrice: totals.subtotal,
-    totalPrice: totals.total,
+    totalPrice: payableTotal,
     shippingPrice: totals.deliveryFee,
     serviceFee: totals.serviceFee,
+    ...(voucherApplication && {
+      voucherSnapshot: voucherApplication.snapshot,
+      discountAmount,
+      discountTargetAmount: voucherApplication.targetAmount,
+    }),
     restaurantId: restaurantId,
     isPaid: false,
     paidAt: null,
     orderStatus: isOnlinePayment(paymentMethod) ? "pending_payment" : "pending",
   };
-  const newOrder = await orderRepo.create(newOrderData);
+  let newOrder;
+  if (voucherApplication) {
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        newOrder = await orderRepo.create(newOrderData, { session });
+        await voucherRepo.reserveForOrder({
+          voucher: voucherApplication.voucher,
+          userId: user._id,
+          orderId: newOrder._id,
+          discountAmount,
+        }, session);
+      });
+    } finally {
+      await session.endSession();
+    }
+  } else {
+    newOrder = await orderRepo.create(newOrderData);
+  }
 
   let paymentUrl = null;
   if (paymentMethod === "VNPAY") {
@@ -229,7 +286,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 15 * 60 * 1000);
     const params = {
-      vnp_Amount: String(Math.round(totals.total) * 100),
+      vnp_Amount: String(Math.round(payableTotal) * 100),
       vnp_Command: "pay",
       vnp_CreateDate: vnpayDate(now),
       vnp_CurrCode: "VND",
@@ -258,7 +315,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
       await orderRepo.updateById(newOrder._id, { payosOrderCode: orderCode });
       const paymentLink = await payos.payOS.paymentRequests.create({
         orderCode,
-        amount: Math.round(totals.total),
+        amount: Math.round(payableTotal),
         description: orderPaymentDescription(newOrder._id),
         items: [
           ...orderItems.map((item) => ({ name: item.name.slice(0, 50), quantity: item.quantity, price: Math.round(item.price) })),
@@ -276,6 +333,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
       // The cart has not been cleared, so deleting the unfinished record lets
       // the customer retry without leaving a payment-pending ghost order.
       await orderRepo.deleteById(newOrder._id);
+      await voucherRepo.releaseForOrder(newOrder._id, "payment_link_creation_failed");
       throw new AppError(`Unable to create PayOS payment link: ${error.message}`, 502);
     }
   } else {
@@ -290,6 +348,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
     restaurantId: restaurantId.toString(),
     deliveryMethod,
     paymentMethod,
+    totalPrice: payableTotal,
     message:
       paymentMethod === "COD"
         ? "Order placed with COD"
@@ -332,6 +391,7 @@ const recordVnpayResult = async (query) => {
   }
   if (hashIsValid && order && !paid && !order.isPaid) {
     await orderRepo.updateById(orderId, { orderStatus: "cancelled", reason: "VNPay payment failed or was cancelled" });
+    await voucherRepo.releaseForOrder(orderId, "vnpay_payment_failed");
   }
   return { ...result, paid: Boolean(paid || order?.isPaid), newlyPaid: false };
 };
@@ -655,6 +715,9 @@ export const updateStatus = async (user, updateData) => {
     });
   } else {
     await orderRepo.updateById(orderId, updateDataObj);
+    if (status === "cancelled") {
+      await voucherRepo.releaseForOrder(orderId, "order_cancelled");
+    }
     if (status === "cancelled" && order.codReservationStatus === "reserved") {
       await releaseCodLiability(orderId);
     }

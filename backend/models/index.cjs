@@ -33,6 +33,9 @@ const WalletTransaction = require("./walletTransactionModel.cjs");
 const WalletPayment = require("./walletPaymentModel.cjs");
 const RestaurantWithdrawal = require("./restaurantWithdrawalModel.cjs");
 const ShipperAccountClosure = require("./shipperAccountClosureModel.cjs");
+const Voucher = require("./voucherModel.cjs");
+const VoucherRedemption = require("./voucherRedemptionModel.cjs");
+const VoucherUserUsage = require("./voucherUserUsageModel.cjs");
 
 module.exports = {
   User,
@@ -50,4 +53,7 @@ module.exports = {
   WalletPayment,
   RestaurantWithdrawal,
   ShipperAccountClosure,
+  Voucher,
+  VoucherRedemption,
+  VoucherUserUsage,
 };

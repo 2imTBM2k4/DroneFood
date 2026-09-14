@@ -1,13 +1,13 @@
 // backend/repositories/orderRepository.js
 import { Order } from "../models/index.cjs";
 
-export const create = async (orderData) => {
+export const create = async (orderData, { session } = {}) => {
   const { totalPrice, paymentMethod, restaurantId } = orderData;
   if (totalPrice <= 0 || !paymentMethod || !restaurantId) {
     throw new Error("Invalid order data");
   }
   const order = new Order(orderData);
-  return await order.save();
+  return await order.save({ session });
 };
 
 export const findById = async (id) => {

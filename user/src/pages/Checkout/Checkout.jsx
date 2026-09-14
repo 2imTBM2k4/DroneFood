@@ -56,6 +56,9 @@ const Checkout = () => {
   const [deliveryMethod, setDeliveryMethod] = useState("shipper");
   const [deliveryQuote, setDeliveryQuote] = useState(null);
   const [quoteError, setQuoteError] = useState("");
+  const [voucherInput, setVoucherInput] = useState("");
+  const [appliedVoucherCode, setAppliedVoucherCode] = useState("");
+  const [voucherError, setVoucherError] = useState("");
   const [placing, setPlacing] = useState(false);
 
 
@@ -144,6 +147,7 @@ const Checkout = () => {
         `${url}/api/order/quote`,
         {
           deliveryMethod,
+          voucherCode: appliedVoucherCode || undefined,
           address: {
             fullName: `${address.firstName} ${address.lastName}`.trim() || "Customer",
             address: address.street || "Map location",
@@ -163,14 +167,28 @@ const Checkout = () => {
       })
       .catch((error) => {
         if (active) {
-          setDeliveryQuote(null);
-          setQuoteError(error.response?.data?.message || "Unable to calculate delivery fee.");
+          const message = error.response?.data?.message || "Unable to calculate delivery fee.";
+          if (appliedVoucherCode) {
+            // The server rejected the code. Keep the already-known delivery
+            // price, but remove every voucher effect and prevent this code
+            // from being submitted with the order.
+            setDeliveryQuote((current) => current && {
+              ...current,
+              discountAmount: 0,
+              voucher: null,
+            });
+            setVoucherError(message);
+            setAppliedVoucherCode("");
+          } else {
+            setDeliveryQuote(null);
+            setQuoteError(message);
+          }
         }
       });
     return () => {
       active = false;
     };
-  }, [address.lat, address.lng, address.firstName, address.lastName, address.street, address.city, address.state, address.country, address.zipcode, address.phone, deliveryMethod, token, url]);
+  }, [address.lat, address.lng, address.firstName, address.lastName, address.street, address.city, address.state, address.country, address.zipcode, address.phone, deliveryMethod, token, url, appliedVoucherCode]);
 
   const persistAddress = async () => {
     localStorage.setItem("deliveryInfo", JSON.stringify(address));
@@ -237,6 +255,7 @@ const Checkout = () => {
           },
           paymentMethod,
           deliveryMethod,
+          voucherCode: appliedVoucherCode || undefined,
         },
         { headers: { token } }
       );
@@ -259,7 +278,7 @@ const Checkout = () => {
     } finally {
       setPlacing(false);
     }
-  }, [address, clearCart, deliveryMethod, navigate, paymentMethod, token, url]);
+  }, [address, appliedVoucherCode, clearCart, deliveryMethod, navigate, paymentMethod, token, url]);
 
   const goToStep = (target) => {
     // Never jump forward past a step that isn't satisfied yet.
@@ -499,6 +518,47 @@ const Checkout = () => {
 
               <section className="checkout-review-block">
                 <p><strong>{deliveryMethod === "shipper" ? "Shipper" : "Drone"}</strong> · {deliveryQuote ? formatVND(deliveryQuote.shippingPrice) : "Calculating…"}</p>
+              </section>
+
+              <section className="checkout-review-block checkout-voucher">
+                <label htmlFor="voucher-code">Voucher</label>
+                <div className="checkout-voucher-control">
+                  <input
+                    id="voucher-code"
+                    value={voucherInput}
+                    onChange={(event) => {
+                      setVoucherInput(event.target.value.toUpperCase());
+                      setVoucherError("");
+                    }}
+                    placeholder="Nhập mã voucher"
+                    autoCapitalize="characters"
+                    aria-invalid={Boolean(voucherError)}
+                    aria-describedby={voucherError ? "voucher-code-error" : undefined}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVoucherError("");
+                      setAppliedVoucherCode(voucherInput.trim());
+                    }}
+                    disabled={!voucherInput.trim() || voucherInput.trim() === appliedVoucherCode}
+                  >
+                    Áp dụng
+                  </button>
+                  {appliedVoucherCode && (
+                    <button type="button" onClick={() => {
+                      setAppliedVoucherCode("");
+                      setVoucherError("");
+                    }}>Bỏ mã</button>
+                  )}
+                </div>
+                {deliveryQuote?.discountAmount > 0 && (
+                  <p className="checkout-voucher-success">
+                    {deliveryQuote.voucher?.code}: -{formatVND(deliveryQuote.discountAmount)}
+                  </p>
+                )}
+                {voucherError && <p id="voucher-code-error" className="checkout-voucher-error" role="alert">{voucherError}</p>}
+                {quoteError && <p className="checkout-payment-message" role="alert">{quoteError}</p>}
               </section>
 
               <div className="checkout-actions">

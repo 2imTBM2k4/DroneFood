@@ -15,6 +15,7 @@ import shipperRouter from "./routes/shipperRoute.js";
 import walletRouter from "./routes/walletRoute.js";
 import restaurantWithdrawalRouter from "./routes/restaurantWithdrawalRoute.js";
 import shipperAccountClosureRouter from "./routes/shipperAccountClosureRoute.js";
+import voucherRouter from "./routes/voucherRoute.js";
 
 const app = express();
 
@@ -56,6 +57,7 @@ app.use("/api/shippers", shipperRouter);
 app.use("/api/wallet", walletRouter);
 app.use("/api/restaurant-withdrawals", restaurantWithdrawalRouter);
 app.use("/api/shipper/account-closure", shipperAccountClosureRouter);
+app.use("/api/vouchers", voucherRouter);
 
 app.get("/api/health", (req, res) => {
   const dbState = mongoose.connection.readyState;

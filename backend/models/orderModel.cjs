@@ -109,6 +109,19 @@ const orderSchema = new mongoose.Schema(
       shipperOnlineEarningsAmount: { type: Number, default: 0 },
       codLiabilityAmount: { type: Number, default: 0 },
     },
+    // Voucher terms are frozen at checkout. The platform funds the discount,
+    // so settlement continues to use itemsPrice/shippingPrice before discount.
+    voucherSnapshot: {
+      voucherId: { type: mongoose.Schema.Types.ObjectId, ref: "Voucher", default: null },
+      code: { type: String, default: "" },
+      kind: { type: String, enum: ["fixed", "percent", ""], default: "" },
+      value: { type: Number, default: 0, min: 0 },
+      appliesTo: { type: String, enum: ["items_subtotal", "shipping_fee", ""], default: "" },
+      minOrderAmount: { type: Number, default: 0, min: 0 },
+      maxDiscountAmount: { type: Number, default: null, min: 0 },
+    },
+    discountAmount: { type: Number, default: 0, min: 0 },
+    discountTargetAmount: { type: Number, default: 0, min: 0 },
     // A reservation is exposure, not a wallet balance. It is released once
     // the COD delivery is settled or the order is cancelled before delivery.
     codReservationStatus: {

@@ -103,6 +103,11 @@
   color: var(--text-color);
 }
 
+.order-summary-discount {
+  color: var(--success-text);
+  font-weight: 600;
+}
+
 @media (max-width: 900px) {
   .order-summary.collapsible {
     position: sticky;
