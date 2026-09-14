@@ -9,6 +9,7 @@ import { SkeletonList } from "../../components/Skeleton/Skeleton";
 import { EmptyState, ErrorState } from "../../../../shared/components/StateBlock";
 import "./MyOrders.css"; // Giả sử bạn có file CSS này cho style nhất quán với light mode
 import { formatVND } from "../../../../shared/utils/money";
+import OrderReviewPrompt from "../../components/OrderReviewPrompt/OrderReviewPrompt";
 
 const SHIPPER_WAIT_WINDOW_MS = 10 * 60 * 1000;
 
@@ -262,6 +263,12 @@ const MyOrders = () => {
     }
   };
 
+  const handleReviewFlowChanged = (orderId, reviewFlow) => {
+    setOrders((current) => current.map((order) =>
+      order._id === orderId ? { ...order, reviewFlow } : order
+    ));
+  };
+
   const handleExtendShipperSearch = async (orderId) => {
     setExtendingSearchId(orderId);
     try {
@@ -448,6 +455,13 @@ const MyOrders = () => {
               )}
 
               <OrderStatusTimeline order={order} now={now} />
+
+              <OrderReviewPrompt
+                order={order}
+                url={url}
+                token={token}
+                onFlowChanged={handleReviewFlowChanged}
+              />
 
               {(order.orderStatus === "pending" || (
                 order.orderStatus === "preparing" &&

@@ -28,6 +28,7 @@ export const findByUser = async (userId) => {
   return await Order.find({ user: userId })
     .populate("orderItems.product")
     .populate("restaurantId")
+    .populate("shipperId", "name")
     .sort({ createdAt: -1 }); // Recent first
 };
 

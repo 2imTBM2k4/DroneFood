@@ -37,6 +37,7 @@ const Voucher = require("./voucherModel.cjs");
 const VoucherRedemption = require("./voucherRedemptionModel.cjs");
 const VoucherUserUsage = require("./voucherUserUsageModel.cjs");
 const RefundRequest = require("./refundRequestModel.cjs");
+const OrderReview = require("./orderReviewModel.cjs");
 
 module.exports = {
   User,
@@ -58,4 +59,5 @@ module.exports = {
   VoucherRedemption,
   VoucherUserUsage,
   RefundRequest,
+  OrderReview,
 };

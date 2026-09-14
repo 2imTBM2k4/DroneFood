@@ -13,6 +13,7 @@ import { releaseCodLiability, settleDeliveredOrder } from "./walletService.js";
 import * as voucherService from "./voucherService.js";
 import * as voucherRepo from "../repositories/voucherRepository.js";
 import { resolveAddressSnapshot } from "./addressBookService.js";
+import { attachReviewFlows } from "./orderReviewService.js";
 
 const VNPAY_DEFAULT_URL = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
 const SHIPPER_ASSIGNMENT_WINDOW_MS = 10 * 60 * 1000;
@@ -477,7 +478,14 @@ export const verifyOrder = async (user, orderId) => {
 
 export const userOrders = async (userId) => {
   const orders = await orderRepo.findByUser(userId);
-  return { success: true, data: orders };
+  const reviewFlows = await attachReviewFlows(orders);
+  return {
+    success: true,
+    data: orders.map((order, index) => ({
+      ...order.toObject(),
+      reviewFlow: reviewFlows[index],
+    })),
+  };
 };
 
 export const listOrders = async (user, { page, limit } = {}) => {
