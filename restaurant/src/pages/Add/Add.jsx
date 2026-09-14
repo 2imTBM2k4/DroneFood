@@ -202,7 +202,7 @@ const Add = ({ url }) => {
             </datalist>
           </div>
           <div className="add-price flex-col">
-            <p>Product Price</p>
+            <p>Product Price (VND)</p>
             <input
               className="inputclasa"
               onChange={onChangeHandler}

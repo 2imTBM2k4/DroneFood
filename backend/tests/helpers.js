@@ -1,16 +1,20 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 import { User, Food, Restaurant, Cart, Order } from "../models/index.cjs";
 
+let sequence = 0;
+const unique = (prefix) => `${prefix}-${Date.now()}-${++sequence}`;
+
 export const createUser = async (overrides = {}) => {
-  const password = overrides.password || "password123";
+  const { password: rawPassword = "password123", ...userOverrides } = overrides;
+  const password = rawPassword;
   const hash = await bcrypt.hash(password, 10);
   const userData = {
     name: "Test User",
-    email: `test-${Date.now()}@example.com`,
-    password: hash,
+    email: `${unique("test")}@example.com`,
     role: "user",
-    ...overrides,
+    ...userOverrides,
     password: hash,
   };
   const user = await User.create(userData);
@@ -18,14 +22,14 @@ export const createUser = async (overrides = {}) => {
 };
 
 export const createAdmin = async () => {
-  return createUser({ name: "Admin", role: "admin", email: "admin@test.com" });
+  return createUser({ name: "Admin", role: "admin", email: `${unique("admin")}@test.com` });
 };
 
 export const createRestaurantOwner = async () => {
   const owner = await createUser({
     name: "Owner",
     role: "restaurant_owner",
-    email: `owner-${Date.now()}@test.com`,
+    email: `${unique("owner")}@test.com`,
   });
   const restaurant = await Restaurant.create({
     name: "Test Restaurant",
@@ -34,6 +38,8 @@ export const createRestaurantOwner = async () => {
     phone: "0123456789",
     email: owner.email,
     isLocked: false,
+    lat: 10.7769,
+    lng: 106.7009,
   });
   owner.restaurantId = restaurant._id;
   await owner.save();
@@ -57,11 +63,12 @@ export const createFood = async (restaurantId, overrides = {}) => {
 };
 
 export const createOrder = async (userId, restaurantId, overrides = {}) => {
+  const food = await createFood(restaurantId, { name: `${unique("food")}`, price: 10 });
   return Order.create({
     user: userId,
     orderItems: [
       {
-        product: new (await import("mongoose")).default.Types.ObjectId(),
+        product: food._id || new mongoose.Types.ObjectId(),
         name: "Test Food",
         quantity: 1,
         price: 10,
@@ -76,6 +83,8 @@ export const createOrder = async (userId, restaurantId, overrides = {}) => {
       country: "VN",
       zipCode: "12345",
       phone: "0123456789",
+      lat: 10.7769,
+      lng: 106.7009,
     },
     paymentMethod: "COD",
     totalPrice: 12,

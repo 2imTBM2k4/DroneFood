@@ -6,6 +6,7 @@ import { assets } from "../../assets/assets";
 import io from "socket.io-client";
 import { EmptyState, ErrorState } from "../../../../shared/components/StateBlock";
 import { ClipboardList } from "lucide-react";
+import { formatVND } from "../../../../shared/utils/money";
 
 const Orders = ({ url }) => {
   const [orders, setOrders] = useState([]);
@@ -118,7 +119,8 @@ const Orders = ({ url }) => {
   useEffect(() => {
     fetchAllOrders();
 
-    const socket = io(url);
+    const token = localStorage.getItem("token");
+    const socket = io(url, { auth: { token } });
     const restaurantId = localStorage.getItem("restaurantId");
     if (restaurantId) {
       socket.emit("joinRestaurant", restaurantId);
@@ -133,7 +135,7 @@ const Orders = ({ url }) => {
       setOrders((prev) => [newOrder, ...prev]); // THÊM MỚI VÀO ĐẦU DANH SÁCH
     });
 
-    socket.on("connect_error", (error) => {
+    socket.on("connect_error", () => {
       toast.error("Notification connection failed");
     });
 
@@ -332,7 +334,7 @@ const Orders = ({ url }) => {
                     <strong>Items:</strong> {order.orderItems?.length || 0}
                   </p>
                   <p>
-                    <strong>Total:</strong> ${order.totalPrice || 0}
+                    <strong>Total:</strong> {formatVND(order.totalPrice)}
                   </p>
                   <p>
                     <strong>Payment:</strong> {order.paymentMethod || "N/A"}
@@ -363,7 +365,7 @@ const Orders = ({ url }) => {
                     </button>
                   </div>
                 )}
-                {order.orderStatus === "preparing" && (
+                {order.orderStatus === "preparing" && order.deliveryMethod !== "shipper" && (
                   <div className="status-buttons">
                     <button
                       className="btn-deliver"

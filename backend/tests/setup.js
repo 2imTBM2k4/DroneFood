@@ -1,18 +1,20 @@
-import { MongoMemoryServer } from "mongodb-memory-server";
+import { MongoMemoryReplSet } from "mongodb-memory-server";
 import mongoose from "mongoose";
 
 let mongoServer;
 
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
+  mongoServer = await MongoMemoryReplSet.create({ replSet: { count: 1, storageEngine: "wiredTiger" } });
   const uri = mongoServer.getUri();
   await mongoose.connect(uri);
 });
 
 afterAll(async () => {
-  await mongoose.connection.dropDatabase();
-  await mongoose.connection.close();
-  await mongoServer.stop();
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.connection.dropDatabase();
+    await mongoose.connection.close();
+  }
+  if (mongoServer) await mongoServer.stop();
 });
 
 afterEach(async () => {
@@ -23,5 +25,4 @@ afterEach(async () => {
 });
 
 process.env.JWT_SECRET = "test-secret-key-for-testing";
-process.env.STRIPE_SECRET_KEY = "sk_test_fake";
 process.env.FRONTEND_URL = "http://localhost:5173";

@@ -1,4 +1,4 @@
-import React, { useState, useContext } from "react";
+import { useState, useContext } from "react";
 import "./Cart.css";
 import { StoreContext } from "../../context/StoreContext";
 import { useNavigate } from "react-router-dom";
@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import { ShoppingCart, Store, Trash2, Plus, Minus } from "lucide-react";
 import { EmptyState } from "../../../../shared/components/StateBlock";
 import ItemOptionsSheet from "../../components/ItemOptionsSheet/ItemOptionsSheet";
+import { formatVND } from "../../../../shared/utils/money";
 
 const Cart = () => {
   const {
@@ -157,7 +158,7 @@ const Cart = () => {
                   )}
                   {line.note && <p className="cart-item-note">“{line.note}”</p>}
                   <p className="cart-line-unit">
-                    ${line.unitPrice.toFixed(2)} each
+                    {formatVND(line.unitPrice)} each
                   </p>
                   <button
                     type="button"
@@ -170,7 +171,7 @@ const Cart = () => {
 
                 <div className="cart-line-side">
                   <p className="cart-line-total">
-                    ${(line.unitPrice * line.quantity).toFixed(2)}
+                    {formatVND(line.unitPrice * line.quantity)}
                   </p>
                   <div className="quantity-controls">
                     <button
@@ -219,22 +220,24 @@ const Cart = () => {
               <h2>Order summary</h2>
               <div className="cart-total-details">
                 <p>Subtotal</p>
-                <p className="ds-num">${subtotal.toFixed(2)}</p>
+                <p className="ds-num">{formatVND(subtotal)}</p>
               </div>
               <div className="cart-total-details">
                 <p>Delivery fee</p>
-                <p className="ds-num">${deliveryFee.toFixed(2)}</p>
+                <p className="ds-num">
+                  {deliveryFee == null ? "Calculated at checkout" : formatVND(deliveryFee)}
+                </p>
               </div>
               {serviceFee > 0 && (
                 <div className="cart-total-details">
                   <p>Service fee</p>
-                  <p className="ds-num">${serviceFee.toFixed(2)}</p>
+                  <p className="ds-num">{formatVND(serviceFee)}</p>
                 </div>
               )}
               <hr />
               <div className="cart-total-details cart-total-grand">
                 <b>Total</b>
-                <b className="ds-num">${total.toFixed(2)}</b>
+                <b className="ds-num">{formatVND(total)}</b>
               </div>
               <button className="cart-checkout-btn" onClick={handleProceedCheckout}>
                 Proceed to checkout

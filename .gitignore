@@ -125,3 +125,15 @@ dist
 
 # Claude Code local config (dev-specific, không chia sẻ)
 .claude/
+
+# Agent skills & configs
+.agents/
+PLAN.md
+dronefood-payment-plan.md
+dronefood-payment-plan.md
+dronefood-payment-plan.md
+
+# Local Week 1 planning and implementation notes
+/docs/feature-specs/
+/docs/testing.vi.md
+/docs/migrations.vi.md

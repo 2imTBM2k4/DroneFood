@@ -4,6 +4,7 @@ import { assets } from "../../assets/assets";
 import { AuthContext } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { Wallet, ChevronDown, LogOut, Settings, Sun, Moon } from "lucide-react";
+import { formatVND } from "../../../../shared/utils/money";
 
 const Navbar = () => {
   const { user, logout } = useContext(AuthContext);
@@ -53,7 +54,7 @@ const Navbar = () => {
           <>
             <div className="wallet-badge">
               <Wallet size={16} />
-              <span>${user.walletBalance?.toFixed(2) || "0.00"}</span>
+              <span>{formatVND(user.walletBalance)}</span>
             </div>
 
             <div className="account-menu" ref={dropdownRef}>

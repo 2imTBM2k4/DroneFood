@@ -26,6 +26,13 @@ const Order = require("./orderModel.cjs");
 const Food = require("./foodModel.cjs");
 const Restaurant = require("./restaurantModel.cjs");
 const Cart = require("./cartModel.cjs");
+const ShipperProfile = require("./shipperProfileModel.cjs");
+const ShipperDeposit = require("./shipperDepositModel.cjs");
+const ShipperEarningsWallet = require("./shipperEarningsWalletModel.cjs");
+const WalletTransaction = require("./walletTransactionModel.cjs");
+const WalletPayment = require("./walletPaymentModel.cjs");
+const RestaurantWithdrawal = require("./restaurantWithdrawalModel.cjs");
+const ShipperAccountClosure = require("./shipperAccountClosureModel.cjs");
 
 module.exports = {
   User,
@@ -36,4 +43,11 @@ module.exports = {
   Food,
   Restaurant,
   Cart,
+  ShipperProfile,
+  ShipperDeposit,
+  ShipperEarningsWallet,
+  WalletTransaction,
+  WalletPayment,
+  RestaurantWithdrawal,
+  ShipperAccountClosure,
 };

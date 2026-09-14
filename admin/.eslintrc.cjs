@@ -12,7 +12,12 @@ module.exports = {
   settings: { react: { version: '18.2' } },
   plugins: ['react-refresh'],
   rules: {
+    // Web apps share the JavaScript component convention documented in user/.
+    'react/prop-types': 'off',
     'react/jsx-no-target-blank': 'off',
+    'react/no-unescaped-entities': 'off',
+    'react-hooks/exhaustive-deps': 'off',
+    'no-unused-vars': ['error', { varsIgnorePattern: '^React$' }],
     'react-refresh/only-export-components': [
       'warn',
       { allowConstantExport: true },

@@ -1,4 +1,3 @@
-import React from "react";
 import "./Avatar.css";
 
 // Deterministic pick so a given name always lands on the same colour.

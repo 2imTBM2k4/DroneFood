@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import bcrypt from "bcrypt";
-import { User } from "../../models/index.cjs";
+import { User, ShipperProfile } from "../../models/index.cjs";
 import * as userService from "../../services/userService.js";
 
 describe("userService", () => {
@@ -86,6 +86,21 @@ describe("userService", () => {
       const user = await User.findOne({ email: "owner@test.com" });
       expect(user.role).toBe("restaurant_owner");
       expect(user.restaurantId).toBeDefined();
+    });
+
+    it("creates a pending shipper profile without an invalid empty GPS point", async () => {
+      await userService.registerUser({
+        name: "Shipper",
+        email: "shipper-register@test.com",
+        password: "password123",
+        phone: "0901234567",
+        role: "shipper",
+      });
+
+      const shipper = await User.findOne({ email: "shipper-register@test.com" });
+      const profile = await ShipperProfile.findOne({ user: shipper._id });
+      expect(profile.approvalStatus).toBe("pending");
+      expect(profile.currentLocation).toBeUndefined();
     });
   });
 

@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@paypal/react-paypal-js": "^8.9.2",
     "axios": "^1.7.2",
     "html5-qrcode": "^2.3.8",
     "jsqr": "^1.4.0",
@@ -37,5 +36,8 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.6",
     "vite": "^5.2.0"
+  },
+  "allowScripts": {
+    "esbuild@0.21.5": true
   }
 }

@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { User, MapPin, Shield, Camera, LogIn, Loader2 } from "lucide-react";

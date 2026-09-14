@@ -173,14 +173,14 @@ const EditProduct = ({ url, product, onClose, onUpdate }) => {
               />
             </div>
             <div className="add-price flex-col">
-              <p>Product Price</p>
+              <p>Product Price (VND)</p>
               <input
                 className="inputclasa"
                 onChange={onChangeHandler}
                 value={data.price}
                 type="Number"
                 name="price"
-                placeholder="$20"
+                placeholder="50000"
                 required
               />
             </div>

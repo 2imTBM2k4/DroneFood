@@ -11,6 +11,10 @@ import restaurantRouter from "./routes/restaurantRoute.js";
 import droneRouter from "./routes/droneRoute.js";
 import configRouter from "./routes/configRoute.js";
 import auditRouter from "./routes/auditRoute.js";
+import shipperRouter from "./routes/shipperRoute.js";
+import walletRouter from "./routes/walletRoute.js";
+import restaurantWithdrawalRouter from "./routes/restaurantWithdrawalRoute.js";
+import shipperAccountClosureRouter from "./routes/shipperAccountClosureRoute.js";
 
 const app = express();
 
@@ -48,6 +52,10 @@ app.use("/api/restaurant", restaurantRouter);
 app.use("/api/drone", droneRouter);
 app.use("/api/config", configRouter);
 app.use("/api/audit", auditRouter);
+app.use("/api/shippers", shipperRouter);
+app.use("/api/wallet", walletRouter);
+app.use("/api/restaurant-withdrawals", restaurantWithdrawalRouter);
+app.use("/api/shipper/account-closure", shipperAccountClosureRouter);
 
 app.get("/api/health", (req, res) => {
   const dbState = mongoose.connection.readyState;

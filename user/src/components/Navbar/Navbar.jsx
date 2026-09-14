@@ -1,8 +1,15 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useContext } from "react";
 import "./Navbar.css";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { useContext } from "react";
-import { ShoppingCart, ShoppingBag, LogOut, Sun, Moon, MapPin, UserRound } from "lucide-react";
+import {
+  ShoppingBag,
+  LogOut,
+  Sun,
+  Moon,
+  MapPin,
+  UserRound,
+  Plane,
+} from "lucide-react";
 import { StoreContext } from "../../context/StoreContext";
 import Avatar from "../Avatar/Avatar";
 
@@ -11,13 +18,12 @@ const Navbar = ({ setShowLogin }) => {
   const [profileOpen, setProfileOpen] = useState(false);
   const [isDark, setIsDark] = useState(() => localStorage.getItem("mode") === "dark");
   const [scrolled, setScrolled] = useState(false);
-  const { getCartItemCount, token, setToken, user, liveLocation, liveAddress } = useContext(StoreContext);
+  const { getCartItemCount, token, setToken, user, liveLocation, liveAddress } =
+    useContext(StoreContext);
   const navigate = useNavigate();
   const location = useLocation();
-  const menuRef = useRef(null);
   const profileRef = useRef(null);
 
-  // Total number of items in the cart (sum of quantities across lines)
   const cartCount = getCartItemCount();
 
   const logout = () => {
@@ -42,19 +48,12 @@ const Navbar = ({ setShowLogin }) => {
     setProfileOpen(false);
   }, [location.pathname]);
 
-  // When the live bar is hidden the fixed header is one strip shorter, so the
-  // static top offset would leave a gap. Flag it on <html> to shrink the offset.
   const addr = liveAddress || user?.address;
   const deliveryAddress = addr
     ? addr.formatted || [addr.address || addr.street, addr.city].filter(Boolean).join(", ")
     : liveLocation
-    ? "Updating your location…"
+    ? "Updating location…"
     : "";
-  const showLiveBar = Boolean(token && deliveryAddress);
-
-  useEffect(() => {
-    document.documentElement.classList.toggle("no-live-bar", !showLiveBar);
-  }, [showLiveBar]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -65,101 +64,161 @@ const Navbar = ({ setShowLogin }) => {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setMobileMenuOpen(false);
-      }
       if (profileRef.current && !profileRef.current.contains(e.target)) {
         setProfileOpen(false);
       }
     };
-    if (mobileMenuOpen || profileOpen) {
+    if (profileOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [mobileMenuOpen, profileOpen]);
+  }, [profileOpen]);
 
-  const isActive = (path) => location.pathname === path;
-
-  // The live bar greets a signed-in user with where their food will land.
-  // Signed out (or no saved address), the bar has nothing personal to say,
-  // so we hide it entirely rather than show a generic marketing line.
   return (
-    <header className={`site-header ${scrolled ? "scrolled" : ""}`}>
-      {showLiveBar && (
-        <div className="live-bar">
-          <div className="live-bar-msg">
-            <MapPin size={14} className="live-bar-pin" />
-            <span>
-              Delivering to <b>{deliveryAddress}</b>
-            </span>
+    <header className={`apple-navbar-wrapper ${scrolled ? "scrolled" : ""}`}>
+      <nav className="apple-unified-nav" aria-label="Main Navigation">
+        <div className="apple-nav-inner">
+          {/* Brand */}
+          <Link to="/" className="apple-nav-brand" aria-label="Drone Food Home">
+            <Plane className="apple-logo-glyph" size={17} strokeWidth={1.8} aria-hidden="true" />
+            <span className="apple-brand-title">DroneFood</span>
+          </Link>
+
+          {/* Center: Clean links & location */}
+          <div className="apple-nav-center">
+            <Link
+              to="/restaurants"
+              className={`apple-nav-link ${location.pathname.startsWith("/restaurants") ? "active" : ""}`}
+            >
+              Restaurants
+            </Link>
+
+            {token && (
+              <Link
+                to="/myorders"
+                className={`apple-nav-link ${location.pathname === "/myorders" ? "active" : ""}`}
+              >
+                Orders
+              </Link>
+            )}
+
+            {deliveryAddress && (
+              <div className="apple-nav-location" title={deliveryAddress}>
+                <MapPin size={12} className="apple-location-icon" />
+                <span className="apple-location-text">{deliveryAddress}</span>
+              </div>
+            )}
           </div>
-          <Link to="/restaurants" className="ds-label gold live-bar-cta">
-            BROWSE RESTAURANTS ▾
-          </Link>
+
+          {/* Right Actions */}
+          <div className="apple-nav-actions">
+            <button
+              className="apple-icon-btn"
+              onClick={() => setIsDark(!isDark)}
+              aria-label="Toggle theme"
+              title={isDark ? "Light Mode" : "Dark Mode"}
+            >
+              {isDark ? <Sun size={15} /> : <Moon size={15} />}
+            </button>
+
+            <Link
+              to="/cart"
+              className="apple-icon-btn apple-bag-btn"
+              aria-label={`Shopping Bag, ${cartCount} items`}
+            >
+              <ShoppingBag size={17} />
+              {cartCount > 0 && <span className="apple-bag-count">{cartCount}</span>}
+            </Link>
+
+            {!token ? (
+              <button
+                className="btn-apple-dark-utility"
+                onClick={() => setShowLogin(true)}
+              >
+                Sign In
+              </button>
+            ) : (
+              <div
+                className={`apple-profile-container ${profileOpen ? "open" : ""}`}
+                ref={profileRef}
+              >
+                <button
+                  type="button"
+                  className="apple-profile-trigger"
+                  onClick={() => setProfileOpen((prev) => !prev)}
+                  aria-label="Account menu"
+                  aria-expanded={profileOpen}
+                >
+                  <Avatar src={user?.avatar} name={user?.name} size={30} />
+                </button>
+                {profileOpen && (
+                  <ul className="apple-profile-dropdown">
+                    <li onClick={() => navigate("/profile")}>
+                      <UserRound size={15} />
+                      <span>Account</span>
+                    </li>
+                    <li onClick={() => navigate("/myorders")}>
+                      <ShoppingBag size={15} />
+                      <span>Orders</span>
+                    </li>
+                    <li onClick={logout} className="apple-logout-item">
+                      <LogOut size={15} />
+                      <span>Sign Out</span>
+                    </li>
+                  </ul>
+                )}
+              </div>
+            )}
+
+            <button
+              className={`apple-hamburger ${mobileMenuOpen ? "open" : ""}`}
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Menu"
+            >
+              <span />
+              <span />
+            </button>
+          </div>
         </div>
-      )}
+      </nav>
 
-      <nav className="navbar">
-      <Link to="/" aria-label="Home" className="brand">
-        <span className="brand-mark ds-serif">Drone Food</span>
-      </Link>
-
-      <div className="navbar-right">
-        <button
-          className="theme-toggle"
-          onClick={() => setIsDark(!isDark)}
-          aria-label="Toggle theme"
-        >
-          {isDark ? <Sun size={18} /> : <Moon size={18} />}
-        </button>
-        <div className="navbar-search-icon">
-          <Link to="/cart" aria-label={`Cart, ${cartCount} items`} className="basketlogo">
-            <ShoppingCart size={22} />
+      {/* Mobile Drawer Menu */}
+      {mobileMenuOpen && (
+        <div className="apple-mobile-drawer">
+          <Link to="/" className="apple-mobile-link" onClick={() => setMobileMenuOpen(false)}>
+            Home
           </Link>
-          {cartCount > 0 && (
-            <span className="cart-count">{cartCount > 99 ? "99+" : cartCount}</span>
+          <Link
+            to="/restaurants"
+            className="apple-mobile-link"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            Restaurants
+          </Link>
+          {token && (
+            <Link
+              to="/myorders"
+              className="apple-mobile-link"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Orders
+            </Link>
+          )}
+          <Link
+            to="/cart"
+            className="apple-mobile-link"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            Shopping Bag ({cartCount})
+          </Link>
+          {deliveryAddress && (
+            <div className="apple-mobile-addr">
+              <MapPin size={13} />
+              <span>{deliveryAddress}</span>
+            </div>
           )}
         </div>
-        {!token ? (
-          <button className="signbutton" onClick={() => setShowLogin(true)}>
-            Sign in
-          </button>
-        ) : (
-          <div
-            className={`navbar-profile ${profileOpen ? "open" : ""}`}
-            ref={profileRef}
-            onClick={() => setProfileOpen((prev) => !prev)}
-          >
-            <Avatar src={user?.avatar} name={user?.name} size={34} />
-            <ul className="nav-profile-dropdown">
-              <li onClick={() => navigate("/profile")}>
-                <UserRound size={18} />
-                <p>Profile</p>
-              </li>
-              <li onClick={() => navigate("/myorders")}>
-                <ShoppingBag size={18} />
-                <p>Orders</p>
-              </li>
-              <hr />
-              <li onClick={logout}>
-                <LogOut size={18} />
-                <p>Logout</p>
-              </li>
-            </ul>
-          </div>
-        )}
-        <button
-          className={`hamburger ${mobileMenuOpen ? "open" : ""}`}
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          aria-label="Toggle menu"
-          aria-expanded={mobileMenuOpen}
-        >
-          <span></span>
-          <span></span>
-          <span></span>
-        </button>
-      </div>
-      </nav>
+      )}
     </header>
   );
 };

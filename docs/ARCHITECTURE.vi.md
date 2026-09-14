@@ -1331,8 +1331,9 @@ Hệ thống hiện là **một khối (monolith) phân tầng tốt**. **Không
 |---|---|---|
 | Bán kính tìm nhà hàng | **15 km** | `user/src/lib/distance.js` → `NEARBY_RADIUS_KM` |
 | Pin tối thiểu để bay | **30 %** | `backend/repositories/droneRepository.js` → `MIN_BATTERY_PERCENT` |
-| Phí giao hàng | **$2** | `backend/config/fees.js` → `DELIVERY_FEE` |
-| Phí dịch vụ | **$0** | `backend/config/fees.js` → `SERVICE_FEE` |
+| Phí shipper | **5.000đ/km** theo đường bộ | `backend/config/fees.js` → `SHIPPER_RATE_PER_KM` |
+| Phí drone | **7.000đ/km** theo đường chim bay | `backend/config/fees.js` → `DRONE_RATE_PER_KM` |
+| Phí dịch vụ | **0đ** | `backend/config/fees.js` → `SERVICE_FEE` |
 | Chia doanh thu | **80 / 20** trên `itemsPrice` | `backend/services/orderService.js` |
 | Hạn access token | **30 phút** | `backend/services/userService.js` |
 | Hạn refresh token | **7 ngày** | `backend/services/userService.js` |

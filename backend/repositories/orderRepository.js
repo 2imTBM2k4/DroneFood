@@ -17,6 +17,13 @@ export const findById = async (id) => {
     .populate("restaurantId");
 };
 
+export const findByPayosOrderCode = async (payosOrderCode) => {
+  return await Order.findOne({ payosOrderCode })
+    .populate("user")
+    .populate("orderItems.product")
+    .populate("restaurantId");
+};
+
 export const findByUser = async (userId) => {
   return await Order.find({ user: userId })
     .populate("orderItems.product")
@@ -45,7 +52,7 @@ export const updateById = async (id, updates) => {
   // Handle specific updates like orderStatus enum
   if (
     updates.orderStatus &&
-    !["pending", "preparing", "delivering", "delivered", "cancelled"].includes(
+    !["pending_payment", "pending", "preparing", "delivering", "delivered", "cancelled"].includes(
       updates.orderStatus
     )
   ) {

@@ -126,70 +126,97 @@
   font-size: 13px;
 }
 
-/* ---------- Sticky category bar ---------- */
+/* ---------- Desktop category sidebar ---------- */
+
+.restaurant-menu-layout {
+  display: grid;
+  grid-template-columns: minmax(148px, 190px) minmax(0, 1fr);
+  align-items: start;
+  gap: 48px;
+}
+
+.restaurant-page-content {
+  min-width: 0;
+}
 
 .restaurant-catalog {
+  order: -1;
   position: sticky;
-  top: var(--navbar-offset);
+  top: calc(var(--navbar-offset, 90px) + 24px);
   z-index: 20;
-  margin-bottom: 8px;
-  padding: 12px 0;
-  background: var(--body-color);
-  border-bottom: 1px solid var(--border-color);
+  max-height: calc(100dvh - var(--navbar-offset, 90px) - 48px);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  background: transparent;
+  border: 0;
 }
 
 /* Scoped under .restaurant-catalog — FoodPage.css defines its own
    .catalog-list/.catalog-item and these stylesheets share a global scope. */
 .restaurant-catalog .catalog-list {
   display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  padding-bottom: 2px;
-}
-
-.restaurant-catalog .catalog-list::-webkit-scrollbar {
-  display: none;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
 }
 
 .restaurant-catalog .catalog-item {
-  flex: none;
-  padding: 9px 18px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: auto;
+  min-height: 44px;
+  padding: 8px 0;
+  border: 0;
+  border-radius: 0;
   cursor: pointer;
-  background: var(--card-bg);
+  background: transparent;
   color: var(--text-secondary);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  transition: border-color 0.18s ease, color 0.18s ease, background 0.18s ease;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: -0.2px;
+  line-height: 1.2;
+  text-align: left;
+  overflow-wrap: anywhere;
+  transform: scale(0.9);
+  transform-origin: left center;
+  opacity: 0.72;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), color 180ms ease, opacity 180ms ease;
 }
 
-.catalog-item:hover {
-  border-color: var(--accent-border);
+.restaurant-catalog .catalog-item:hover {
+  color: var(--text-color);
+  opacity: 1;
+  transform: scale(0.97);
+}
+
+.restaurant-catalog .catalog-item.active {
   color: var(--accent-color);
+  font-weight: 700;
+  opacity: 1;
+  transform: scale(1.14);
 }
 
-.catalog-item.active {
-  border-color: var(--accent-color);
-  color: var(--accent-color);
-  background: var(--accent-light);
+.restaurant-catalog .catalog-item:focus-visible {
+  outline: 0;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
 }
 
-.catalog-item:focus-visible {
-  outline: 2px solid var(--accent-color);
-  outline-offset: 2px;
+@media (prefers-reduced-motion: reduce) {
+  .restaurant-catalog .catalog-item {
+    transition: none;
+  }
 }
 
 /* ---------- Menu sections ---------- */
 
 .menu-section {
-  /* Anchor offset so scrolling to a section clears the sticky headers. */
-  scroll-margin-top: calc(var(--navbar-offset) + 58px);
+  /* Anchor offset so a section heading clears the fixed global nav. */
+  scroll-margin-top: calc(var(--navbar-offset) + 24px);
   padding-top: 30px;
 }
 
@@ -198,6 +225,60 @@
   margin-bottom: 18px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border-light);
+}
+
+@media (max-width: 900px) {
+  .restaurant-menu-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .restaurant-catalog {
+    position: sticky;
+    top: var(--navbar-offset);
+    order: -1;
+    transform: none;
+    /* Explicit width prevents the flex item's intrinsic chip width from
+       extending the negative-margin scroller past the viewport. */
+    width: calc(100% + (var(--container-pad) * 2));
+    max-height: none;
+    margin: 0 calc(var(--container-pad) * -1) 8px;
+    padding: 12px var(--container-pad);
+    overflow: visible;
+    background: var(--body-color);
+    border: 0;
+    border-radius: 0;
+  }
+
+  .restaurant-catalog .catalog-list {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+
+  .restaurant-catalog .catalog-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .restaurant-catalog .catalog-item {
+    display: inline-flex;
+    justify-content: center;
+    width: auto;
+    min-height: 40px;
+    padding: 9px 18px;
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 400;
+    letter-spacing: -0.1px;
+    text-align: center;
+    text-transform: none;
+    white-space: nowrap;
+    transform-origin: center;
+  }
 }
 
 @media (max-width: 750px) {
@@ -212,12 +293,6 @@
 
   .restaurant-hero-top h1 {
     font-size: 1.8rem;
-  }
-
-  .restaurant-catalog {
-    /* Bleed the scroller to the screen edges so chips don't look clipped. */
-    margin-inline: calc(var(--container-pad) * -1);
-    padding-inline: var(--container-pad);
   }
 
   .menu-section-title {

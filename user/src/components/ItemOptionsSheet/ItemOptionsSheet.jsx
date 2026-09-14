@@ -1,10 +1,11 @@
-import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, Plus, Minus, Star } from "lucide-react";
 import { toast } from "react-toastify";
 import "./ItemOptionsSheet.css";
 import { StoreContext } from "../../context/StoreContext";
 import { assets } from "../../assets/assets";
+import { formatVND } from "../../../../shared/utils/money";
 
 /**
  * The dish sheet: options, quantity, kitchen note, live price.
@@ -218,7 +219,7 @@ const ItemOptionsSheet = ({
               </span>
             </div>
             <p className="ios-desc">{item.description}</p>
-            <p className="ios-base-price ds-num">${item.price.toFixed(2)}</p>
+            <p className="ios-base-price ds-num">{formatVND(item.price)}</p>
 
             {groups.map((group) => (
               <fieldset className="ios-group" key={group.name}>
@@ -246,7 +247,7 @@ const ItemOptionsSheet = ({
                         <span className="ios-option-name">{option.name}</span>
                         {option.priceDelta > 0 && (
                           <span className="ios-option-price ds-num">
-                            +${option.priceDelta.toFixed(2)}
+                            +{formatVND(option.priceDelta)}
                           </span>
                         )}
                       </label>
@@ -305,7 +306,7 @@ const ItemOptionsSheet = ({
                 {submitLabel}
                 <span className="ios-submit-sep">·</span>
                 <span className="ds-num">
-                  ${(unitPrice * quantity).toFixed(2)}
+                  {formatVND(unitPrice * quantity)}
                 </span>
               </>
             )}

@@ -1,243 +1,187 @@
-.login-popup {
+/* ============================================================
+   Apple Modal Dialog — LoginPopup (DESIGN-apple.md)
+   White canvas · Hairline border (1px) · 18px radius (rounded.lg)
+   Backdrop filter blur · SF Pro typography · Action Blue pill button
+   NO box-shadow on inputs or cards · 11px radius on inputs
+   ============================================================ */
+
+.apple-modal-overlay {
   position: fixed;
   inset: 0;
   z-index: 2000;
-  background-color: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
+  background-color: rgba(0, 0, 0, 0.48);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   display: grid;
   place-items: center;
-  animation: fadeIn 0.3s ease;
+  padding: 20px;
+  animation: fadeIn 0.25s ease;
 }
 
-.login-popup-container {
-  width: min(420px, 90vw);
-  background-color: var(--card-bg);
+.apple-modal-card {
+  width: 100%;
+  max-width: 440px;
+  background-color: var(--apple-canvas);
+  border: 1px solid var(--apple-hairline);
+  border-radius: var(--radius-lg);
+  padding: 36px 32px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  padding: 32px;
-  border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
-  animation: fadeIn 0.3s ease;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.2);
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
 }
 
-.login-popup-title {
+.dark-mode .apple-modal-card {
+  background-color: var(--apple-surface-tile-1);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+}
+
+.apple-modal-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
 }
 
-.login-popup-title h2 {
-  color: var(--text-color);
-  font-size: 24px;
-  font-weight: 700;
+/* 24px / 600 Headline */
+.apple-modal-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.374px;
+  color: var(--apple-ink);
 }
 
-.login-close-btn {
-  background: none;
-  border: none;
-  font-size: 24px;
-  line-height: 1;
-  padding: 4px 8px;
+.apple-modal-close-btn {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 50% !important;
+  background-color: var(--apple-canvas-parchment) !important;
+  border: none !important;
+  color: var(--apple-body-muted) !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  color: var(--text-color);
-  opacity: 0.5;
-  transition: opacity 0.2s ease;
-  border-radius: 6px;
+  transition: opacity 0.18s ease;
 }
 
-.login-close-btn:hover {
-  opacity: 1;
+.apple-modal-close-btn:hover {
+  opacity: 0.8;
+  color: var(--apple-ink);
 }
 
-.login-close-btn:focus-visible {
-  outline: 2px solid var(--accent-color);
-  outline-offset: 2px;
-  opacity: 1;
+.apple-modal-back-btn {
+  background: transparent;
+  border: none;
+  color: var(--apple-body-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  transition: color 0.18s ease;
 }
 
-.login-popup-inputs {
+.apple-modal-back-btn:hover {
+  color: var(--apple-ink);
+}
+
+.apple-modal-desc {
+  font-family: var(--font-text);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.43;
+  color: var(--apple-body-muted);
+  margin-bottom: 24px;
+}
+
+.apple-modal-inputs {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  margin-bottom: 24px;
 }
 
-.login-popup-inputs input {
+/* Apple Input: 11px radius, hairline border, clean focus ring */
+.apple-modal-input {
+  width: 100%;
+  height: 44px;
+  background-color: var(--apple-canvas);
+  color: var(--apple-ink);
+  font-family: var(--font-text);
+  font-size: 15px;
+  border: 1px solid var(--apple-hairline);
+  border-radius: var(--radius-md);
+  padding: 0 16px;
   outline: none;
-  border: 1.5px solid var(--border-color);
-  padding: 12px 16px;
-  border-radius: 10px;
-  font-size: 15px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  color: var(--text-color);
-  background: var(--background-secondary);
+  transition: border-color 0.18s ease;
 }
 
-.login-popup-inputs input:focus {
-  border-color: var(--accent-color);
-  box-shadow: 0 0 0 3px var(--accent-light);
-  background: var(--card-bg);
+.dark-mode .apple-modal-input {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
-.login-popup-inputs input::placeholder {
-  color: var(--text-muted);
+.apple-modal-input:focus {
+  border-color: var(--apple-primary-focus);
 }
 
-.login-popup-container button {
-  border: none;
-  padding: 13px;
-  border-radius: 10px;
-  color: white;
-  background: var(--accent-color);
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.15s ease;
-  letter-spacing: 0.02em;
+.apple-modal-input::placeholder {
+  color: var(--apple-body-muted);
 }
 
-.login-popup-container button:hover {
-  background-color: var(--accent-hover);
-  transform: translateY(-1px);
+/* Modal Action Button */
+.apple-modal-action {
+  width: 100%;
+  height: 44px;
+  font-size: 15px !important;
+  margin-bottom: 16px;
 }
 
-.login-popup-container button:active {
-  transform: translateY(0);
-}
-
-.login-popup-condition {
-  display: flex;
-  align-items: start;
-  gap: 8px;
-  margin-top: -10px;
-}
-
-.login-popup-condition input {
-  margin-top: 5px;
-  accent-color: var(--accent-color);
-}
-
-.login-popup p {
-  color: var(--text-secondary);
-  font-size: 14px;
+.apple-forgot-link {
   text-align: center;
+  margin-bottom: 14px;
 }
 
-.login-popup p span {
-  color: var(--accent-color);
-  font-weight: 600;
-  cursor: pointer;
-  transition: color 0.2s ease;
-}
-
-.login-popup p span:hover {
-  color: var(--accent-hover);
-}
-
-.continuee {
-  position: relative;
-  top: 4px;
-}
-
-/* ---------- Forgot Password styles ---------- */
-
-.login-back-btn {
-  background: none;
-  border: none;
-  padding: 4px;
-  cursor: pointer;
-  color: var(--text-secondary);
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.2s ease, background-color 0.2s ease;
-}
-
-.login-back-btn:hover {
-  color: var(--text-color);
-  background-color: var(--border-light);
-}
-
-.login-back-btn:focus-visible {
-  outline: 2px solid var(--accent-color);
-  outline-offset: 2px;
-}
-
-.forgot-desc {
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.6;
-  margin-top: -8px;
-}
-
-.forgot-link {
-  margin-top: -12px !important;
+.apple-modal-footer-text {
   text-align: center;
-}
-
-.forgot-link span {
   font-size: 13px;
+  color: var(--apple-body-muted);
 }
 
-.forgot-success {
+.apple-modal-footer-text .apple-text-link {
+  font-weight: 500;
+}
+
+/* Forgot success view */
+.apple-forgot-success {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
   text-align: center;
-  padding: 8px 0;
+  gap: 12px;
+  padding: 12px 0;
 }
 
-.forgot-success-icon {
-  width: 64px;
-  height: 64px;
+.apple-forgot-icon {
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  background: var(--accent-light);
-  border: 1.5px solid var(--accent-border);
-  display: grid;
-  place-items: center;
-  color: var(--accent-color);
-  animation: pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@keyframes pop-in {
-  0% {
-    opacity: 0;
-    transform: scale(0.5);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.forgot-success-title {
-  font-family: var(--font-serif);
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--text-color);
-}
-
-.forgot-success-desc {
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.6;
-  max-width: 320px;
-}
-
-.forgot-success-desc strong {
-  color: var(--text-color);
-}
-
-/* Loading spinner */
-.login-popup-container button.loading {
-  opacity: 0.7;
-  pointer-events: none;
+  background-color: rgba(0, 102, 204, 0.08);
+  color: var(--apple-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.apple-forgot-success-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--apple-ink);
 }
 
 .spin-icon {
@@ -248,9 +192,4 @@
   100% {
     transform: rotate(360deg);
   }
-}
-
-/* Disabled state */
-.login-popup-container button:disabled {
-  cursor: not-allowed;
 }

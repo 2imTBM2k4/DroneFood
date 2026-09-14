@@ -1,13 +1,130 @@
-import React, { useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import axios from "axios";
 import { StoreContext } from "../../context/StoreContext";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
-import { Package, LogIn } from "lucide-react";
+import { Bike, Check, CircleX, Clock3, CookingPot, Package, PackageCheck, Truck, LogIn } from "lucide-react";
 import DroneDelivery from "../../components/DroneDelivery/DroneDelivery";
 import { SkeletonList } from "../../components/Skeleton/Skeleton";
 import { EmptyState, ErrorState } from "../../../../shared/components/StateBlock";
 import "./MyOrders.css"; // Giả sử bạn có file CSS này cho style nhất quán với light mode
+import { formatVND } from "../../../../shared/utils/money";
+
+const SHIPPER_WAIT_WINDOW_MS = 15 * 60 * 1000;
+
+const formatRemainingTime = (remainingMs) => {
+  const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+};
+
+const getTimelineDetails = (order) => {
+  const isShipper = order.deliveryMethod === "shipper";
+  const isFindingShipper = isShipper && order.shipperAssignmentStatus === "unassigned";
+  const steps = isShipper
+    ? [
+        { key: "placed", label: "Đã đặt", Icon: PackageCheck },
+        { key: "finding-shipper", label: "Tìm Shipper", Icon: Bike },
+        { key: "preparing", label: "Đang chuẩn bị", Icon: CookingPot },
+        { key: "delivering", label: "Đang giao", Icon: Truck },
+        { key: "delivered", label: "Đã giao", Icon: Check },
+      ]
+    : [
+        { key: "placed", label: "Đã đặt", Icon: PackageCheck },
+        { key: "preparing", label: "Đang chuẩn bị", Icon: CookingPot },
+        { key: "delivering", label: "Đang giao", Icon: Truck },
+        { key: "delivered", label: "Đã giao", Icon: Check },
+      ];
+
+  if (order.orderStatus === "delivered") {
+    return { steps, activeStep: steps.length - 1, message: "Đơn hàng đã được giao thành công." };
+  }
+  if (order.orderStatus === "delivering") {
+    return { steps, activeStep: steps.length - 2, message: "Đơn hàng đang được giao đến bạn." };
+  }
+  if (isFindingShipper) {
+    return {
+      steps,
+      activeStep: 1,
+      message: order.orderStatus === "preparing"
+        ? "Nhà hàng đang chuẩn bị, đồng thời tìm Shipper."
+        : "Đang tìm Shipper gần nhà hàng.",
+    };
+  }
+  if (order.orderStatus === "preparing") {
+    return {
+      steps,
+      activeStep: isShipper ? 2 : 1,
+      message: isShipper && order.shipperAssignmentStatus === "accepted"
+        ? "Shipper đã nhận đơn. Nhà hàng đang chuẩn bị."
+        : "Nhà hàng đang chuẩn bị đơn hàng.",
+    };
+  }
+  if (isShipper && order.shipperAssignmentStatus === "accepted") {
+    return { steps, activeStep: 2, message: "Shipper đã nhận đơn. Chờ nhà hàng chuẩn bị món." };
+  }
+  return { steps, activeStep: 0, message: "Nhà hàng đang chờ xác nhận đơn hàng." };
+};
+
+const OrderStatusTimeline = ({ order, now }) => {
+  const isWaitingForShipper = order.deliveryMethod === "shipper"
+    && ["pending", "preparing"].includes(order.orderStatus)
+    && order.shipperAssignmentStatus === "unassigned";
+  const deadlineMs = order.shipperAssignmentDeadlineAt ? new Date(order.shipperAssignmentDeadlineAt).getTime() : null;
+  const remainingMs = deadlineMs ? Math.max(0, deadlineMs - now) : null;
+
+  if (order.orderStatus === "cancelled") {
+    return (
+      <section className="order-timeline order-timeline-cancelled" aria-label="Trạng thái đơn hàng: đã hủy">
+        <CircleX size={20} aria-hidden="true" />
+        <div>
+          <strong>Đơn hàng đã hủy</strong>
+          <p>{order.cancellationCode === "NO_SHIPPER_AVAILABLE" ? "Không có Shipper nào nhận đơn trong thời gian chờ." : "Đơn hàng không thể tiếp tục xử lý."}</p>
+        </div>
+      </section>
+    );
+  }
+
+  const { steps, activeStep, message } = getTimelineDetails(order);
+  const waitProgress = remainingMs === null ? 0 : Math.min(100, Math.max(0, ((SHIPPER_WAIT_WINDOW_MS - remainingMs) / SHIPPER_WAIT_WINDOW_MS) * 100));
+
+  return (
+    <section className="order-timeline" aria-label={`Trạng thái đơn hàng: ${message}`}>
+      <div className="order-timeline-heading">
+        <div>
+          <span className="order-timeline-kicker">Theo dõi đơn hàng</span>
+          <strong aria-live="polite">{message}</strong>
+        </div>
+        {isWaitingForShipper && remainingMs !== null && (
+          <div className="shipper-countdown" aria-live="polite">
+            <Clock3 size={18} aria-hidden="true" />
+            <span>{remainingMs > 0 ? "Còn" : "Đang xác nhận"}</span>
+            <time dateTime={`PT${Math.ceil(remainingMs / 1000)}S`}>{remainingMs > 0 ? formatRemainingTime(remainingMs) : "00:00"}</time>
+          </div>
+        )}
+      </div>
+
+      <ol className="order-timeline-steps">
+        {steps.map(({ key, label, Icon }, index) => {
+          const state = index < activeStep ? "done" : index === activeStep ? "active" : "upcoming";
+          return (
+            <li key={key} className={`order-timeline-step ${state}`}>
+              <span className="order-timeline-dot" aria-hidden="true"><Icon size={16} /></span>
+              <span className="order-timeline-label">{label}</span>
+            </li>
+          );
+        })}
+      </ol>
+
+      {isWaitingForShipper && remainingMs !== null && (
+        <div className="shipper-wait-progress" aria-label={`Đã chờ ${Math.round(waitProgress)} phần trăm thời gian tìm Shipper`}>
+          <span style={{ width: `${waitProgress}%` }} />
+        </div>
+      )}
+    </section>
+  );
+};
 
 const MyOrders = () => {
   const { url, token, setShowLogin } = useContext(StoreContext);
@@ -20,32 +137,39 @@ const MyOrders = () => {
   const [canReceiveOrder, setCanReceiveOrder] = useState({});
   const [showCancelModal, setShowCancelModal] = useState(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [now, setNow] = useState(() => Date.now());
+  const hasShipperAwaitingAcceptance = orders.some((order) => order.deliveryMethod === "shipper" && ["pending", "preparing"].includes(order.orderStatus) && order.shipperAssignmentStatus === "unassigned");
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async ({ background = false } = {}) => {
     if (!token) {
-      setIsLoading(false);
+      if (!background) setIsLoading(false);
       return;
     }
     try {
-      setIsLoading(true);
-      setLoadError(null);
+      if (!background) {
+        setIsLoading(true);
+        setLoadError(null);
+      }
       const response = await axios.get(`${url}/api/order/userorders`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.data.success) {
-        setOrders(response.data.data);
+        const nextOrders = response.data.data;
+        setOrders(nextOrders);
       } else {
         throw new Error(response.data.message || "Failed to load orders");
       }
     } catch (error) {
       console.error("Fetch orders error:", error);
-      setLoadError(
-        error.response?.data?.message || error.message || "Failed to load orders"
-      );
+      if (!background) {
+        setLoadError(
+          error.response?.data?.message || error.message || "Failed to load orders"
+        );
+      }
     } finally {
-      setIsLoading(false);
+      if (!background) setIsLoading(false);
     }
-  };
+  }, [token, url]);
 
   const confirmReceived = async (orderId) => {
     try {
@@ -151,7 +275,20 @@ const MyOrders = () => {
 
   useEffect(() => {
     fetchOrders();
-  }, [token]);
+    if (!token) return undefined;
+    // The expiry job runs outside the API process, so polling is required to
+    // surface the 15-minute cancellation without asking the customer to reload.
+    const refreshId = window.setInterval(() => fetchOrders({ background: true }), 30000);
+    return () => window.clearInterval(refreshId);
+  }, [fetchOrders, token]);
+
+  useEffect(() => {
+    if (!hasShipperAwaitingAcceptance) return undefined;
+    const refreshClock = () => setNow(Date.now());
+    refreshClock();
+    const timerId = window.setInterval(refreshClock, 1000);
+    return () => window.clearInterval(timerId);
+  }, [hasShipperAwaitingAcceptance]);
 
   return (
     <div className="my-orders">
@@ -219,7 +356,7 @@ const MyOrders = () => {
                           )}
                         </span>
                         <span className="item-quantity">x{item.quantity}</span>
-                        <span className="item-price">${item.price}</span>
+                        <span className="item-price">{formatVND(item.price)}</span>
                       </div>
                     ))}
                   </div>
@@ -228,15 +365,19 @@ const MyOrders = () => {
                 <div className="order-summary">
                   <div className="summary-row">
                     <span>Total:</span>
-                    <strong>${order.totalPrice}</strong>
+                    <strong>{formatVND(order.totalPrice)}</strong>
                   </div>
                   <div className="summary-row">
                     <span>Payment method:</span>
                     <span>
                       {order.paymentMethod === "COD"
                         ? "Cash on delivery"
-                        : "Credit card"}
+                        : order.paymentMethod === "PAYOS" ? "PayOS" : "VNPay"}
                     </span>
+                  </div>
+                  <div className="summary-row">
+                    <span>Delivery method:</span>
+                    <span>{order.deliveryMethod === "shipper" ? "Shipper" : "Drone"}</span>
                   </div>
                   <div className="summary-row summary-row-stacked">
                     <span>Delivery address:</span>
@@ -248,6 +389,19 @@ const MyOrders = () => {
                   </div>
                 </div>
               </div>
+
+              {order.refundStatus === "requested" && (
+                <p className="refund-status" role="status">
+                  Hoàn tiền VNPay đã được yêu cầu. Mã yêu cầu: {order.refundRequestId}.
+                </p>
+              )}
+              {order.refundStatus === "failed" && (
+                <p className="refund-status refund-status-failed" role="alert">
+                  Chưa thể gửi yêu cầu hoàn tiền. Vui lòng liên hệ hỗ trợ.
+                </p>
+              )}
+
+              <OrderStatusTimeline order={order} now={now} />
 
               {order.orderStatus === "pending" && (
                 <div className="order-actions">
@@ -262,12 +416,14 @@ const MyOrders = () => {
 
               {order.orderStatus === "delivering" && (
                 <div className="order-actions">
-                  <button
-                    onClick={() => handleViewDelivery(order)}
-                    className="view-delivery-btn"
-                  >
-                    View delivery details
-                  </button>
+                  {order.deliveryMethod !== "shipper" && (
+                    <button
+                      onClick={() => handleViewDelivery(order)}
+                      className="view-delivery-btn"
+                    >
+                      View delivery details
+                    </button>
+                  )}
                   <button
                     onClick={() => confirmReceived(order._id)}
                     className={`confirm-received-btn ${
@@ -280,7 +436,16 @@ const MyOrders = () => {
                 </div>
               )}
 
-              {order.orderStatus === "cancelled" && order.reason && (
+              {order.cancellationCode === "NO_SHIPPER_AVAILABLE" && (
+                <div className="shipper-timeout-notice" role="alert">
+                  <div>
+                    <strong>Không tìm được Shipper</strong>
+                    <p>{order.reason || "Đơn đã tự hủy sau 15 phút vì chưa có Shipper nào nhận."}</p>
+                  </div>
+                </div>
+              )}
+
+              {order.orderStatus === "cancelled" && order.reason && order.cancellationCode !== "NO_SHIPPER_AVAILABLE" && (
                 <div className="cancel-reason">
                   <strong>Cancellation reason:</strong> {order.reason}
                 </div>
@@ -335,7 +500,7 @@ const MyOrders = () => {
       )}
 
       {/* Drone Delivery Modal */}
-      {showDroneModal && selectedOrder && (
+      {showDroneModal && selectedOrder && selectedOrder.deliveryMethod !== "shipper" && (
         <div
           className="drone-modal-overlay"
           onClick={() => setShowDroneModal(false)}

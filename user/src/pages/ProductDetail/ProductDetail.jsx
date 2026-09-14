@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect, useCallback } from "react";
+import { useContext, useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Plus, Star, ArrowLeft } from "lucide-react";
 import "./ProductDetail.css";
@@ -6,6 +6,7 @@ import { StoreContext } from "../../context/StoreContext";
 import { ErrorState } from "../../../../shared/components/StateBlock";
 import ItemOptionsSheet from "../../components/ItemOptionsSheet/ItemOptionsSheet";
 import { assets } from "../../assets/assets";
+import { formatVND } from "../../../../shared/utils/money";
 
 /**
  * Deep-link page for a single dish. Adding to the cart goes through the same
@@ -115,7 +116,7 @@ const ProductDetail = () => {
             </span>
           </div>
           <p className="product-detail-desc">{item.description}</p>
-          <p className="product-detail-price">${item.price}</p>
+          <p className="product-detail-price">{formatVND(item.price)}</p>
 
           {optionGroups.length > 0 && (
             <ul className="product-detail-options">

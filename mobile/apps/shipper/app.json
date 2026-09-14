@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Drone Food Shipper",
+    "slug": "drone-food-shipper",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Drone Food dùng vị trí để hiển thị đơn hàng gần bạn.",
+          "locationAlwaysAndWhenInUsePermission": "Drone Food dùng vị trí khi bạn đang giao hàng để cập nhật vị trí shipper.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ]
+    ],
+    "android": {
+      "package": "com.dronefood.shipper",
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION", "ACCESS_BACKGROUND_LOCATION", "FOREGROUND_SERVICE", "FOREGROUND_SERVICE_LOCATION"]
+    },
+    "ios": {
+      "bundleIdentifier": "com.dronefood.shipper",
+      "infoPlist": {
+        "UIBackgroundModes": ["location"]
+      }
+    }
+  }
+}

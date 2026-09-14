@@ -1,7 +1,24 @@
 {
+  "name": "drone-food",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "mobile/packages/*",
+    "mobile/apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "mobile:build": "npm run build --workspace=@drone-food/contracts && npm run build --workspace=@drone-food/api-client && npm run typecheck --workspace=customer && npm run typecheck --workspace=shipper && npm run typecheck --workspace=restaurant-mobile",
+    "mobile:typecheck": "npm run mobile:build"
+  },
   "dependencies": {
     "leaflet": "^1.9.4",
     "react-toastify": "^11.0.5",
     "trackasia-gl": "^2.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
   }
 }

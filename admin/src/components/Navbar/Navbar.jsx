@@ -3,6 +3,7 @@ import "./Navbar.css";
 import { Sun, Moon } from "lucide-react";
 import { assets } from "../../assets/assets";
 import { AuthContext } from "../../context/AuthContext";
+import { formatVND } from "../../../../shared/utils/money";
 
 const Navbar = () => {
   const { user, logout } = useContext(AuthContext);
@@ -41,7 +42,7 @@ const Navbar = () => {
         </button>
         {user && (
           <span className="balance">
-            Balance: ${user.walletBalance?.toFixed(2) || "0.00"}
+            Balance: {formatVND(user.walletBalance)}
           </span>
         )}
         <img className="profile" src={assets.profile_image} alt="Profile" />

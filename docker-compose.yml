@@ -1,7 +1,7 @@
 services:
   backend:
     build: ./backend
-    container_name: drone-delivery-backend
+    container_name: dronefood-backend
     env_file:
       - ./backend/.env
     ports:
@@ -12,7 +12,7 @@ services:
     build:
       context: .
       dockerfile: user/Dockerfile
-    container_name: drone-delivery-user
+    container_name: dronefood-user
     ports:
       - "5173:80"
     depends_on:
@@ -23,7 +23,7 @@ services:
     build:
       context: .
       dockerfile: admin/Dockerfile
-    container_name: drone-delivery-admin
+    container_name: dronefood-admin
     ports:
       - "5174:80"
     depends_on:
@@ -34,7 +34,7 @@ services:
     build:
       context: .
       dockerfile: restaurant/Dockerfile
-    container_name: drone-delivery-restaurant
+    container_name: dronefood-restaurant
     ports:
       - "5175:80"
     depends_on:

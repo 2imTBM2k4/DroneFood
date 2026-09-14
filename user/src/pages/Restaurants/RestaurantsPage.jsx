@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Search, X, Store } from "lucide-react";
 import "./RestaurantsPage.css";
@@ -8,6 +8,9 @@ import Reveal from "../../components/Reveal/Reveal";
 import { EmptyState } from "../../../../shared/components/StateBlock";
 import { NEARBY_RADIUS_KM } from "../../lib/distance";
 
+const getSearchParam = (params) =>
+  params.get("q") ?? params.get("search") ?? "";
+
 /**
  * Browse restaurants that deliver here — the step between the home page and a
  * restaurant's own menu. Search and cuisine chips both narrow the same list,
@@ -16,20 +19,24 @@ import { NEARBY_RADIUS_KM } from "../../lib/distance";
 const RestaurantsPage = () => {
   const { restaurants, categories, customer } = useNearbyRestaurants();
   const [searchParams, setSearchParams] = useSearchParams();
+  // `search` was used by an earlier version of the home hero. Accept it for
+  // shared and bookmarked links, then write all new changes using `q`.
   const [category, setCategory] = useState(
     searchParams.get("category") || "All"
   );
-  const [search, setSearch] = useState(searchParams.get("q") || "");
+  const [search, setSearch] = useState(() => getSearchParam(searchParams));
 
   // Keep state in step with the URL (arriving from the home hero or strip,
   // and the back button).
   useEffect(() => {
-    setSearch(searchParams.get("q") || "");
+    setSearch(getSearchParam(searchParams));
     setCategory(searchParams.get("category") || "All");
   }, [searchParams]);
 
   const writeParam = (key, value) => {
     const next = new URLSearchParams(searchParams);
+    // Normalise legacy URLs the moment the user updates the filter.
+    if (key === "q") next.delete("search");
     if (value && value !== "All") next.set(key, value);
     else next.delete(key);
     setSearchParams(next, { replace: true });

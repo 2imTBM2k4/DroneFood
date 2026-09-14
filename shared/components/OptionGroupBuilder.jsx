@@ -226,11 +226,11 @@ const OptionGroupBuilder = ({ value = [], onChange }) => {
                   }
                 />
                 <div className="ogb-price">
-                  <span className="ogb-price-sign">+$</span>
+                  <span className="ogb-price-sign">+₫</span>
                   <input
                     type="number"
                     min="0"
-                    step="0.01"
+                    step="1"
                     className="ogb-input ogb-number"
                     value={option.priceDelta}
                     onChange={(e) =>

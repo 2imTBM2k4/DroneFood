@@ -3,7 +3,12 @@ const mongoose = require('mongoose');
 // A single choice inside a group, e.g. "Large" (+$2.00) or "Extra cheese".
 const foodOptionSchema = new mongoose.Schema({
     name: { type: String, required: true, trim: true },
-    priceDelta: { type: Number, default: 0 },
+    priceDelta: {
+        type: Number,
+        default: 0,
+        min: 0,
+        validate: { validator: Number.isInteger, message: "priceDelta must be whole VND" },
+    },
 }, { _id: false });
 
 // A set of choices the customer picks from, e.g. "Size" or "Toppings".
@@ -27,7 +32,12 @@ const optionGroupSchema = new mongoose.Schema({
 const foodSchema = new mongoose.Schema({
     name: {type:String,required:true},
     description: {type:String,required:true},
-    price:{type:Number,required:true},
+    price:{
+        type:Number,
+        required:true,
+        min:1,
+        validate: { validator: Number.isInteger, message: "price must be whole VND" },
+    },
     image:{type:String,required:true},
     category:{type:String,required:true},
     restaurantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Restaurant', required: true },  // Mới: Liên kết với restaurant

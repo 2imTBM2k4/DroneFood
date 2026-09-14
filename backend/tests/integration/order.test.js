@@ -19,11 +19,13 @@ const ADDRESS = {
   country: "VN",
   zipCode: "70000",
   phone: "0123456789",
+  lat: 10.7769,
+  lng: 106.7009,
 };
 
 describe("Order API", () => {
   describe("POST /api/order/place", () => {
-    it("should place a COD order from the server-side cart", async () => {
+    it("should place a COD shipper order from the server-side cart", async () => {
       const { restaurant } = await createRestaurantOwner();
       const user = await createUser({ email: "orderer@test.com" });
       const token = generateToken(user._id);
@@ -37,7 +39,7 @@ describe("Order API", () => {
       const res = await request(app)
         .post("/api/order/place")
         .set("Authorization", `Bearer ${token}`)
-        .send({ address: ADDRESS, paymentMethod: "COD" });
+        .send({ address: ADDRESS, paymentMethod: "COD", deliveryMethod: "shipper" });
 
       expect(res.body.success).toBe(true);
       expect(res.body.orderId).toBeDefined();
@@ -46,8 +48,10 @@ describe("Order API", () => {
       expect(order.paymentMethod).toBe("COD");
       expect(order.orderStatus).toBe("pending");
       expect(order.restaurantId.toString()).toBe(restaurant._id.toString());
-      // Priced from the database: 2 x food.price, plus the $2 delivery fee.
-      expect(order.totalPrice).toBe(food.price * 2 + 2);
+      expect(order.currency).toBe("VND");
+      expect(order.deliveryMethod).toBe("shipper");
+      expect(order.shippingPrice).toBe(0);
+      expect(order.totalPrice).toBe(food.price * 2);
     });
 
     it("should ignore a client-supplied amount and price from the cart", async () => {
@@ -67,12 +71,13 @@ describe("Order API", () => {
         .send({
           address: ADDRESS,
           paymentMethod: "COD",
+          deliveryMethod: "shipper",
           amount: 0.01,
           items: [{ _id: food._id, name: "Free lunch", quantity: 1, price: 0 }],
         });
 
       const order = await Order.findById(res.body.orderId);
-      expect(order.totalPrice).toBe(food.price + 2);
+      expect(order.totalPrice).toBe(food.price);
       expect(order.orderItems[0].name).toBe(food.name);
     });
 
@@ -110,7 +115,7 @@ describe("Order API", () => {
       const res = await request(app)
         .post("/api/order/place")
         .set("Authorization", `Bearer ${token}`)
-        .send({ address: ADDRESS, paymentMethod: "COD" });
+      .send({ address: ADDRESS, paymentMethod: "COD", deliveryMethod: "shipper" });
 
       const order = await Order.findById(res.body.orderId);
       expect(order.orderItems[0].selectedOptions).toHaveLength(1);
@@ -118,7 +123,7 @@ describe("Order API", () => {
       expect(order.orderItems[0].selectedOptions[0].priceDelta).toBe(4);
       expect(order.orderItems[0].note).toBe("Extra napkins");
       expect(order.orderItems[0].price).toBe(food.price + 4);
-      expect(order.totalPrice).toBe(food.price + 4 + 2);
+      expect(order.totalPrice).toBe(food.price + 4);
     });
 
     it("should reject order with an empty cart", async () => {
@@ -128,7 +133,7 @@ describe("Order API", () => {
       const res = await request(app)
         .post("/api/order/place")
         .set("Authorization", `Bearer ${token}`)
-        .send({ address: ADDRESS, paymentMethod: "COD" });
+        .send({ address: ADDRESS, paymentMethod: "COD", deliveryMethod: "drone" });
 
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);

@@ -1,0 +1,43 @@
+name: Web CI
+
+on:
+  pull_request:
+    paths:
+      - "user/**"
+      - "admin/**"
+      - "restaurant/**"
+      - "shared/**"
+      - "package.json"
+      - ".github/workflows/web-ci.yml"
+  push:
+    paths:
+      - "user/**"
+      - "admin/**"
+      - "restaurant/**"
+      - "shared/**"
+      - "package.json"
+      - ".github/workflows/web-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [user, admin, restaurant]
+    defaults:
+      run:
+        working-directory: ${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ${{ matrix.app }}/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build

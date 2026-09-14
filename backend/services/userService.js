@@ -10,6 +10,7 @@ import AppError from "../utils/AppError.js";
 import sendEmail from "../utils/sendEmail.js";
 import { geocodeAddress } from "../utils/geocode.js";
 import { recordAudit } from "../utils/auditLog.js";
+import { ShipperProfile } from "../models/index.cjs";
 
 const createAccessToken = (id) => {
   return jwt.sign({ id, type: "access" }, process.env.JWT_SECRET, { expiresIn: "30m" });
@@ -120,6 +121,16 @@ export const registerUser = async (userData) => {
       newUser._id,
       newRestaurant._id
     );
+  }
+
+  if (role === "shipper") {
+    try {
+      await ShipperProfile.create({ user: newUser._id, vehicleType: "motorbike" });
+    } catch (error) {
+      // Do not leave a duplicate email that cannot enter the Shipper workflow.
+      await userRepo.deleteById(newUser._id);
+      throw error;
+    }
   }
 
   return { success: true, token, refreshToken };
@@ -306,6 +317,9 @@ export const deleteUser = async (userId) => {
   const user = await userRepo.findById(userId);
   if (!user) {
     throw new AppError("User not found", 404);
+  }
+  if (user.role === "shipper") {
+    throw new AppError("Shipper accounts must use the account closure workflow", 409);
   }
   await userRepo.deleteById(userId);
   return { success: true, message: "User deleted successfully" };

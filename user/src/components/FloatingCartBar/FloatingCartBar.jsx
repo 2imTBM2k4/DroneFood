@@ -1,53 +1,53 @@
-import React, { useContext } from "react";
+import { useContext } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ShoppingBag, ArrowRight } from "lucide-react";
+import { ShoppingBag, ChevronRight } from "lucide-react";
 import "./FloatingCartBar.css";
 import { StoreContext } from "../../context/StoreContext";
+import { formatVND } from "../../../../shared/utils/money";
 
-/** Routes where the cart is already the subject of the page. */
 const HIDDEN_ROUTES = ["/cart", "/checkout", "/payment", "/placeorder", "/order"];
 
 const FloatingCartBar = () => {
-  const { getCartItemCount, getTotalCartAmount, token } =
-    useContext(StoreContext);
+  const { getCartItemCount, getTotalCartAmount, token } = useContext(StoreContext);
   const location = useLocation();
   const navigate = useNavigate();
 
   const itemCount = getCartItemCount();
-
-  const isHidden =
-    !token || itemCount === 0 || HIDDEN_ROUTES.includes(location.pathname);
-
+  const isHidden = !token || itemCount === 0 || HIDDEN_ROUTES.includes(location.pathname);
   const total = getTotalCartAmount();
 
   return (
-    <div
-      className={`floating-cart-bar ${isHidden ? "" : "visible"}`}
+    <aside
+      className={`apple-floating-sticky-bar ${isHidden ? "" : "visible"}`}
       aria-hidden={isHidden}
     >
-      <button
-        type="button"
-        className="floating-cart-inner"
-        onClick={() => navigate("/cart")}
-        tabIndex={isHidden ? -1 : 0}
-      >
-        <span className="floating-cart-icon">
-          <ShoppingBag size={18} strokeWidth={1.8} />
-          <span className="floating-cart-count ds-num">{itemCount}</span>
-        </span>
+      <div className="apple-sticky-bar-inner">
+        <div className="apple-sticky-bar-left">
+          <span className="apple-sticky-bag-icon">
+            <ShoppingBag size={18} />
+            <span className="apple-sticky-bag-badge">{itemCount}</span>
+          </span>
+          <div className="apple-sticky-bar-pricing">
+            <span className="apple-sticky-item-count">
+              {itemCount} {itemCount === 1 ? "dish selected" : "dishes selected"}
+            </span>
+            <span className="apple-sticky-total">{formatVND(total)}</span>
+          </div>
+        </div>
 
-        <span className="floating-cart-text">
-          {itemCount} {itemCount === 1 ? "item" : "items"}
-          <span className="floating-cart-sep">·</span>
-          <span className="ds-num">${total.toFixed(2)}</span>
-        </span>
-
-        <span className="floating-cart-cta">
-          <span className="floating-cart-cta-label">View cart</span>
-          <ArrowRight size={15} />
-        </span>
-      </button>
-    </div>
+        <div className="apple-sticky-bar-right">
+          <button
+            type="button"
+            className="btn-apple-primary button-primary apple-sticky-cta"
+            onClick={() => navigate("/cart")}
+            tabIndex={isHidden ? -1 : 0}
+          >
+            <span>Review Bag</span>
+            <ChevronRight size={15} />
+          </button>
+        </div>
+      </div>
+    </aside>
   );
 };
 

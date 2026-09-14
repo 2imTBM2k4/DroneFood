@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback, useContext } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, useContext } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { MapPin, Phone, Star, Clock, Bike, Navigation, UtensilsCrossed, Store } from "lucide-react";
 import "./RestaurantPage.css";
@@ -7,6 +7,7 @@ import FoodDisplay from "../../components/FoodDisplay/FoodDisplay";
 import { SkeletonGrid } from "../../components/Skeleton/Skeleton";
 import { EmptyState, ErrorState } from "../../../../shared/components/StateBlock";
 import { assets } from "../../assets/assets";
+import { formatVND } from "../../../../shared/utils/money";
 import {
   haversineKm,
   estimateEtaMinutes,
@@ -29,9 +30,6 @@ const RestaurantPage = () => {
   const [activeCategory, setActiveCategory] = useState(null);
 
   const navRef = useRef(null);
-  // While a click-triggered smooth scroll is in flight the observer would
-  // fight the user's intent, so we freeze the spy until it settles.
-  const isProgrammaticScroll = useRef(false);
 
   useEffect(() => {
     const found = restaurant_list.find((r) => r._id === id);
@@ -89,43 +87,68 @@ const RestaurantPage = () => {
     );
   }, [categories]);
 
-  // Scroll-spy: highlight whichever section is under the sticky nav.
+  // Scroll-spy: keep the catalog in sync with the section currently passing
+  // the reading line. A requestAnimationFrame keeps this inexpensive while
+  // still responding immediately to mouse wheel, touch, and keyboard scrolls.
   useEffect(() => {
     if (sections.length === 0) return;
 
-    const visible = new Set();
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          const category = entry.target.dataset.category;
-          if (entry.isIntersecting) visible.add(category);
-          else visible.delete(category);
-        });
+    let animationFrame = null;
 
-        if (isProgrammaticScroll.current) return;
+    const syncActiveCategory = () => {
+      animationFrame = null;
+      const mobileCatalog = window.matchMedia("(max-width: 900px)").matches;
+      const navbarOffset =
+        Number.parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue("--navbar-offset")
+        ) || 96;
+      // The mobile catalog sits below the fixed navbar, while the desktop
+      // sidebar is vertically centered and never covers section headings.
+      const readingLine = mobileCatalog && navRef.current
+        ? navRef.current.getBoundingClientRect().bottom + 16
+        : mobileCatalog
+          ? navbarOffset + 24
+          : window.innerHeight * 0.5;
 
-        // Of everything on screen, the topmost section wins.
-        const topmost = sections.find((s) => visible.has(s.category));
-        if (topmost) setActiveCategory(topmost.category);
-      },
-      {
-        // Detection line sits just below navbar + sticky category bar.
-        rootMargin: "-170px 0px -65% 0px",
-        threshold: 0,
+      let nextCategory = sections[0].category;
+      for (const section of sections) {
+        const node = document.getElementById(section.id);
+        if (node && node.getBoundingClientRect().top <= readingLine) {
+          nextCategory = section.category;
+        } else {
+          break;
+        }
       }
-    );
 
-    const nodes = sections
-      .map((s) => document.getElementById(s.id))
-      .filter(Boolean);
-    nodes.forEach((node) => observer.observe(node));
+      setActiveCategory((current) =>
+        current === nextCategory ? current : nextCategory
+      );
+    };
 
-    return () => observer.disconnect();
+    const queueSync = () => {
+      if (animationFrame === null) {
+        animationFrame = window.requestAnimationFrame(syncActiveCategory);
+      }
+    };
+
+    syncActiveCategory();
+    window.addEventListener("scroll", queueSync, { passive: true });
+    window.addEventListener("resize", queueSync);
+
+    return () => {
+      window.removeEventListener("scroll", queueSync);
+      window.removeEventListener("resize", queueSync);
+      if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
+    };
   }, [sections]);
 
   // Keep the active chip in view on the horizontally scrolling mobile bar.
   useEffect(() => {
-    if (!activeCategory || !navRef.current) return;
+    if (
+      !activeCategory ||
+      !navRef.current ||
+      !window.matchMedia("(max-width: 900px)").matches
+    ) return;
     const chip = navRef.current.querySelector(`[data-chip="${activeCategory}"]`);
     if (chip?.scrollIntoView) {
       chip.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
@@ -137,17 +160,15 @@ const RestaurantPage = () => {
     if (!target) return;
 
     setActiveCategory(category);
-    isProgrammaticScroll.current = true;
 
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    // Offset by the navbar plus the sticky bar so the heading isn't hidden.
-    const offset = 158;
+    const mobileCatalog = window.matchMedia("(max-width: 900px)").matches;
+    const offset = mobileCatalog && navRef.current
+      ? navRef.current.getBoundingClientRect().height + 112
+      : 120;
     const top = target.getBoundingClientRect().top + window.scrollY - offset;
 
     window.scrollTo({ top, behavior: reduceMotion ? "auto" : "smooth" });
-    window.setTimeout(() => {
-      isProgrammaticScroll.current = false;
-    }, reduceMotion ? 100 : 700);
   };
 
   const buildImgSrc = (image) => {
@@ -175,6 +196,7 @@ const RestaurantPage = () => {
     }
     return { distanceKm: null, etaMin: null };
   }, [restaurant, liveLocation, user]);
+
 
   const deliveryFee = fees?.deliveryFee;
 
@@ -204,142 +226,144 @@ const RestaurantPage = () => {
 
   return (
     <div className="restaurant-page">
-      <header className="restaurant-hero">
-        <div className="restaurant-hero-image">
-          <img
-            src={buildImgSrc(restaurant.image)}
-            alt={restaurant.name}
-            onError={(e) => {
-              e.target.src = assets.logo;
-            }}
-          />
-        </div>
-
-        <div className="restaurant-hero-card">
-          <div className="restaurant-hero-top">
-            <h1>{restaurant.name}</h1>
-            <span className="restaurant-hero-rating">
-              <Star size={14} fill="currentColor" strokeWidth={0} />
-              4.8
-            </span>
+        <header className="restaurant-hero">
+          <div className="restaurant-hero-image">
+            <img
+              src={buildImgSrc(restaurant.image)}
+              alt={restaurant.name}
+              onError={(e) => {
+                e.target.src = assets.logo;
+              }}
+            />
           </div>
 
-          {restaurant.description && (
-            <p className="restaurant-hero-desc">{restaurant.description}</p>
-          )}
-
-          <div className="restaurant-hero-meta">
-            <span className="restaurant-hero-meta-item">
-              <MapPin size={14} />
-              {restaurant.address}
-            </span>
-            {restaurant.phone && (
-              <span className="restaurant-hero-meta-item">
-                <Phone size={14} />
-                {restaurant.phone}
+          <div className="restaurant-hero-card">
+            <div className="restaurant-hero-top">
+              <h1>{restaurant.name}</h1>
+              <span className="restaurant-hero-rating">
+                <Star size={14} fill="currentColor" strokeWidth={0} />
+                4.8
               </span>
+            </div>
+
+            {restaurant.description && (
+              <p className="restaurant-hero-desc">{restaurant.description}</p>
             )}
-            {typeof distanceKm === "number" && (
+
+            <div className="restaurant-hero-meta">
               <span className="restaurant-hero-meta-item">
-                <Navigation size={14} />
-                {formatDistance(distanceKm)}
+                <MapPin size={14} />
+                {restaurant.address}
               </span>
+              {restaurant.phone && (
+                <span className="restaurant-hero-meta-item">
+                  <Phone size={14} />
+                  {restaurant.phone}
+                </span>
+              )}
+              {typeof distanceKm === "number" && (
+                <span className="restaurant-hero-meta-item">
+                  <Navigation size={14} />
+                  {formatDistance(distanceKm)}
+                </span>
+              )}
+              <span className="restaurant-hero-meta-item">
+                <Clock size={14} />
+                {etaMin ? `${etaMin} min` : "15–25 min"}
+              </span>
+              <span className="restaurant-hero-meta-item">
+                <Bike size={14} />
+                {typeof deliveryFee === "number"
+                  ? `${formatVND(deliveryFee)} delivery`
+                  : "Delivery calculated at checkout"}
+              </span>
+            </div>
+
+            {restaurant.isOpen === false && (
+              <p className="restaurant-hero-closed">
+                Closed right now — this restaurant isn&apos;t taking orders at the
+                moment. Please check back later.
+              </p>
             )}
-            <span className="restaurant-hero-meta-item">
-              <Clock size={14} />
-              {etaMin ? `${etaMin} min` : "15–25 min"}
-            </span>
-            <span className="restaurant-hero-meta-item">
-              <Bike size={14} />
-              {typeof deliveryFee === "number"
-                ? `$${deliveryFee.toFixed(2)} delivery`
-                : "Delivery"}
-            </span>
+
+            {restaurant.isLocked && (
+              <p className="restaurant-hero-closed">
+                Temporarily unavailable — this restaurant is not accepting orders
+                right now.
+              </p>
+            )}
+          </div>
+        </header>
+
+        <div className="restaurant-menu-layout">
+          <div className="restaurant-page-content">
+            {loading && <SkeletonGrid count={6} />}
+
+            {!loading && error && (
+              <ErrorState
+                title="Could not load this menu"
+                description={error}
+                onRetry={fetchFoods}
+                actionLabel="Back to restaurants"
+                onAction={() => navigate("/")}
+              />
+            )}
+
+            {!loading && !error && restaurant.isOpen === false && (
+              <EmptyState
+                icon={Store}
+                title="This restaurant is closed"
+                description="The kitchen has paused orders for now. Browse other restaurants delivering to you."
+                actionLabel="Browse restaurants"
+                onAction={() => navigate("/restaurants")}
+              />
+            )}
+
+            {!loading &&
+              !error &&
+              restaurant.isOpen !== false &&
+              sections.map(({ category, id: anchor, foods }) => (
+                <section
+                  key={category}
+                  id={anchor}
+                  data-category={category}
+                  className="menu-section"
+                >
+                  <h2 className="menu-section-title">{category}</h2>
+                  <FoodDisplay foods={foods} category="All" restaurantId={id} />
+                </section>
+              ))}
+
+            {!loading && !error && sections.length === 0 && (
+              <EmptyState
+                icon={UtensilsCrossed}
+                title="No dishes yet"
+                description="This restaurant hasn't published its menu. Check back soon."
+                actionLabel="Browse restaurants"
+                onAction={() => navigate("/")}
+              />
+            )}
           </div>
 
-          {restaurant.isOpen === false && (
-            <p className="restaurant-hero-closed">
-              Closed right now — this restaurant isn't taking orders at the
-              moment. Please check back later.
-            </p>
-          )}
-
-          {restaurant.isLocked && (
-            <p className="restaurant-hero-closed">
-              Temporarily unavailable — this restaurant is not accepting orders
-              right now.
-            </p>
+          {sections.length > 0 && restaurant.isOpen !== false && (
+            <nav className="restaurant-catalog" ref={navRef} aria-label="Menu categories">
+              <div className="catalog-list">
+                {sections.map(({ category }) => (
+                  <button
+                    key={category}
+                    type="button"
+                    data-chip={category}
+                    className={`catalog-item ${activeCategory === category ? "active" : ""}`}
+                    aria-current={activeCategory === category ? "true" : undefined}
+                    onClick={() => handleCategoryClick(category)}
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
+            </nav>
           )}
         </div>
-      </header>
-
-      {sections.length > 0 && restaurant.isOpen !== false && (
-        <nav className="restaurant-catalog" ref={navRef} aria-label="Menu categories">
-          <div className="catalog-list">
-            {sections.map(({ category }) => (
-              <button
-                key={category}
-                type="button"
-                data-chip={category}
-                className={`catalog-item ${activeCategory === category ? "active" : ""}`}
-                aria-current={activeCategory === category ? "true" : undefined}
-                onClick={() => handleCategoryClick(category)}
-              >
-                {category}
-              </button>
-            ))}
-          </div>
-        </nav>
-      )}
-
-      <div className="restaurant-page-content">
-        {loading && <SkeletonGrid count={6} />}
-
-        {!loading && error && (
-          <ErrorState
-            title="Could not load this menu"
-            description={error}
-            onRetry={fetchFoods}
-            actionLabel="Back to restaurants"
-            onAction={() => navigate("/")}
-          />
-        )}
-
-        {!loading && !error && restaurant.isOpen === false && (
-          <EmptyState
-            icon={Store}
-            title="This restaurant is closed"
-            description="The kitchen has paused orders for now. Browse other restaurants delivering to you."
-            actionLabel="Browse restaurants"
-            onAction={() => navigate("/restaurants")}
-          />
-        )}
-
-        {!loading &&
-          !error &&
-          restaurant.isOpen !== false &&
-          sections.map(({ category, id: anchor, foods }) => (
-            <section
-              key={category}
-              id={anchor}
-              data-category={category}
-              className="menu-section"
-            >
-              <h2 className="menu-section-title">{category}</h2>
-              <FoodDisplay foods={foods} category="All" restaurantId={id} />
-            </section>
-          ))}
-
-        {!loading && !error && sections.length === 0 && (
-          <EmptyState
-            icon={UtensilsCrossed}
-            title="No dishes yet"
-            description="This restaurant hasn't published its menu. Check back soon."
-            actionLabel="Browse restaurants"
-            onAction={() => navigate("/")}
-          />
-        )}
-      </div>
     </div>
   );
 };

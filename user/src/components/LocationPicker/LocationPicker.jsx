@@ -57,6 +57,7 @@ export default function LocationPicker({ initial, onResolve }) {
   const [address, setAddress] = useState(null);
   const [resolving, setResolving] = useState(false);
   const [geoError, setGeoError] = useState(null);
+  const [locationNotice, setLocationNotice] = useState(null);
   const markerRef = useRef(null);
   const { loading: locating, locate } = useGeolocation();
 
@@ -65,6 +66,7 @@ export default function LocationPicker({ initial, onResolve }) {
     setPosition(coords);
     setResolving(true);
     setGeoError(null);
+    setLocationNotice(null);
     try {
       const result = await reverseGeocode(coords.lat, coords.lng);
       if (result) {
@@ -82,12 +84,15 @@ export default function LocationPicker({ initial, onResolve }) {
 
   const handleLocate = async () => {
     setGeoError(null);
-    const { coords, error } = await locate();
+    const { coords, error, usedApproximateLocation } = await locate();
     if (error) {
       setGeoError(error);
       return;
     }
     await resolve(coords);
+    if (usedApproximateLocation) {
+      setLocationNotice("We found an approximate location. Drag the pin to your exact delivery point.");
+    }
   };
 
   const handleDragEnd = () => {
@@ -149,6 +154,7 @@ export default function LocationPicker({ initial, onResolve }) {
         </p>
       )}
       {geoError && <p className="location-error">{geoError}</p>}
+      {locationNotice && <p className="location-notice">{locationNotice}</p>}
     </div>
   );
 }

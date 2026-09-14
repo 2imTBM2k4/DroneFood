@@ -4,8 +4,9 @@ const optionSchema = Joi.object({
   name: Joi.string().trim().min(1).max(60).required().messages({
     "any.required": "Mỗi lựa chọn phải có tên",
   }),
-  priceDelta: Joi.number().min(0).default(0).messages({
+  priceDelta: Joi.number().integer().min(0).default(0).messages({
     "number.min": "Phụ phí không được âm",
+    "number.integer": "Phụ phí phải là số tiền VND nguyên",
   }),
 });
 
@@ -77,8 +78,9 @@ export const addFoodSchema = Joi.object({
   description: Joi.string().trim().max(500).required().messages({
     "any.required": "Mô tả là bắt buộc",
   }),
-  price: Joi.number().positive().required().messages({
+  price: Joi.number().integer().positive().required().messages({
     "number.positive": "Giá phải là số dương",
+    "number.integer": "Giá phải là số tiền VND nguyên",
     "any.required": "Giá là bắt buộc",
   }),
   category: Joi.string().trim().min(1).max(50).required().messages({
@@ -93,8 +95,9 @@ export const updateFoodSchema = Joi.object({
   }),
   name: Joi.string().trim().min(2).max(100),
   description: Joi.string().trim().max(500),
-  price: Joi.number().positive().messages({
+  price: Joi.number().integer().positive().messages({
     "number.positive": "Giá phải là số dương",
+    "number.integer": "Giá phải là số tiền VND nguyên",
   }),
   category: Joi.string().trim().min(1).max(50),
   optionGroups: optionGroupsField,

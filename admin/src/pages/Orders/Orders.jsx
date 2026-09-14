@@ -3,6 +3,7 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import "./Orders.css";
 import { assets } from "../../assets/assets";
+import { formatVND } from "../../../../shared/utils/money";
 
 const Orders = ({ url }) => {
   const [orders, setOrders] = useState([]);
@@ -142,7 +143,7 @@ const Orders = ({ url }) => {
               )}
             </div>
             <p>Items: {order.orderItems.length}</p>
-            <p>${order.totalPrice}</p>
+            <p>{formatVND(order.totalPrice)}</p>
             <p>Status: {order.orderStatus}</p>
             
             {order.orderStatus === "preparing" && !order.droneId && (

@@ -1331,8 +1331,9 @@ The system is a **well-layered monolith**. **Do not split it into microservices*
 |---|---|---|
 | Restaurant search radius | **15 km** | `user/src/lib/distance.js` → `NEARBY_RADIUS_KM` |
 | Minimum battery to fly | **30 %** | `backend/repositories/droneRepository.js` → `MIN_BATTERY_PERCENT` |
-| Delivery fee | **$2** | `backend/config/fees.js` → `DELIVERY_FEE` |
-| Service fee | **$0** | `backend/config/fees.js` → `SERVICE_FEE` |
+| Shipper fee | **5,000 VND/km** by road route | `backend/config/fees.js` → `SHIPPER_RATE_PER_KM` |
+| Drone fee | **7,000 VND/km** by straight-line distance | `backend/config/fees.js` → `DRONE_RATE_PER_KM` |
+| Service fee | **0 VND** | `backend/config/fees.js` → `SERVICE_FEE` |
 | Revenue split | **80 / 20** on `itemsPrice` | `backend/services/orderService.js` |
 | Access token lifetime | **30 minutes** | `backend/services/userService.js` |
 | Refresh token lifetime | **7 days** | `backend/services/userService.js` |

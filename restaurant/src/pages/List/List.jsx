@@ -6,6 +6,7 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import EditProduct from "../Products/EditProduct";
 import { Pencil, Trash2, Search, X } from "lucide-react";
+import { formatVND } from "../../../../shared/utils/money";
 
 const List = ({ url }) => {
   const [list, setList] = useState([]);
@@ -202,7 +203,7 @@ const List = ({ url }) => {
                 />
                 <p className="item-name">{item.name}</p>
                 <span className="category-badge">{item.category}</span>
-                <p className="item-price">${Number(item.price).toFixed(2)}</p>
+                <p className="item-price">{formatVND(item.price)}</p>
                 <div className="actions">
                   <button
                     onClick={() => editFood(item)}

@@ -1,7 +1,8 @@
-import React, { useContext, useState } from "react";
+import { useContext, useState } from "react";
 import { ChevronUp } from "lucide-react";
 import "./OrderSummary.css";
 import { StoreContext } from "../../context/StoreContext";
+import { formatVND } from "../../../../shared/utils/money";
 
 /**
  * The running cost of the order: lines, then every fee spelled out.
@@ -10,12 +11,12 @@ import { StoreContext } from "../../context/StoreContext";
  * the bottom that expands on tap. Fees come from the server (GET
  * /api/config/fees) so what's shown here is what gets charged.
  */
-const OrderSummary = ({ collapsible = true }) => {
+const OrderSummary = ({ collapsible = true, deliveryQuote = null }) => {
   const { cartLines, getTotalCartAmount, fees } = useContext(StoreContext);
   const [expanded, setExpanded] = useState(false);
 
   const subtotal = getTotalCartAmount();
-  const deliveryFee = subtotal > 0 ? fees.deliveryFee : 0;
+  const deliveryFee = subtotal > 0 ? deliveryQuote?.shippingPrice ?? fees.deliveryFee : 0;
   const serviceFee = subtotal > 0 ? fees.serviceFee : 0;
   const total = subtotal + deliveryFee + serviceFee;
 
@@ -34,7 +35,7 @@ const OrderSummary = ({ collapsible = true }) => {
         >
           <span>{expanded ? "Hide" : "Show"} order details</span>
           <span className="order-summary-toggle-right">
-            <span className="ds-num">${total.toFixed(2)}</span>
+            <span className="ds-num">{formatVND(total)}</span>
             <ChevronUp size={16} className="order-summary-chevron" />
           </span>
         </button>
@@ -61,7 +62,7 @@ const OrderSummary = ({ collapsible = true }) => {
                 )}
               </span>
               <span className="order-summary-amount ds-num">
-                ${(line.unitPrice * line.quantity).toFixed(2)}
+                {formatVND(line.unitPrice * line.quantity)}
               </span>
             </li>
           ))}
@@ -70,21 +71,23 @@ const OrderSummary = ({ collapsible = true }) => {
         <div className="order-summary-fees">
           <div className="order-summary-row">
             <span>Subtotal</span>
-            <span className="ds-num">${subtotal.toFixed(2)}</span>
+            <span className="ds-num">{formatVND(subtotal)}</span>
           </div>
           <div className="order-summary-row">
             <span>Delivery fee</span>
-            <span className="ds-num">${deliveryFee.toFixed(2)}</span>
+            <span className="ds-num">
+              {deliveryFee == null ? "Calculated at checkout" : formatVND(deliveryFee)}
+            </span>
           </div>
           {serviceFee > 0 && (
             <div className="order-summary-row">
               <span>Service fee</span>
-              <span className="ds-num">${serviceFee.toFixed(2)}</span>
+              <span className="ds-num">{formatVND(serviceFee)}</span>
             </div>
           )}
           <div className="order-summary-row order-summary-total">
             <span>Total</span>
-            <span className="ds-num">${total.toFixed(2)}</span>
+            <span className="ds-num">{formatVND(total)}</span>
           </div>
         </div>
       </div>

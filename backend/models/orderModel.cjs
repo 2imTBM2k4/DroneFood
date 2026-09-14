@@ -78,10 +78,67 @@ const orderSchema = new mongoose.Schema(
         default: null,
       },
     },
+    currency: {
+      type: String,
+      enum: ["VND"],
+      default: "VND",
+      required: true,
+    },
+    // The delivery quote is persisted at checkout so a later route refresh or
+    // rate change can never alter the amount that the customer accepted.
+    deliveryMethod: {
+      type: String,
+      enum: ["shipper", "drone"],
+      default: "drone",
+    },
+    deliveryDistanceKm: { type: Number, default: 0, min: 0 },
+    deliveryDistanceType: {
+      type: String,
+      enum: ["road", "air"],
+      default: "air",
+    },
+    deliveryRatePerKm: { type: Number, default: 0, min: 0 },
+    // Financial terms are immutable at checkout. Settlement must use these
+    // values instead of any current platform configuration.
+    financialSnapshot: {
+      restaurantSharePercent: { type: Number, default: 80 },
+      platformFoodCommissionPercent: { type: Number, default: 20 },
+      shipperDeliverySharePercent: { type: Number, default: 85 },
+      platformDeliverySharePercent: { type: Number, default: 15 },
+      restaurantPayoutAmount: { type: Number, default: 0 },
+      shipperOnlineEarningsAmount: { type: Number, default: 0 },
+      codLiabilityAmount: { type: Number, default: 0 },
+    },
+    // A reservation is exposure, not a wallet balance. It is released once
+    // the COD delivery is settled or the order is cancelled before delivery.
+    codReservationStatus: {
+      type: String,
+      enum: ["none", "reserved", "released"],
+      default: "none",
+    },
+    codReservedLiability: { type: Number, default: 0, min: 0 },
+    restaurantSettlementTransaction: { type: mongoose.Schema.Types.ObjectId, ref: "WalletTransaction", default: null },
+    shipperSettlementTransaction: { type: mongoose.Schema.Types.ObjectId, ref: "WalletTransaction", default: null },
+    pickupLocation: {
+      type: { type: String, enum: ["Point"], default: undefined },
+      coordinates: { type: [Number], default: undefined },
+    },
+    shipperId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    shipperAssignmentStatus: {
+      type: String,
+      enum: ["not_applicable", "unassigned", "accepted", "picked_up", "completed", "expired"],
+      default: "not_applicable",
+    },
+    shipperAssignmentDeadlineAt: { type: Date, default: null, index: true },
+    shipperAcceptedAt: { type: Date, default: null },
+    shipperPickedUpAt: { type: Date, default: null },
+    shipperCompletedAt: { type: Date, default: null },
+    cancellationCode: { type: String, default: "" },
     paymentMethod: {
       type: String,
       // required: true,
-      enum: ["Card", "COD", "PayPal"],
+      // Keep VNPAY so historical orders remain readable after the migration.
+      enum: ["COD", "VNPAY", "PAYOS"],
     },
     paymentResult: {
       id: String,
@@ -127,23 +184,30 @@ const orderSchema = new mongoose.Schema(
     },
     orderStatus: {
       type: String,
-      enum: ["pending", "preparing", "delivering", "delivered", "cancelled"],
+      enum: ["pending_payment", "pending", "preparing", "delivering", "delivered", "cancelled"],
       default: "pending",
     },
     reason: {
       type: String,
       default: "",
     },
-    stripeSessionId: String,
+    vnpTxnRef: { type: String, default: null },
+    vnpTransactionNo: { type: String, default: null },
+    vnpCreateDate: { type: String, default: null },
+    // PayOS identifies a payment request by a merchant-generated numeric code.
+    // It is stored separately from the Mongo order id so webhook data can be
+    // matched safely and idempotently.
+    // Omit this property (rather than store null) for COD/VNPay records so
+    // the sparse unique index permits any number of non-PayOS orders.
+    payosOrderCode: { type: Number, default: undefined, unique: true, sparse: true },
+    payosPaymentLinkId: { type: String, default: null },
+    refundStatus: { type: String, enum: ["not_required", "requested", "failed"], default: "not_required" },
+    refundRequestId: { type: String, default: null },
+    refundRequestedAt: { type: Date, default: null },
     restaurantId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Restaurant",
       required: true,
-    },
-    paypalOrderId: {
-      // THÊM: Lưu trữ Order ID từ PayPal
-      type: String,
-      default: null,
     },
     qrCode: {
       type: String,
@@ -180,5 +244,8 @@ const orderSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+orderSchema.index({ pickupLocation: "2dsphere" });
+orderSchema.index({ deliveryMethod: 1, shipperAssignmentStatus: 1, shipperAssignmentDeadlineAt: 1 });
 
 module.exports = mongoose.models.Order || mongoose.model("Order", orderSchema);

@@ -12,6 +12,7 @@ import { toast } from "react-toastify";
 import { AuthContext } from "../../context/AuthContext";
 import { ErrorState } from "../../../../shared/components/StateBlock";
 import "./Dashboard.css";
+import { formatVND } from "../../../../shared/utils/money";
 
 const STATUS_LABELS = {
   pending: "Pending",
@@ -216,7 +217,7 @@ const Dashboard = ({ url }) => {
         <StatCard
           icon={DollarSign}
           label="Revenue today"
-          value={loading ? "—" : `$${stats.todayRevenue.toFixed(2)}`}
+          value={loading ? "—" : formatVND(stats.todayRevenue)}
         />
         <StatCard
           icon={Clock}
@@ -280,7 +281,7 @@ const Dashboard = ({ url }) => {
                   {STATUS_LABELS[order.orderStatus] || order.orderStatus}
                 </span>
                 <span className="dash-recent-total">
-                  ${(order.totalPrice || 0).toFixed(2)}
+                  {formatVND(order.totalPrice)}
                 </span>
               </li>
             ))}

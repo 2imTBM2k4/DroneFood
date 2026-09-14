@@ -1,4 +1,5 @@
 import * as userService from "../services/userService.js";
+import { geocodeAddress, reverseGeocode as reverseGeocodeAddress } from "../utils/geocode.js";
 
 export const loginUser = async (req, res) => {
   try {
@@ -45,6 +46,16 @@ export const getMe = async (req, res) => {
       .status(error.statusCode || 500)
       .json({ success: false, message: error.message });
   }
+};
+
+export const reverseGeocode = async (req, res) => {
+  const data = await reverseGeocodeAddress(req.query.lat, req.query.lng);
+  res.json({ success: true, data });
+};
+
+export const geocodeUserAddress = async (req, res) => {
+  const data = await geocodeAddress(req.query.address);
+  res.json({ success: true, data });
 };
 
 export const updateUserAddress = async (req, res) => {

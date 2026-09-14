@@ -1,145 +1,186 @@
-.food-item {
+/* ============================================================
+   Apple Store Utility Card — FoodItem (DESIGN-apple.md)
+   White canvas · Hairline border (1px) · 18px radius (rounded.lg)
+   24px padding · Product shadow on image · NO shadow on card
+   17px / 600 title · 17px / 400 price · Action Blue CTA
+   ============================================================ */
+
+.apple-store-utility-card.food-item {
   width: 100%;
-  margin: auto;
+  background-color: var(--apple-canvas);
+  border: 1px solid var(--apple-hairline);
   border-radius: var(--radius-lg);
-  background-color: var(--card-bg);
-  border: 1px solid var(--border-color);
-  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
-  animation: fadeIn 0.5s ease;
-  overflow: hidden;
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
   cursor: pointer;
-}
-
-.food-item:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--card-shadow-hover);
-  border-color: var(--accent-border);
-}
-
-.food-item-img-container {
+  outline: none;
+  transition: border-color 0.2s ease, transform 0.2s ease;
   position: relative;
   overflow: hidden;
+  box-shadow: none; /* Apple uses NO card shadow */
 }
 
-.food-item-image {
+.apple-store-utility-card.food-item:hover {
+  border-color: rgba(0, 0, 0, 0.22);
+}
+
+.dark-mode .apple-store-utility-card.food-item:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.apple-store-utility-card.food-item:focus-visible {
+  border-color: var(--apple-primary-focus);
+  outline: 2px solid var(--apple-primary-focus);
+  outline-offset: 2px;
+}
+
+/* ── Image Container & Inner 8px Radius ───────────────────── */
+.apple-card-image-wrapper {
+  position: relative;
   width: 100%;
   aspect-ratio: 4 / 3;
-  object-fit: cover;
-  transition: transform 0.4s ease;
-  display: block;
-}
-
-.food-item:hover .food-item-image {
-  transform: scale(1.06);
-}
-
-.food-item-info {
-  padding: 16px 18px;
-}
-
-.food-item-name-rating {
+  margin-bottom: 16px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background-color: var(--apple-canvas-parchment);
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
+  justify-content: center;
 }
 
-.food-item-name-rating p,
-.namewe {
-  font-family: var(--font-serif);
-  font-size: 20px;
-  font-weight: 500;
-  color: var(--text-color);
-  line-height: 1.2;
+.apple-card-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  /* Single system drop-shadow on product render */
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.12));
+}
+
+.apple-store-utility-card.food-item:hover .apple-card-image {
+  transform: scale(1.04);
+}
+
+/* Translucent circular action button (40x40) */
+.apple-card-add-btn {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-full);
+  background-color: var(--apple-surface-chip-translucent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--apple-ink);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.18s ease, color 0.18s ease;
+  z-index: 2;
+}
+
+.apple-card-add-btn:hover {
+  background-color: var(--apple-primary);
+  color: #fff;
+  border-color: var(--apple-primary);
+}
+
+.apple-card-add-btn:active {
+  transform: scale(0.95);
+}
+
+/* ── Content & Typography ─────────────────────────────────── */
+.apple-card-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.apple-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+/* 17px Weight 600 Body-Strong Headline */
+.apple-card-title {
+  font-family: var(--font-text);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.24;
+  letter-spacing: -0.374px;
+  color: var(--apple-ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.food-item-rating {
+.apple-card-rating {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
+  font-family: var(--font-text);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--apple-body-muted);
   flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--accent-color);
 }
 
-.food-item-desc {
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.5;
+.apple-card-rating svg {
+  color: #ff9500;
+}
+
+/* 14px Weight 400 Caption */
+.apple-card-desc {
+  font-family: var(--font-text);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.43;
+  letter-spacing: -0.224px;
+  color: var(--apple-body-muted);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  margin-bottom: 16px;
+  flex: 1;
 }
 
-.food-item-price,
-.cartitemsp {
-  color: var(--text-color);
-  font-family: var(--font-mono);
-  font-size: 15px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  margin-top: 10px;
-}
-
-/* Add button — circular accent overlay */
-.food-add-btn {
-  position: absolute;
-  bottom: 12px;
-  right: 12px;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  cursor: pointer;
-  border-radius: 50%;
-  background-color: var(--accent-color);
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(182, 130, 53, 0.4);
-  transition: transform 0.2s ease, background-color 0.2s ease;
-}
-
-.food-add-btn:hover {
-  transform: scale(1.12);
-  background-color: var(--accent-hover);
-}
-
-/* The inline quantity counter is gone — quantity now lives in
-   ItemOptionsSheet, which every add-to-cart goes through. */
-
-.food-item-footer {
+/* ── Footer ───────────────────────────────────────────────── */
+.apple-card-footer {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--apple-hairline-soft);
 }
 
-.food-item:focus-visible {
-  outline: 2px solid var(--accent-color);
-  outline-offset: 2px;
-}
-
-.confirm-btn {
-  background: var(--accent-color);
-  color: white;
-  border: none;
-  padding: 9px;
-  border-radius: 8px;
-  font-size: 13px;
+/* 17px Weight 400 Price */
+.apple-card-price {
+  font-family: var(--font-text);
+  font-size: 17px;
   font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
+  line-height: 1.47;
+  letter-spacing: -0.374px;
+  color: var(--apple-ink);
 }
 
-.confirm-btn:hover {
-  background: var(--accent-hover);
+.apple-card-footer .apple-text-link {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--apple-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.apple-card-footer .apple-text-link:hover {
+  text-decoration: underline;
 }

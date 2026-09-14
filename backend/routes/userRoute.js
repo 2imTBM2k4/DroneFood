@@ -4,6 +4,8 @@ import {
   loginUser,
   lockUser,
   getMe,
+  reverseGeocode,
+  geocodeUserAddress,
   updateUserAddress,
   listUsers,
   updateUserByAdmin,
@@ -25,6 +27,8 @@ import {
   registerSchema,
   loginSchema,
   updateAddressSchema,
+  reverseGeocodeQuerySchema,
+  geocodeAddressQuerySchema,
   updateProfileSchema,
   changePasswordSchema,
   lockUserSchema,
@@ -52,6 +56,8 @@ userRouter.post("/refresh-token", authLimiter, refreshToken);
 
 // ============ PROTECTED ROUTES ============
 userRouter.get("/me", protect, getMe);
+userRouter.get("/reverse-geocode", protect, validate(reverseGeocodeQuerySchema, "query"), reverseGeocode);
+userRouter.get("/geocode", protect, validate(geocodeAddressQuerySchema, "query"), geocodeUserAddress);
 userRouter.put("/update-address", protect, validate(updateAddressSchema), updateUserAddress);
 userRouter.put("/profile", protect, validate(updateProfileSchema), updateProfile);
 userRouter.put("/change-password", protect, validate(changePasswordSchema), changePassword);

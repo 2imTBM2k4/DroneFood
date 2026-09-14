@@ -2,7 +2,6 @@ import React, { useContext, useEffect, useState } from "react";
 import Navbar from "./components/Navbar/Navbar";
 import Sidebar from "./components/Sidebar/Sidebar";
 import { Routes, Route, useLocation } from "react-router-dom";
-import Add from "./pages/Add/Add";
 import ListRestaurant from "./pages/ListRestaurant/ListRestaurant";
 import Orders from "./pages/Orders/Orders";
 import Dashboard from "./pages/Dashboard/Dashboard";
@@ -10,6 +9,7 @@ import ListUsers from "./pages/ListUsers/ListUsers";
 import Login from "./pages/Login/Login";
 import Drones from "./pages/Drones/Drones";
 import AuditLog from "./pages/AuditLog/AuditLog";
+import Shippers from "./pages/Shippers/Shippers";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { AuthContext } from "./context/AuthContext";
@@ -74,6 +74,7 @@ const App = () => {
               <Route path="/list-users" element={<ListUsers url={url} />} />
               <Route path="/orders" element={<Orders url={url} />} />
               <Route path="/drones" element={<Drones url={url} />} />
+              <Route path="/shippers" element={<Shippers url={url} />} />
               <Route path="/audit" element={<AuditLog url={url} />} />
             </Routes>
           </PageTransition>

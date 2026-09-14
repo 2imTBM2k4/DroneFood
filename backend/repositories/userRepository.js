@@ -2,7 +2,8 @@
 import { User, Restaurant, Order } from "../models/index.cjs"; // Dùng index
 
 export const findByEmail = async (email) => {
-  return await User.findOne({ email }).select("+password +role"); // Select hidden fields
+  const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : email;
+  return await User.findOne({ email: normalizedEmail }).select("+password +role"); // Select hidden fields
 };
 
 export const findById = async (id, select = "-password -cart -wishlist") => {

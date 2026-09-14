@@ -18,6 +18,7 @@ import {
   Line,
 } from "recharts";
 import "./Dashboard.css";
+import { formatVND } from "../../../../shared/utils/money";
 
 const Dashboard = ({ url }) => {
   const [stats, setStats] = useState({});
@@ -154,7 +155,7 @@ const Dashboard = ({ url }) => {
           </div>
           <div className="stat-content">
             <h3>Admin Revenue</h3>
-            <p className="stat-number">${adminRevenue.toFixed(2)}</p>
+            <p className="stat-number">{formatVND(adminRevenue)}</p>
             <span className="stat-label">Total earnings</span>
           </div>
         </div>
@@ -176,7 +177,7 @@ const Dashboard = ({ url }) => {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" />
               <YAxis />
-              <Tooltip formatter={(value) => [`$${value}`, "Revenue"]} />
+              <Tooltip formatter={(value) => [formatVND(value), "Revenue"]} />
               <Legend />
               <Bar dataKey="revenue" fill="#8884d8" name="Revenue" />
             </BarChart>
@@ -225,7 +226,7 @@ const Dashboard = ({ url }) => {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="date" />
             <YAxis />
-            <Tooltip formatter={(value) => [`$${value}`, "Revenue"]} />
+              <Tooltip formatter={(value) => [formatVND(value), "Revenue"]} />
             <Legend />
             <Line
               type="monotone"
