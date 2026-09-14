@@ -5,6 +5,7 @@ import {
   verifyOrder,
   vnpayReturn,
   vnpayIpn,
+  payosWebhook,
   userOrders,
   listOrders,
   updateStatus,
@@ -24,6 +25,7 @@ const router = express.Router();
 router.post("/quote", protect, validate(deliveryQuoteSchema), quoteDelivery);
 router.get("/vnpay-return", vnpayReturn);
 router.get("/vnpay-ipn", vnpayIpn);
+router.post("/payos/webhook", payosWebhook);
 router.post("/place", protect, validate(placeOrderSchema), placeOrder);
 router.post("/verify", protect, validate(verifyOrderSchema), verifyOrder);
 router.get("/userorders", protect, userOrders);

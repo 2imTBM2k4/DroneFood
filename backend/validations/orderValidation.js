@@ -20,10 +20,10 @@ export const placeOrderSchema = Joi.object({
   }),
   amount: Joi.number().optional(),
   paymentMethod: Joi.string()
-    .valid("COD", "VNPAY")
+    .valid("COD", "VNPAY", "PAYOS")
     .required()
     .messages({
-      "any.only": "Phương thức thanh toán không hợp lệ (COD, VNPAY)",
+      "any.only": "Phương thức thanh toán không hợp lệ (COD, PAYOS)",
       "any.required": "Phương thức thanh toán là bắt buộc",
     }),
   deliveryMethod: Joi.string().valid("shipper", "drone").required().messages({

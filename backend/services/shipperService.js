@@ -291,6 +291,21 @@ export const expireUnacceptedOrders = async () => {
   let cancelledCount = 0;
   for (const order of overdueOrders) {
     try {
+      // A paid PayOS order must never be silently cancelled without returning
+      // the customer's money. It is held for support/manual refund until the
+      // PayOS payout workflow is configured.
+      if (order.paymentMethod === "PAYOS" && order.isPaid) {
+        const result = await Order.updateOne(
+          { _id: order._id, shipperAssignmentStatus: "unassigned", orderStatus: { $in: DISPATCHABLE_ORDER_STATUSES } },
+          { $set: {
+            shipperAssignmentStatus: "expired",
+            cancellationCode: "NO_SHIPPER_AVAILABLE",
+            reason: "No shipper accepted this paid PayOS order. Support action and refund review are required.",
+          } }
+        );
+        cancelledCount += result.modifiedCount;
+        continue;
+      }
       let refund = {};
       if (order.paymentMethod === "VNPAY" && order.isPaid) {
         const refundRequestId = await requestVnpayRefund(order);

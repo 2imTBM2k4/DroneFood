@@ -65,6 +65,8 @@ export const findTransactionByEventKey = (eventKey) => WalletTransaction.findOne
 
 export const createPayment = async (data) => WalletPayment.create(data);
 export const findPaymentByReference = async (vnpTxnRef) => WalletPayment.findOne({ vnpTxnRef });
+export const findPaymentByPayosOrderCode = async (payosOrderCode) => WalletPayment.findOne({ payosOrderCode });
+export const deletePaymentById = async (id) => WalletPayment.findByIdAndDelete(id);
 
 export const listTransactions = async ({ ownerId, walletType }) =>
   WalletTransaction.find({ ownerId, ...(walletType && { walletType }) }).sort({ createdAt: -1 });

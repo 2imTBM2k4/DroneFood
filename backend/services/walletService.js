@@ -1,7 +1,8 @@
 import mongoose from "mongoose";
 import crypto from "crypto";
+import { PayOS } from "@payos/node";
 import AppError from "../utils/AppError.js";
-import { Order, WalletPayment } from "../models/index.cjs";
+import { Order, User, WalletPayment } from "../models/index.cjs";
 import * as walletRepo from "../repositories/walletRepository.js";
 
 export const MIN_INITIAL_DEPOSIT = 350000;
@@ -119,8 +120,8 @@ export const settleDeliveredOrder = async (orderId, deliveredFields = {}) => run
   const existingRestaurantTransaction = await walletRepo.findTransactionByEventKey(restaurantEventKey).session(session);
   if (existingRestaurantTransaction) return { alreadySettled: true, order };
 
-  if (order.paymentMethod === "VNPAY" && !order.isPaid) {
-    throw new AppError("A VNPay order cannot settle before payment confirmation", 409);
+  if (["VNPAY", "PAYOS"].includes(order.paymentMethod) && !order.isPaid) {
+    throw new AppError("An online order cannot settle before payment confirmation", 409);
   }
 
   const itemsSubtotal = typeof order.itemsPrice === "number" && order.itemsPrice > 0
@@ -148,7 +149,7 @@ export const settleDeliveredOrder = async (orderId, deliveredFields = {}) => run
   let shipperTransaction = null;
   if (order.deliveryMethod === "shipper") {
     await walletRepo.ensureShipperWallets(order.shipperId, session);
-    if (order.paymentMethod === "VNPAY") {
+    if (["VNPAY", "PAYOS"].includes(order.paymentMethod)) {
       const wallet = await walletRepo.updateEarningsBalance(order.shipperId, onlineEarningsAmount, session);
       shipperTransaction = await addLedgerEntry({
         walletType: "shipper_earnings",
@@ -201,8 +202,8 @@ export const settleDeliveredOrder = async (orderId, deliveredFields = {}) => run
   return { alreadySettled: false, order, restaurantTransaction, shipperTransaction };
 });
 
-/** Credits a confirmed VNPay deposit payment and records its ledger entry. */
-export const settleDepositPayment = async (paymentId, transactionNo = null) => runInTransaction(async (session) => {
+/** Credits a confirmed gateway deposit payment and records its ledger entry. */
+export const settleDepositPayment = async (paymentId, transactionNo = null, provider = "VNPAY") => runInTransaction(async (session) => {
   const payment = await WalletPayment.findById(paymentId).session(session);
   if (!payment) throw new AppError("Deposit payment not found", 404);
   const eventKey = `deposit-payment:${payment._id}`;
@@ -224,11 +225,14 @@ export const settleDepositPayment = async (paymentId, transactionNo = null) => r
     transactionType: "shipper_deposit_top_up",
     eventKey,
     paymentId: payment._id,
-    metadata: { vnpTxnRef: payment.vnpTxnRef },
+    metadata: provider === "PAYOS"
+      ? { payosOrderCode: payment.payosOrderCode, payosReference: transactionNo }
+      : { vnpTxnRef: payment.vnpTxnRef },
   }, session);
   payment.status = "paid";
   payment.paidAt = new Date();
-  payment.vnpTransactionNo = transactionNo;
+  if (provider === "PAYOS") payment.payosReference = transactionNo;
+  else payment.vnpTransactionNo = transactionNo;
   await payment.save({ session });
   return { alreadySettled: false, payment, transaction };
 });
@@ -245,27 +249,88 @@ const signedVnpayQuery = (params, secret) => crypto.createHmac("sha512", secret)
   .update(new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== "").sort(([a], [b]) => a.localeCompare(b))).toString(), "utf8")
   .digest("hex");
 
-/** Creates a separate VNPay payment intent for a shipper deposit. */
-export const createDepositPayment = async (shipperId, amount, clientIp) => {
-  if (!Number.isSafeInteger(amount) || amount <= 0) throw new AppError("Deposit amount must be a positive VND integer", 400);
-  const tmnCode = process.env.VNPAY_TMN_CODE;
-  const hashSecret = process.env.VNPAY_HASH_SECRET;
-  const returnUrl = process.env.VNPAY_DEPOSIT_RETURN_URL;
-  if (!tmnCode || !hashSecret || !returnUrl) throw new AppError("VNPay deposit is not configured", 503);
+const payosDepositConfig = () => {
+  const { PAYOS_CLIENT_ID: clientId, PAYOS_API_KEY: apiKey, PAYOS_CHECKSUM_KEY: checksumKey } = process.env;
+  if (!clientId || !apiKey || !checksumKey) {
+    throw new AppError("PayOS is not configured. Set PAYOS_CLIENT_ID, PAYOS_API_KEY and PAYOS_CHECKSUM_KEY.", 503);
+  }
+  const webhookUrl = process.env.PAYOS_WEBHOOK_URL;
+  const defaultReturnUrl = webhookUrl
+    ? new URL("/api/wallet/payos/deposit-return", webhookUrl).toString()
+    : process.env.PAYOS_RETURN_URL || `${process.env.FRONTEND_URL || "http://localhost:5173"}/verify`;
+  const returnUrl = process.env.PAYOS_DEPOSIT_RETURN_URL || defaultReturnUrl;
+  const cancelUrl = process.env.PAYOS_DEPOSIT_CANCEL_URL || returnUrl;
+  try {
+    new URL(returnUrl);
+    new URL(cancelUrl);
+  } catch {
+    throw new AppError("PAYOS_DEPOSIT_RETURN_URL and PAYOS_DEPOSIT_CANCEL_URL must be absolute URLs.", 503);
+  }
+  return { payOS: new PayOS({ clientId, apiKey, checksumKey }), returnUrl, cancelUrl };
+};
 
-  const now = new Date();
-  const reference = `DP${Date.now()}${String(shipperId).slice(-6)}`;
-  const payment = await walletRepo.createPayment({ shipper: shipperId, amount, vnpTxnRef: reference });
-  const params = {
-    vnp_Amount: String(amount * 100), vnp_Command: "pay", vnp_CreateDate: vnpayDate(now),
-    vnp_CurrCode: "VND", vnp_ExpireDate: vnpayDate(new Date(now.getTime() + 15 * 60 * 1000)),
-    vnp_IpAddr: String(clientIp || "127.0.0.1").replace(/^::ffff:/, "") || "127.0.0.1",
-    vnp_Locale: "vn", vnp_OrderInfo: `Nap ky quy shipper ${payment._id}`,
-    vnp_OrderType: "other", vnp_ReturnUrl: returnUrl, vnp_TmnCode: tmnCode,
-    vnp_TxnRef: reference, vnp_Version: "2.1.0",
-  };
-  const paymentUrl = `${process.env.VNPAY_PAYMENT_URL || "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"}?${new URLSearchParams({ ...params, vnp_SecureHash: signedVnpayQuery(params, hashSecret) }).toString()}`;
-  return { success: true, paymentId: payment._id, paymentUrl };
+// The final digit identifies the PayOS purpose: 1 = customer order (defined
+// in orderService), 2 = shipper deposit. This keeps both flows disjoint even
+// though they share a single PayOS channel and webhook URL.
+const newPayosDepositOrderCode = () => Number(`${Math.floor(Date.now() / 1000)}${crypto.randomInt(10000, 100000)}2`);
+
+const paymentDate = (date = new Date()) => new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "2-digit",
+}).format(date).replace(/\//g, "");
+
+const bankSafeName = (name) => String(name || "Shipper")
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/[^a-zA-Z0-9]/g, "")
+  .slice(0, 7) || "Shipper";
+
+// `Nap ky quy ` + a seven-character name + ` ` + DDMMYY is at most 25
+// characters, which keeps the bank-transfer reference readable and compact.
+const depositPaymentDescription = (shipperName, date = new Date()) =>
+  `Nap ky quy ${bankSafeName(shipperName)} ${paymentDate(date)}`;
+
+/** Creates a PayOS payment link for a shipper's deposit. */
+export const createDepositPayment = async (shipperId, amount) => {
+  if (!Number.isSafeInteger(amount) || amount <= 0) throw new AppError("Deposit amount must be a positive VND integer", 400);
+  const { payOS, returnUrl, cancelUrl } = payosDepositConfig();
+  const shipper = await User.findById(shipperId).select("name").lean();
+  if (!shipper) throw new AppError("Shipper not found", 404);
+  const orderCode = newPayosDepositOrderCode();
+  const payment = await walletRepo.createPayment({
+    shipper: shipperId, amount, paymentProvider: "PAYOS", payosOrderCode: orderCode,
+  });
+  try {
+    const paymentLink = await payOS.paymentRequests.create({
+      orderCode,
+      amount,
+      description: depositPaymentDescription(shipper.name),
+      items: [{ name: "Nap ky quy shipper", quantity: 1, price: amount }],
+      returnUrl,
+      cancelUrl,
+    });
+    payment.payosPaymentLinkId = paymentLink.paymentLinkId;
+    await payment.save();
+    return { success: true, paymentId: payment._id, checkoutUrl: paymentLink.checkoutUrl, paymentUrl: paymentLink.checkoutUrl };
+  } catch (error) {
+    await walletRepo.deletePaymentById(payment._id);
+    throw new AppError(`Unable to create PayOS deposit payment link: ${error.message}`, 502);
+  }
+};
+
+/** Verifies PayOS webhook data and credits a matching shipper deposit once. */
+export const handleDepositPayosWebhook = async (payload) => {
+  const { payOS } = payosDepositConfig();
+  const data = await payOS.webhooks.verify(payload);
+  const orderCode = Number(data.orderCode);
+  if (!Number.isSafeInteger(orderCode)) throw new AppError("Invalid PayOS deposit order code", 400);
+  const payment = await walletRepo.findPaymentByPayosOrderCode(orderCode);
+  // This also accepts PayOS's signed sample event during webhook setup.
+  if (!payment) return { newlyPaid: false, ignored: true };
+  if (payment.paymentProvider !== "PAYOS") throw new AppError("Payment provider does not match PayOS", 409);
+  if (Math.round(Number(data.amount)) !== Math.round(payment.amount)) throw new AppError("PayOS deposit amount does not match", 400);
+  if (String(data.code) !== "00") return { newlyPaid: false, ignored: true };
+  const settled = await settleDepositPayment(payment._id, data.reference || data.paymentLinkId, "PAYOS");
+  return { newlyPaid: !settled.alreadySettled, paymentId: payment._id, ignored: false };
 };
 
 /** Verifies a deposit IPN before crediting the deposit balance. */

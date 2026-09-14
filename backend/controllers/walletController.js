@@ -34,3 +34,8 @@ export const depositVnpayIpn = async (req, res) => {
     res.json({ RspCode: "99", Message: "Unknown error" });
   }
 };
+
+export const payosDepositReturn = (req, res) => {
+  const cancelled = req.query.cancel === "true" || req.query.status === "CANCELLED";
+  res.status(200).send(`<!doctype html><html lang="vi"><meta charset="utf-8"><title>DroneFood</title><body><h2>${cancelled ? "Đã hủy nạp ký quỹ" : "Đang xác nhận nạp ký quỹ"}</h2><p>${cancelled ? "Bạn có thể quay lại ứng dụng Shipper." : "Nếu giao dịch thành công, số dư sẽ được cập nhật trong ứng dụng Shipper. Bạn có thể quay lại và làm mới số dư."}</p></body></html>`);
+};

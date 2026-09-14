@@ -242,8 +242,8 @@ const Checkout = () => {
       );
 
       if (response.data.success) {
-        if (paymentMethod === "VNPAY" && response.data.paymentUrl) {
-          window.location.assign(response.data.paymentUrl);
+        if (paymentMethod === "PAYOS" && response.data.checkoutUrl) {
+          window.location.assign(response.data.checkoutUrl);
           return;
         }
         await clearCart();
@@ -399,7 +399,7 @@ const Checkout = () => {
                   <span><strong>Shipper</strong><small>5.000đ/km, calculated by road route.</small></span>
                 </label>
                 <label className={`checkout-method ${deliveryMethod === "drone" ? "picked" : ""}`}>
-                  <input type="radio" value="drone" checked={deliveryMethod === "drone"} onChange={(e) => { setDeliveryMethod(e.target.value); if (paymentMethod === "COD") setPaymentMethod("VNPAY"); }} />
+                  <input type="radio" value="drone" checked={deliveryMethod === "drone"} onChange={(e) => { setDeliveryMethod(e.target.value); if (paymentMethod === "COD") setPaymentMethod("PAYOS"); }} />
                   <span><strong>Drone</strong><small>7.000đ/km, calculated by straight-line distance.</small></span>
                 </label>
               </div>
@@ -427,17 +427,17 @@ const Checkout = () => {
                 </label>
                 <label
                   className={`checkout-method ${
-                    paymentMethod === "VNPAY" ? "picked" : ""
+                    paymentMethod === "PAYOS" ? "picked" : ""
                   }`}
                 >
                   <input
                     type="radio"
-                    value="VNPAY"
-                    checked={paymentMethod === "VNPAY"}
+                    value="PAYOS"
+                    checked={paymentMethod === "PAYOS"}
                     onChange={(e) => setPaymentMethod(e.target.value)}
                   />
                   <span>
-                    <strong>VNPay</strong>
+                    <strong>PayOS</strong>
                     <small>Pay securely by bank card, QR code, or mobile banking.</small>
                   </span>
                 </label>
@@ -493,7 +493,7 @@ const Checkout = () => {
                 <p>
                   {paymentMethod === "COD"
                     ? "Cash on delivery"
-                    : "VNPay"}
+                    : "PayOS"}
                 </p>
               </section>
 
@@ -526,7 +526,7 @@ const Checkout = () => {
                     onClick={placeOrder}
                     disabled={placing}
                   >
-                    {placing ? "Creating payment…" : "Pay with VNPay"}
+                    {placing ? "Creating payment…" : "Pay with PayOS"}
                   </button>
                 )}
               </div>

@@ -135,7 +135,7 @@ const Orders = ({ url }) => {
       setOrders((prev) => [newOrder, ...prev]); // THÊM MỚI VÀO ĐẦU DANH SÁCH
     });
 
-    socket.on("connect_error", (error) => {
+    socket.on("connect_error", () => {
       toast.error("Notification connection failed");
     });
 

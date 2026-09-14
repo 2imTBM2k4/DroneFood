@@ -372,7 +372,7 @@ const MyOrders = () => {
                     <span>
                       {order.paymentMethod === "COD"
                         ? "Cash on delivery"
-                        : "VNPay"}
+                        : order.paymentMethod === "PAYOS" ? "PayOS" : "VNPay"}
                     </span>
                   </div>
                   <div className="summary-row">

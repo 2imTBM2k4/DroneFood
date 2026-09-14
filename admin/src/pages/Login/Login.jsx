@@ -3,7 +3,7 @@ import "./Login.css";
 import { toast } from "react-toastify";
 import { AuthContext } from "../../context/AuthContext";
 
-const Login = ({ url }) => {
+const Login = () => {
   const { login } = useContext(AuthContext);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

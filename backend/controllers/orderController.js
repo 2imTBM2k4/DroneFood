@@ -1,4 +1,5 @@
 import * as orderService from "../services/orderService.js";
+import * as walletService from "../services/walletService.js";
 import { emitCustomerOrderUpdate } from "../utils/orderRealtime.js";
 
 const notifyPaidOrder = async (req, result) => {
@@ -21,13 +22,13 @@ export const placeOrder = async (req, res) => {
     const result = await orderService.placeOrder(req.user, req.body, req.ip);
 
     const restaurantId = result.restaurantId;
-    if (result.paymentMethod !== "VNPAY" && req.app.get("io") && restaurantId) {
+    if (result.paymentMethod === "COD" && req.app.get("io") && restaurantId) {
       req.app
         .get("io")
         .to(`restaurant_${restaurantId}`)
         .emit("newOrder", result.orderId);
     }
-    if (result.paymentMethod !== "VNPAY" && result.deliveryMethod === "shipper" && req.app.get("io")) {
+    if (result.paymentMethod === "COD" && result.deliveryMethod === "shipper" && req.app.get("io")) {
       const { Order } = await import("../models/index.cjs");
       const { nearbyAvailableShipperIds } = await import("../services/shipperService.js");
       const order = await Order.findById(result.orderId).select("pickupLocation shipperAssignmentDeadlineAt");
@@ -91,6 +92,22 @@ export const vnpayIpn = async (req, res) => {
     res.json({ RspCode: result.RspCode, Message: result.Message });
   } catch {
     res.json({ RspCode: "99", Message: "Unknown error" });
+  }
+};
+
+export const payosWebhook = async (req, res) => {
+  try {
+    const result = await orderService.handlePayosWebhook(req.body);
+    if (result.ignored) {
+      const depositResult = await walletService.handleDepositPayosWebhook(req.body);
+      return res.status(200).json({ success: true, type: depositResult.ignored ? "sample" : "shipper_deposit" });
+    }
+    await notifyPaidOrder(req, result);
+    res.status(200).json({ success: true });
+  } catch (error) {
+    // PayOS retries non-2xx responses, so only acknowledge a webhook once it
+    // has passed signature and order/amount checks.
+    res.status(error.statusCode || 400).json({ success: false, message: error.message });
   }
 };
 

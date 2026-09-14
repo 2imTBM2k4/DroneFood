@@ -6,12 +6,16 @@ on:
       - "user/**"
       - "admin/**"
       - "restaurant/**"
+      - "shared/**"
+      - "package.json"
       - ".github/workflows/web-ci.yml"
   push:
     paths:
       - "user/**"
       - "admin/**"
       - "restaurant/**"
+      - "shared/**"
+      - "package.json"
       - ".github/workflows/web-ci.yml"
 
 permissions:
@@ -35,4 +39,5 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ matrix.app }}/package-lock.json
       - run: npm ci
+      - run: npm run lint
       - run: npm run build

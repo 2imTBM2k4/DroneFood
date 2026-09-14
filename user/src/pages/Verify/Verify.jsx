@@ -7,7 +7,8 @@ import { toast } from "react-toastify";
 
 const Verify = () => {
   const [searchParams] = useSearchParams();
-  const vnpayResult = searchParams.get("vnpay");
+  const paymentStatus = searchParams.get("status");
+  const paymentCancelled = searchParams.get("cancel") === "true" || paymentStatus === "CANCELLED";
   const orderId = searchParams.get("orderId");
   const { url, token, clearCart, isHydrated } = useContext(StoreContext);
   const navigate = useNavigate();
@@ -24,31 +25,41 @@ const Verify = () => {
       return;
     }
 
+    if (paymentCancelled) {
+      toast.info("Payment was cancelled.");
+      navigate("/checkout");
+      return;
+    }
+
     try {
-      const response = await axios.post(
-        `${url}/api/order/verify`,
-        { orderId },
-        {
-          headers: { Authorization: `Bearer ${token}` },
+      // The redirect can reach the browser a moment before the signed PayOS
+      // webhook reaches our server. Poll briefly so a genuine payment never
+      // appears as a failure merely because of that race.
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        const response = await axios.post(
+          `${url}/api/order/verify`,
+          { orderId },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (response.data.success) {
+          await clearCart();
+          toast.success("Payment verified! Check My Orders.");
+          navigate("/myorders");
+          return;
         }
-      );
-      if (response.data.success) {
-        await clearCart();
-        toast.success("Payment verified! Check My Orders.");
-        navigate("/myorders");
-      } else {
-        toast.error("Payment failed");
-        navigate("/");
+        await new Promise((resolve) => setTimeout(resolve, 1500));
       }
+      toast.info("Your payment is still being confirmed. Please check My Orders shortly.");
+      navigate("/myorders");
     } catch (error) {
       console.error("Verify error:", error);
       toast.error(error.response?.data?.message || "Verification error");
       navigate("/");
     }
-  }, [clearCart, navigate, orderId, token, url]);
+  }, [clearCart, navigate, orderId, paymentCancelled, token, url]);
 
   useEffect(() => {
-    // A VNPay redirect reloads the SPA. Wait until StoreContext has restored
+    // A payment redirect reloads the SPA. Wait until StoreContext has restored
     // the saved access token, otherwise this request races with hydration and
     // receives a 401 from the protected verification endpoint.
     if (isHydrated && orderId) {
@@ -59,7 +70,7 @@ const Verify = () => {
   return (
     <div className="verify">
       <div className="spinner"></div>
-      <p>{vnpayResult === "failed" ? "Payment was not completed." : "Verifying payment..."}</p>
+      <p>{paymentCancelled ? "Payment was cancelled." : "Verifying payment..."}</p>
     </div>
   );
 };

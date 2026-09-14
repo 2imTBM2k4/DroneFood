@@ -137,7 +137,8 @@ const orderSchema = new mongoose.Schema(
     paymentMethod: {
       type: String,
       // required: true,
-      enum: ["COD", "VNPAY"],
+      // Keep VNPAY so historical orders remain readable after the migration.
+      enum: ["COD", "VNPAY", "PAYOS"],
     },
     paymentResult: {
       id: String,
@@ -193,6 +194,13 @@ const orderSchema = new mongoose.Schema(
     vnpTxnRef: { type: String, default: null },
     vnpTransactionNo: { type: String, default: null },
     vnpCreateDate: { type: String, default: null },
+    // PayOS identifies a payment request by a merchant-generated numeric code.
+    // It is stored separately from the Mongo order id so webhook data can be
+    // matched safely and idempotently.
+    // Omit this property (rather than store null) for COD/VNPay records so
+    // the sparse unique index permits any number of non-PayOS orders.
+    payosOrderCode: { type: Number, default: undefined, unique: true, sparse: true },
+    payosPaymentLinkId: { type: String, default: null },
     refundStatus: { type: String, enum: ["not_required", "requested", "failed"], default: "not_required" },
     refundRequestId: { type: String, default: null },
     refundRequestedAt: { type: Date, default: null },

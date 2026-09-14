@@ -66,7 +66,7 @@ backend/
 - **Authentication**: JWT (30-minute access token + 7-day refresh token)
 - **Validation**: Joi (with `stripUnknown` for mass-assignment protection)
 - **Real-time**: Socket.io (order notifications to restaurants)
-- **Payments**: VNPay
+- **Payments**: PayOS
 - **Image hosting**: Cloudinary
 - **File upload**: Multer (JPEG/PNG/GIF/WebP, 5MB limit)
 - **Email**: Nodemailer (password reset)
@@ -84,7 +84,7 @@ backend/
 - **Icons**: Lucide React
 - **Maps**: Leaflet / React-Leaflet + TrackAsia GL
 - **QR**: qrcode.react + html5-qrcode
-- **Payments**: VNPay redirect checkout (user app)
+- **Payments**: PayOS redirect checkout (user app and shipper deposit)
 - **Charts**: Chart.js + Recharts (admin app)
 
 ### Infrastructure
@@ -98,7 +98,7 @@ backend/
 - Pick exact delivery location on map (Geolocation + TrackAsia)
 - View restaurant menu with food option groups (sizes, toppings)
 - Add to cart (single-restaurant restriction) with item customization
-- Place orders (COD, online via VNPay)
+- Place orders (COD, online via PayOS)
 - Track drone delivery in real-time
 - Scan QR code to open drone cargo bay and confirm receipt
 - Cancel pending orders with reason
@@ -160,7 +160,7 @@ cancelled  cancelled
 - Node.js 18+
 - MongoDB (local or Atlas)
 - Cloudinary account
-- VNPay merchant account (sandbox or production)
+- PayOS payment channel
 
 ### 1. Clone the repository
 
@@ -187,18 +187,26 @@ CLOUDINARY_CLOUD_NAME=your-cloud-name
 CLOUDINARY_API_KEY=your-api-key
 CLOUDINARY_API_SECRET=your-api-secret
 
-VNPAY_TMN_CODE=your_vnpay_tmn_code
-VNPAY_HASH_SECRET=your_vnpay_hash_secret
-# Must point to the backend callback endpoint registered with VNPay.
-VNPAY_RETURN_URL=http://localhost:4000/api/order/vnpay-return
-VNPAY_PAYMENT_URL=https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
-VNPAY_REFUND_API_URL=https://sandbox.vnpayment.vn/merchant_webapi/api/transaction
-VNPAY_REFUND_CREATE_BY=system
-VNPAY_REFUND_IP_ADDR=127.0.0.1
+PAYOS_CLIENT_ID=your_payos_client_id
+PAYOS_API_KEY=your_payos_api_key
+PAYOS_CHECKSUM_KEY=your_payos_checksum_key
+# These redirect the customer back to the web app after PayOS checkout.
+PAYOS_RETURN_URL=http://localhost:5173/verify
+PAYOS_CANCEL_URL=http://localhost:5173/verify
+# Required for shipper deposits when using the default return page.
+# This is also the one webhook URL configured in your PayOS channel.
+PAYOS_WEBHOOK_URL=https://your-backend/api/order/payos/webhook
+# Optional custom browser return pages for the shipper mobile app.
+# Defaults to https://your-backend/api/wallet/payos/deposit-return from the webhook origin.
+PAYOS_DEPOSIT_RETURN_URL=https://your-backend/api/wallet/payos/deposit-return
+PAYOS_DEPOSIT_CANCEL_URL=https://your-backend/api/wallet/payos/deposit-return
+# Register this public HTTPS endpoint in the PayOS channel dashboard.
+# It is the authoritative confirmation, even if the customer never returns.
+# https://your-backend/api/order/payos/webhook
 
-# Register this public endpoint as the VNPay IPN URL.
-# It confirms payments even if the buyer does not reach the return page.
-# https://your-backend/api/order/vnpay-ipn
+# Run once before enabling PayOS deposits if the database already contains
+# WalletPayment records created by the old VNPay integration.
+npm run migrate:wallet-payos
 
 FRONTEND_URL=http://localhost:5173
 ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174,http://localhost:5175

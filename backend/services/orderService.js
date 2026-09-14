@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { PayOS } from "@payos/node";
 import * as orderRepo from "../repositories/orderRepository.js";
 import * as restaurantRepo from "../repositories/restaurantRepository.js";
 import * as userRepo from "../repositories/userRepository.js";
@@ -44,6 +45,46 @@ const vnpayConfig = () => {
   return { tmnCode, hashSecret, returnUrl, paymentUrl: process.env.VNPAY_PAYMENT_URL || VNPAY_DEFAULT_URL };
 };
 
+const payosConfig = () => {
+  const { PAYOS_CLIENT_ID: clientId, PAYOS_API_KEY: apiKey, PAYOS_CHECKSUM_KEY: checksumKey } = process.env;
+  if (!clientId || !apiKey || !checksumKey) {
+    throw new AppError("PayOS is not configured. Set PAYOS_CLIENT_ID, PAYOS_API_KEY and PAYOS_CHECKSUM_KEY.", 503);
+  }
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+  const returnUrl = process.env.PAYOS_RETURN_URL || `${frontendUrl}/verify`;
+  const cancelUrl = process.env.PAYOS_CANCEL_URL || returnUrl;
+  try {
+    // Fail early with a clear error instead of creating an unreachable link.
+    new URL(returnUrl);
+    new URL(cancelUrl);
+  } catch {
+    throw new AppError("PAYOS_RETURN_URL and PAYOS_CANCEL_URL must be absolute URLs.", 503);
+  }
+  return { payOS: new PayOS({ clientId, apiKey, checksumKey }), returnUrl, cancelUrl };
+};
+
+const withOrderId = (url, orderId) => {
+  const redirect = new URL(url);
+  redirect.searchParams.set("orderId", String(orderId));
+  return redirect.toString();
+};
+
+const isOnlinePayment = (paymentMethod) => ["VNPAY", "PAYOS"].includes(paymentMethod);
+
+// Bank transfer descriptions need to remain compact. DDMMYY is the Vietnam
+// payment date while the final six Mongo id characters remain the human-facing
+// order reference shown throughout the app.
+const paymentDate = (date = new Date()) => new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "2-digit",
+}).format(date).replace(/\//g, "");
+
+const orderPaymentDescription = (orderId, date = new Date()) =>
+  `DroneFood DH${String(orderId).slice(-6).toUpperCase()} ${paymentDate(date)}`;
+
+// PayOS requires a numeric merchant order code. The timestamp plus random
+// suffix stays below JavaScript's safe-integer limit and avoids collisions.
+const newPayosOrderCode = () => Number(`${Math.floor(Date.now() / 1000)}${crypto.randomInt(10000, 100000)}1`);
+
 export const quoteDelivery = async (user, { address, deliveryMethod }) => {
   const cart = await cartRepo.findByUserId(user._id);
   const firstLine = (cart?.items || []).find((line) => line.foodId);
@@ -73,6 +114,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
   // Fail before creating an order or changing the cart when credentials are
   // absent. Otherwise a customer could lose their cart without a payment URL.
   const vnpay = paymentMethod === "VNPAY" ? vnpayConfig() : null;
+  const payos = paymentMethod === "PAYOS" ? payosConfig() : null;
 
   // The server's cart is the only source of truth for what is being bought
   // and what it costs. Whatever `items`, `amount` or `restaurantId` the client
@@ -177,7 +219,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
     restaurantId: restaurantId,
     isPaid: false,
     paidAt: null,
-    orderStatus: paymentMethod === "VNPAY" ? "pending_payment" : "pending",
+    orderStatus: isOnlinePayment(paymentMethod) ? "pending_payment" : "pending",
   };
   const newOrder = await orderRepo.create(newOrderData);
 
@@ -207,6 +249,35 @@ export const placeOrder = async (user, orderData, clientIp) => {
       vnpTxnRef: params.vnp_TxnRef,
       vnpCreateDate: params.vnp_CreateDate,
     });
+  } else if (paymentMethod === "PAYOS") {
+    const orderCode = newPayosOrderCode();
+    try {
+      // Persist the mapping before asking PayOS to create the link. This
+      // removes the tiny race in which a rapid payment webhook arrives before
+      // the application knows which orderCode belongs to the order.
+      await orderRepo.updateById(newOrder._id, { payosOrderCode: orderCode });
+      const paymentLink = await payos.payOS.paymentRequests.create({
+        orderCode,
+        amount: Math.round(totals.total),
+        description: orderPaymentDescription(newOrder._id),
+        items: [
+          ...orderItems.map((item) => ({ name: item.name.slice(0, 50), quantity: item.quantity, price: Math.round(item.price) })),
+          ...(totals.shippingPrice > 0 ? [{ name: "Phi giao hang", quantity: 1, price: Math.round(totals.shippingPrice) }] : []),
+          ...(totals.serviceFee > 0 ? [{ name: "Phi dich vu", quantity: 1, price: Math.round(totals.serviceFee) }] : []),
+        ],
+        returnUrl: withOrderId(payos.returnUrl, newOrder._id),
+        cancelUrl: withOrderId(payos.cancelUrl, newOrder._id),
+      });
+      paymentUrl = paymentLink.checkoutUrl;
+      await orderRepo.updateById(newOrder._id, {
+        payosPaymentLinkId: paymentLink.paymentLinkId || null,
+      });
+    } catch (error) {
+      // The cart has not been cleared, so deleting the unfinished record lets
+      // the customer retry without leaving a payment-pending ghost order.
+      await orderRepo.deleteById(newOrder._id);
+      throw new AppError(`Unable to create PayOS payment link: ${error.message}`, 502);
+    }
   } else {
     await cartRepo.deleteByUserId(user._id);
     await userRepo.updateById(user._id, { cart: [] });
@@ -214,7 +285,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
 
   return {
     success: true,
-    ...(paymentUrl && { paymentUrl }),
+    ...(paymentUrl && { paymentUrl, checkoutUrl: paymentUrl }),
     orderId: newOrder._id,
     restaurantId: restaurantId.toString(),
     deliveryMethod,
@@ -224,6 +295,8 @@ export const placeOrder = async (user, orderData, clientIp) => {
         ? "Order placed with COD"
         : paymentMethod === "VNPAY"
         ? "Order created. Redirecting to VNPay."
+        : paymentMethod === "PAYOS"
+        ? "Order created. Redirecting to PayOS."
         : "Order created",
   };
 };
@@ -281,6 +354,41 @@ export const handleVnpayIpn = async (query) => {
   return { RspCode: "02", Message: "Order already confirmed", ...recorded };
 };
 
+/** Verifies a PayOS-signed webhook and settles the matching order once. */
+export const handlePayosWebhook = async (payload) => {
+  const { payOS } = payosConfig();
+  const payment = await payOS.webhooks.verify(payload);
+  const orderCode = Number(payment.orderCode);
+  if (!Number.isSafeInteger(orderCode)) throw new AppError("Invalid PayOS order code", 400);
+
+  const order = await orderRepo.findByPayosOrderCode(orderCode);
+  // PayOS sends a signed sample event while its dashboard validates the
+  // webhook URL. Acknowledging an unknown code lets that handshake succeed
+  // without ever changing application data.
+  if (!order) return { paid: false, newlyPaid: false, orderId: null, ignored: true };
+  if (order.paymentMethod !== "PAYOS") throw new AppError("Payment method does not match PayOS", 409);
+  if (Math.round(Number(payment.amount)) !== Math.round(order.totalPrice)) {
+    throw new AppError("PayOS payment amount does not match the order", 400);
+  }
+  if (String(payment.code) !== "00") {
+    return { paid: Boolean(order.isPaid), newlyPaid: false, orderId: order._id, ignored: true };
+  }
+  if (order.isPaid) return { paid: true, newlyPaid: false, orderId: order._id };
+
+  await orderRepo.updateById(order._id, {
+    isPaid: true,
+    paidAt: new Date(),
+    orderStatus: "pending",
+    payosPaymentLinkId: payment.paymentLinkId || order.payosPaymentLinkId,
+    paymentResult: {
+      id: payment.reference || payment.paymentLinkId,
+      status: payment.code,
+      update_time: payment.transactionDateTime,
+    },
+  });
+  return { paid: true, newlyPaid: true, orderId: order._id };
+};
+
 export const verifyOrder = async (user, orderId) => {
   const order = await orderRepo.findById(orderId);
   if (!order) {
@@ -310,8 +418,8 @@ export const listOrders = async (user, { page, limit } = {}) => {
     }
     filter = {
       restaurantId: restId,
-      // A VNPay order is not actionable until the gateway has confirmed it.
-      $or: [{ paymentMethod: { $ne: "VNPAY" } }, { isPaid: true }],
+      // An online order is not actionable until its payment webhook confirms it.
+      $or: [{ paymentMethod: "COD" }, { isPaid: true }],
     };
   } else if (user.role !== "admin") {
     throw new AppError("Unauthorized", 403);
@@ -477,6 +585,10 @@ export const updateStatus = async (user, updateData) => {
   const updateDataObj = { orderStatus: status };
   if (status === "cancelled" && reason) {
     updateDataObj.reason = reason.trim();
+
+    if (order.paymentMethod === "PAYOS" && order.isPaid) {
+      throw new AppError("Automatic PayOS refunds are not configured. Refund the customer before cancelling this paid order.", 409);
+    }
 
     // A paid VNPay order is cancelled only after the gateway has accepted the
     // full-refund request. This prevents the UI from claiming a refund that

@@ -2,7 +2,6 @@ import React, { useContext, useEffect, useState } from "react";
 import Navbar from "./components/Navbar/Navbar";
 import Sidebar from "./components/Sidebar/Sidebar";
 import { Routes, Route, useLocation } from "react-router-dom";
-import Add from "./pages/Add/Add";
 import ListRestaurant from "./pages/ListRestaurant/ListRestaurant";
 import Orders from "./pages/Orders/Orders";
 import Dashboard from "./pages/Dashboard/Dashboard";
