@@ -27,7 +27,7 @@ describe("manual PayOS refunds", () => {
     const { customer, order } = await createPaidPayosOrder();
     const token = generateToken(customer._id);
     const body = {
-      orderId: order._id.toString(), reason: "Không còn nhu cầu", 
+      orderId: order._id.toString(), reason: "Không còn nhu cầu",
       bank: { bankName: "Vietcombank", accountNumber: "123456789", accountHolder: "NGUYEN VAN A" },
     };
     const created = await request(app).post("/api/refunds/request").set("Authorization", `Bearer ${token}`).send(body);
