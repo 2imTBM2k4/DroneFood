@@ -1,146 +1,46 @@
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { StoreContext } from "../../context/StoreContext";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
-import { Bike, Check, CircleX, Clock3, CookingPot, Package, PackageCheck, Truck, LogIn } from "lucide-react";
-import DroneDelivery from "../../components/DroneDelivery/DroneDelivery";
+import {
+  Package,
+  LogIn,
+  Clock,
+  MapPin,
+  Bike,
+  Navigation,
+  ChevronRight,
+  Store,
+  UtensilsCrossed,
+  AlertCircle,
+  XCircle,
+  X,
+  RotateCcw,
+  Search,
+} from "lucide-react";
 import { SkeletonList } from "../../components/Skeleton/Skeleton";
 import { EmptyState, ErrorState } from "../../../../shared/components/StateBlock";
-import "./MyOrders.css"; // Giả sử bạn có file CSS này cho style nhất quán với light mode
+import "./MyOrders.css";
 import { formatVND } from "../../../../shared/utils/money";
 import OrderReviewPrompt from "../../components/OrderReviewPrompt/OrderReviewPrompt";
 
-const SHIPPER_WAIT_WINDOW_MS = 10 * 60 * 1000;
-
-const formatRemainingTime = (remainingMs) => {
-  const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+const STATUS_CONFIG = {
+  pending_payment: { label: "Chờ thanh toán", colorClass: "status-pending" },
+  pending: { label: "Chờ xác nhận", colorClass: "status-pending" },
+  preparing: { label: "Đang chuẩn bị", colorClass: "status-preparing" },
+  delivering: { label: "Đang giao", colorClass: "status-delivering" },
+  delivered: { label: "Đã giao", colorClass: "status-delivered" },
+  cancelled: { label: "Đã hủy", colorClass: "status-cancelled" },
+  refund_pending: { label: "Chờ hoàn tiền", colorClass: "status-refund-pending" },
 };
 
-const getTimelineDetails = (order) => {
-  const isShipper = order.deliveryMethod === "shipper";
-  const isFindingShipper = isShipper && order.shipperAssignmentStatus === "unassigned";
-  const steps = isShipper
-    ? [
-        { key: "placed", label: "Đã đặt", Icon: PackageCheck },
-        { key: "finding-shipper", label: "Tìm Shipper", Icon: Bike },
-        { key: "preparing", label: "Đang chuẩn bị", Icon: CookingPot },
-        { key: "delivering", label: "Đang giao", Icon: Truck },
-        { key: "delivered", label: "Đã giao", Icon: Check },
-      ]
-    : [
-        { key: "placed", label: "Đã đặt", Icon: PackageCheck },
-        { key: "preparing", label: "Đang chuẩn bị", Icon: CookingPot },
-        { key: "delivering", label: "Đang giao", Icon: Truck },
-        { key: "delivered", label: "Đã giao", Icon: Check },
-      ];
-
-  if (order.orderStatus === "delivered") {
-    return { steps, activeStep: steps.length - 1, message: "Đơn hàng đã được giao thành công." };
-  }
-  if (order.orderStatus === "delivering") {
-    return { steps, activeStep: steps.length - 2, message: "Đơn hàng đang được giao đến bạn." };
-  }
-  if (isFindingShipper) {
-    return {
-      steps,
-      activeStep: 1,
-      message: order.orderStatus === "preparing"
-        ? "Nhà hàng đang chuẩn bị, đồng thời tìm Shipper."
-        : "Đang tìm Shipper gần nhà hàng.",
-    };
-  }
-  if (isShipper && order.shipperAssignmentStatus === "expired") {
-    return {
-      steps,
-      activeStep: 1,
-      message: "Chưa tìm được Shipper. Hãy chọn tiếp tục tìm hoặc hủy đơn để hoàn tiền.",
-    };
-  }
-  if (order.orderStatus === "preparing") {
-    return {
-      steps,
-      activeStep: isShipper ? 2 : 1,
-      message: isShipper && order.shipperAssignmentStatus === "accepted"
-        ? "Shipper đã nhận đơn. Nhà hàng đang chuẩn bị."
-        : "Nhà hàng đang chuẩn bị đơn hàng.",
-    };
-  }
-  if (isShipper && order.shipperAssignmentStatus === "accepted") {
-    return { steps, activeStep: 2, message: "Shipper đã nhận đơn. Chờ nhà hàng chuẩn bị món." };
-  }
-  return { steps, activeStep: 0, message: "Nhà hàng đang chờ xác nhận đơn hàng." };
-};
-
-const OrderStatusTimeline = ({ order, now }) => {
-  const isWaitingForShipper = order.deliveryMethod === "shipper"
-    && ["pending", "preparing"].includes(order.orderStatus)
-    && order.shipperAssignmentStatus === "unassigned";
-  const deadlineMs = order.shipperAssignmentDeadlineAt ? new Date(order.shipperAssignmentDeadlineAt).getTime() : null;
-  const remainingMs = deadlineMs ? Math.max(0, deadlineMs - now) : null;
-
-  if (order.orderStatus === "cancelled") {
-    return (
-      <section className="order-timeline order-timeline-cancelled" aria-label="Trạng thái đơn hàng: đã hủy">
-        <CircleX size={20} aria-hidden="true" />
-        <div>
-          <strong>Đơn hàng đã hủy</strong>
-          <p>{order.cancellationCode === "NO_SHIPPER_AVAILABLE" ? "Không có Shipper nào nhận đơn trong thời gian chờ." : "Đơn hàng không thể tiếp tục xử lý."}</p>
-        </div>
-      </section>
-    );
-  }
-  if (order.orderStatus === "refund_pending") {
-    return (
-      <section className="order-timeline order-timeline-refund" aria-label="Trạng thái đơn hàng: chờ hoàn tiền">
-        <Clock3 size={20} aria-hidden="true" />
-        <div><strong>Đang chờ hoàn tiền</strong><p>Admin sẽ xác nhận sau khi đã chuyển tiền về tài khoản bạn cung cấp.</p></div>
-      </section>
-    );
-  }
-
-  const { steps, activeStep, message } = getTimelineDetails(order);
-  const waitProgress = remainingMs === null ? 0 : Math.min(100, Math.max(0, ((SHIPPER_WAIT_WINDOW_MS - remainingMs) / SHIPPER_WAIT_WINDOW_MS) * 100));
-
-  return (
-    <section className="order-timeline" aria-label={`Trạng thái đơn hàng: ${message}`}>
-      <div className="order-timeline-heading">
-        <div>
-          <span className="order-timeline-kicker">Theo dõi đơn hàng</span>
-          <strong aria-live="polite">{message}</strong>
-        </div>
-        {isWaitingForShipper && remainingMs !== null && (
-          <div className="shipper-countdown" aria-live="polite">
-            <Clock3 size={18} aria-hidden="true" />
-            <span>{remainingMs > 0 ? "Còn" : "Đang xác nhận"}</span>
-            <time dateTime={`PT${Math.ceil(remainingMs / 1000)}S`}>{remainingMs > 0 ? formatRemainingTime(remainingMs) : "00:00"}</time>
-          </div>
-        )}
-      </div>
-
-      <ol className="order-timeline-steps">
-        {steps.map(({ key, label, Icon }, index) => {
-          const state = index < activeStep ? "done" : index === activeStep ? "active" : "upcoming";
-          return (
-            <li key={key} className={`order-timeline-step ${state}`}>
-              <span className="order-timeline-dot" aria-hidden="true"><Icon size={16} /></span>
-              <span className="order-timeline-label">{label}</span>
-            </li>
-          );
-        })}
-      </ol>
-
-      {isWaitingForShipper && remainingMs !== null && (
-        <div className="shipper-wait-progress" aria-label={`Đã chờ ${Math.round(waitProgress)} phần trăm thời gian tìm Shipper`}>
-          <span style={{ width: `${waitProgress}%` }} />
-        </div>
-      )}
-    </section>
-  );
-};
+const TAB_OPTIONS = [
+  { id: "all", label: "Tất cả" },
+  { id: "active", label: "Đang xử lý" },
+  { id: "delivered", label: "Đã giao" },
+  { id: "cancelled", label: "Đã hủy" },
+];
 
 const MyOrders = () => {
   const { url, token, setShowLogin } = useContext(StoreContext);
@@ -148,15 +48,14 @@ const MyOrders = () => {
   const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [showDroneModal, setShowDroneModal] = useState(false);
-  const [canReceiveOrder, setCanReceiveOrder] = useState({});
+  const [activeTab, setActiveTab] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [showCancelModal, setShowCancelModal] = useState(null);
   const [cancelReason, setCancelReason] = useState("");
   const [refundBank, setRefundBank] = useState({ bankName: "", accountNumber: "", accountHolder: "" });
   const [extendingSearchId, setExtendingSearchId] = useState(null);
-  const [now, setNow] = useState(() => Date.now());
-  const hasShipperAwaitingAcceptance = orders.some((order) => order.deliveryMethod === "shipper" && ["pending", "preparing"].includes(order.orderStatus) && order.shipperAssignmentStatus === "unassigned");
+  const [retryingPaymentId, setRetryingPaymentId] = useState(null);
+
   const cancellationOrder = orders.find((item) => item._id === showCancelModal);
   const needsManualRefund = cancellationOrder?.paymentMethod === "PAYOS" && cancellationOrder.isPaid;
 
@@ -174,16 +73,15 @@ const MyOrders = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.data.success) {
-        const nextOrders = response.data.data;
-        setOrders(nextOrders);
+        setOrders(response.data.data || []);
       } else {
-        throw new Error(response.data.message || "Failed to load orders");
+        throw new Error(response.data.message || "Không thể tải danh sách đơn hàng");
       }
     } catch (error) {
       console.error("Fetch orders error:", error);
       if (!background) {
         setLoadError(
-          error.response?.data?.message || error.message || "Failed to load orders"
+          error.response?.data?.message || error.message || "Không thể tải danh sách đơn hàng"
         );
       }
     } finally {
@@ -191,52 +89,9 @@ const MyOrders = () => {
     }
   }, [token, url]);
 
-  const confirmReceived = async (orderId) => {
-    try {
-      const payload = {
-        orderId,
-        status: "delivered",
-        isPaid: true,
-        paidAt: new Date().toISOString(),
-      };
-
-      const response = await axios.post(`${url}/api/order/status`, payload, {
-        // Sửa route thành /status
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.data.success) {
-        toast.success("Delivery confirmed!");
-        fetchOrders();
-        setShowDroneModal(false);
-        setSelectedOrder(null);
-      } else {
-        toast.error(response.data.message || "Update failed");
-      }
-    } catch (error) {
-      toast.error("Update failed");
-    }
-  };
-
-  const handleViewDelivery = (order) => {
-    if (order.orderStatus === "delivering") {
-      setSelectedOrder(order);
-      setShowDroneModal(true);
-    }
-  };
-
-  const handleDeliveryComplete = () => {
-    if (selectedOrder) {
-      setCanReceiveOrder((prev) => ({
-        ...prev,
-        [selectedOrder._id]: true,
-      }));
-    }
-  };
-
   const handleCancelOrder = async () => {
     if (!cancelReason.trim()) {
-      toast.error("Please enter a cancellation reason");
+      toast.error("Vui lòng nhập lý do hủy đơn");
       return;
     }
     try {
@@ -250,23 +105,25 @@ const MyOrders = () => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (response.data.success) {
-        toast.success(needsManualRefund ? "Yêu cầu hoàn tiền đã được gửi." : "Order cancelled");
+        toast.success(needsManualRefund ? "Yêu cầu hoàn tiền đã được gửi thành công." : "Đã hủy đơn hàng.");
         setShowCancelModal(null);
         setCancelReason("");
         setRefundBank({ bankName: "", accountNumber: "", accountHolder: "" });
         fetchOrders();
       } else {
-        toast.error(response.data.message || "Cancellation failed");
+        toast.error(response.data.message || "Hủy đơn thất bại");
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || "Cancellation failed");
+      toast.error(error.response?.data?.message || "Hủy đơn thất bại");
     }
   };
 
   const handleReviewFlowChanged = (orderId, reviewFlow) => {
-    setOrders((current) => current.map((order) =>
-      order._id === orderId ? { ...order, reviewFlow } : order
-    ));
+    setOrders((current) =>
+      current.map((order) =>
+        order._id === orderId ? { ...order, reviewFlow } : order
+      )
+    );
   };
 
   const handleExtendShipperSearch = async (orderId) => {
@@ -277,20 +134,40 @@ const MyOrders = () => {
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      if (!response.data.success) throw new Error(response.data.message || "Could not continue searching");
+      if (!response.data.success) {
+        throw new Error(response.data.message || "Không thể tiếp tục tìm kiếm shipper");
+      }
       toast.success("Hệ thống sẽ tiếp tục tìm Shipper trong 10 phút.");
       fetchOrders();
     } catch (error) {
-      toast.error(error.response?.data?.message || error.message || "Could not continue searching");
+      toast.error(error.response?.data?.message || error.message || "Không thể tiếp tục tìm kiếm");
     } finally {
       setExtendingSearchId(null);
     }
   };
 
-  // Hàm helper để format date (giữ nguyên từ code cũ)
+  const handleRetryPayosPayment = async (orderId) => {
+    setRetryingPaymentId(orderId);
+    try {
+      const response = await axios.post(
+        `${url}/api/order/retry-payos`,
+        { orderId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!response.data.success || !response.data.checkoutUrl) {
+        throw new Error(response.data.message || "Không thể tạo lại liên kết thanh toán");
+      }
+      window.location.assign(response.data.checkoutUrl);
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message || "Không thể tạo lại liên kết thanh toán");
+      setRetryingPaymentId(null);
+    }
+  };
+
   const formatDate = (dateString) => {
+    if (!dateString) return "";
     const date = new Date(dateString);
-    return date.toLocaleString("en-US", {
+    return date.toLocaleString("vi-VN", {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -299,335 +176,597 @@ const MyOrders = () => {
     });
   };
 
-  // Hàm helper cho status text và color (giữ nguyên)
-  const getStatusText = (status) => {
-    const statusMap = {
-      pending: "Pending",
-      refund_pending: "Refund pending",
-      preparing: "Preparing",
-      delivering: "Delivering",
-      delivered: "Delivered",
-      cancelled: "Cancelled",
-    };
-    return statusMap[status] || status;
-  };
-
-  const getStatusColor = (status) => {
-    const colorMap = {
-      pending: "#ffc107",
-      refund_pending: "#ff9500",
-      preparing: "#17a2b8",
-      delivering: "#007bff",
-      delivered: "#28a745",
-      cancelled: "#dc3545",
-    };
-    return colorMap[status] || "#6c757d";
-  };
-
   useEffect(() => {
     fetchOrders();
     if (!token) return undefined;
-    // The expiry job runs outside the API process, so polling is required to
-    // Surface a shipper-search timeout without asking the customer to reload.
     const refreshId = window.setInterval(() => fetchOrders({ background: true }), 30000);
     return () => window.clearInterval(refreshId);
   }, [fetchOrders, token]);
 
-  useEffect(() => {
-    if (!hasShipperAwaitingAcceptance) return undefined;
-    const refreshClock = () => setNow(Date.now());
-    refreshClock();
-    const timerId = window.setInterval(refreshClock, 1000);
-    return () => window.clearInterval(timerId);
-  }, [hasShipperAwaitingAcceptance]);
+  // Tab counts
+  const tabCounts = useMemo(() => {
+    const counts = {
+      all: orders.length,
+      active: orders.filter((o) => ["pending_payment", "pending", "preparing", "delivering"].includes(o.orderStatus)).length,
+      delivered: orders.filter((o) => o.orderStatus === "delivered").length,
+      cancelled: orders.filter((o) => ["cancelled", "refund_pending"].includes(o.orderStatus)).length,
+    };
+    return counts;
+  }, [orders]);
+
+  // Filtered orders
+  const filteredOrders = useMemo(() => {
+    return orders.filter((order) => {
+      // Tab filter
+      if (activeTab === "active" && !["pending_payment", "pending", "preparing", "delivering"].includes(order.orderStatus)) return false;
+      if (activeTab === "delivered" && order.orderStatus !== "delivered") return false;
+      if (activeTab === "cancelled" && !["cancelled", "refund_pending"].includes(order.orderStatus)) return false;
+
+      // Search query filter
+      if (searchQuery.trim()) {
+        const query = searchQuery.trim().toLowerCase();
+        const matchesId = order._id?.toLowerCase().includes(query);
+        const matchesRestaurant = order.restaurantId?.name?.toLowerCase().includes(query);
+        const matchesItem = order.orderItems?.some((item) => item.name?.toLowerCase().includes(query));
+        return matchesId || matchesRestaurant || matchesItem;
+      }
+      return true;
+    });
+  }, [orders, activeTab, searchQuery]);
+
+  const getItemImage = (item) => {
+    const raw = item.product?.image || item.image;
+    if (!raw) return null;
+    return raw.startsWith("http") ? raw : `${url}/images/${raw}`;
+  };
+
+  const getPaymentBadge = (method, isPaid) => {
+    const methodNames = {
+      COD: "Tiền mặt khi nhận hàng",
+      PAYOS: "PayOS",
+      VNPAY: "VNPay",
+    };
+    return (
+      <span className="order-payment-pill">
+        <span className="payment-name">{methodNames[method] || method}</span>
+        <span className={`payment-status ${isPaid ? "paid" : "unpaid"}`}>
+          {isPaid ? "Đã thanh toán" : "Chưa thanh toán"}
+        </span>
+      </span>
+    );
+  };
 
   return (
-    <div className="my-orders">
-      <h2>My Orders</h2>
-      {isLoading ? (
-        <SkeletonList count={3} height={190} />
-      ) : !token ? (
-        <EmptyState
-          icon={LogIn}
-          title="Sign in to see your orders"
-          description="Your order history and live drone tracking live behind your account."
-          actionLabel="Sign in"
-          onAction={() => setShowLogin(true)}
-        />
-      ) : loadError ? (
-        <ErrorState
-          title="Could not load your orders"
-          description={loadError}
-          onRetry={fetchOrders}
-        />
-      ) : orders.length === 0 ? (
-        <EmptyState
-          icon={Package}
-          title="No orders yet"
-          description="When you place an order it'll appear here, with live drone tracking."
-          actionLabel="Order something"
-          onAction={() => navigate("/")}
-        />
-      ) : (
-        <div className="my-orders-list">
-          {orders.map((order) => (
-            <div key={order._id} className="my-orders-card">
-              <div className="order-header">
-                <div className="order-info">
-                  <h4>Order #{order._id.slice(-8).toUpperCase()}</h4>
-                  <span className="order-date">
-                    {formatDate(order.createdAt || order.orderDate)}
-                  </span>
-                </div>
-                <div
-                  className="order-status"
-                  style={{ backgroundColor: getStatusColor(order.orderStatus) }}
-                >
-                  {getStatusText(order.orderStatus)}
-                </div>
-              </div>
+    <div className="my-orders-page">
+      <div className="my-orders-container">
+        {/* Header Section */}
+        <header className="my-orders-hero">
+          <div className="my-orders-hero-text">
+            <span className="my-orders-eyebrow">Quản lý mua hàng</span>
+            <h1>Đơn hàng của tôi</h1>
+            <p className="my-orders-subtitle">
+              Theo dõi lộ trình giao hàng trực tiếp bằng Drone và Shipper mọi lúc, mọi nơi.
+            </p>
+          </div>
 
-              <div className="order-details">
-                <div className="order-items">
-                  <strong>Items:</strong>
-                  <div className="items-list">
-                    {order.orderItems?.map((item, index) => (
-                      <div key={index} className="order-item">
-                        <span className="item-name">
-                          {item.name}
-                          {item.selectedOptions?.length > 0 && (
-                            <span className="item-options">
-                              {item.selectedOptions
-                                .map((option) => option.optionName)
-                                .join(" · ")}
-                            </span>
-                          )}
-                          {item.note && (
-                            <span className="item-note">“{item.note}”</span>
-                          )}
-                        </span>
-                        <span className="item-quantity">x{item.quantity}</span>
-                        <span className="item-price">{formatVND(item.price)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+          {token && orders.length > 0 && (
+            <button
+              type="button"
+              className="my-orders-refresh-btn"
+              onClick={() => fetchOrders()}
+              disabled={isLoading}
+              title="Làm mới danh sách"
+            >
+              <RotateCcw size={16} className={isLoading ? "spin-icon" : ""} />
+              <span>Cập nhật</span>
+            </button>
+          )}
+        </header>
 
-                <div className="order-summary">
-                  <div className="summary-row">
-                    <span>Total:</span>
-                    <strong>{formatVND(order.totalPrice)}</strong>
-                  </div>
-                  <div className="summary-row">
-                    <span>Payment method:</span>
-                    <span>
-                      {order.paymentMethod === "COD"
-                        ? "Cash on delivery"
-                        : order.paymentMethod === "PAYOS" ? "PayOS" : "VNPay"}
-                    </span>
-                  </div>
-                  <div className="summary-row">
-                    <span>Delivery method:</span>
-                    <span>{order.deliveryMethod === "shipper" ? "Shipper" : "Drone"}</span>
-                  </div>
-                  <div className="summary-row summary-row-stacked">
-                    <span>Delivery address:</span>
-                    <span className="summary-address">
-                      {[order.shippingAddress?.address, order.shippingAddress?.city]
-                        .filter(Boolean)
-                        .join(", ")}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {order.refundStatus === "requested" && (
-                <p className="refund-status" role="status">
-                  {order.paymentMethod === "PAYOS"
-                    ? "Yêu cầu hoàn tiền đang chờ Admin xử lý."
-                    : `Hoàn tiền VNPay đã được yêu cầu. Mã yêu cầu: ${order.refundRequestId}.`}
-                </p>
-              )}
-              {order.refundStatus === "failed" && (
-                <p className="refund-status refund-status-failed" role="alert">
-                  Chưa thể gửi yêu cầu hoàn tiền. Vui lòng liên hệ hỗ trợ.
-                </p>
-              )}
-
-              <OrderStatusTimeline order={order} now={now} />
-
-              <OrderReviewPrompt
-                order={order}
-                url={url}
-                token={token}
-                onFlowChanged={handleReviewFlowChanged}
-              />
-
-              {(order.orderStatus === "pending" || (
-                order.orderStatus === "preparing" &&
-                order.deliveryMethod === "shipper" &&
-                order.shipperAssignmentStatus === "expired" &&
-                order.paymentMethod === "PAYOS" &&
-                order.isPaid
-              )) && (
-                <div className="order-actions">
-                  {order.deliveryMethod === "shipper" && order.shipperAssignmentStatus === "expired" && order.paymentMethod === "PAYOS" && order.isPaid && (
+        {/* Content Section */}
+        {isLoading ? (
+          <div className="my-orders-loading-wrap">
+            <SkeletonList count={3} height={200} />
+          </div>
+        ) : !token ? (
+          <div className="my-orders-empty-state">
+            <EmptyState
+              icon={LogIn}
+              title="Đăng nhập để xem đơn hàng"
+              description="Lịch sử đơn hàng, hành trình bay của Drone và trạng thái giao hàng được lưu trong tài khoản của bạn."
+              actionLabel="Đăng nhập ngay"
+              onAction={() => setShowLogin(true)}
+            />
+          </div>
+        ) : loadError ? (
+          <div className="my-orders-error-wrap">
+            <ErrorState
+              title="Không thể tải danh sách đơn hàng"
+              description={loadError}
+              onRetry={() => fetchOrders()}
+            />
+          </div>
+        ) : orders.length === 0 ? (
+          <div className="my-orders-empty-state">
+            <EmptyState
+              icon={Package}
+              title="Bạn chưa có đơn hàng nào"
+              description="Khám phá các món ăn thơm ngon và trải nghiệm công nghệ giao hàng bằng Drone ngay hôm nay!"
+              actionLabel="Khám phá món ngon"
+              onAction={() => navigate("/")}
+            />
+          </div>
+        ) : (
+          <>
+            {/* Filter Bar & Tabs */}
+            <div className="my-orders-filter-bar">
+              <nav className="my-orders-tabs" aria-label="Bộ lọc trạng thái">
+                {TAB_OPTIONS.map((tab) => {
+                  const count = tabCounts[tab.id];
+                  const isActive = activeTab === tab.id;
+                  return (
                     <button
+                      key={tab.id}
                       type="button"
-                      onClick={() => handleExtendShipperSearch(order._id)}
-                      className="continue-shipper-search-btn"
-                      disabled={extendingSearchId === order._id}
+                      className={`my-orders-tab ${isActive ? "active" : ""}`}
+                      onClick={() => setActiveTab(tab.id)}
                     >
-                      {extendingSearchId === order._id ? "Đang tìm Shipper…" : "Tìm Shipper thêm 10 phút"}
+                      <span>{tab.label}</span>
+                      {count > 0 && (
+                        <span className={`my-orders-tab-count ${isActive ? "active" : ""}`}>
+                          {count}
+                        </span>
+                      )}
                     </button>
-                  )}
-                  <button
-                    onClick={() => setShowCancelModal(order._id)}
-                    className="cancel-order-btn"
-                  >
-                    Cancel order
-                  </button>
-                </div>
-              )}
+                  );
+                })}
+              </nav>
 
-              {order.orderStatus === "delivering" && (
-                <div className="order-actions">
-                  {order.deliveryMethod !== "shipper" && (
-                    <button
-                      onClick={() => handleViewDelivery(order)}
-                      className="view-delivery-btn"
-                    >
-                      View delivery details
-                    </button>
-                  )}
-                  <button
-                    onClick={() => confirmReceived(order._id)}
-                    className={`confirm-received-btn ${
-                      canReceiveOrder[order._id] ? "enabled" : "disabled"
-                    }`}
-                    disabled={!canReceiveOrder[order._id]}
-                  >
-                    Confirm received
-                  </button>
-                </div>
-              )}
-
-              {order.cancellationCode === "NO_SHIPPER_AVAILABLE" && (
-                <div className="shipper-timeout-notice" role="alert">
-                  <div>
-                    <strong>Không tìm được Shipper</strong>
-                    <p>{order.reason || "Đã chờ 10 phút nhưng chưa có Shipper nhận đơn. Bạn có thể tiếp tục tìm hoặc hủy đơn để hoàn tiền."}</p>
-                  </div>
-                </div>
-              )}
-
-              {order.orderStatus === "cancelled" && order.reason && order.cancellationCode !== "NO_SHIPPER_AVAILABLE" && (
-                <div className="cancel-reason">
-                  <strong>Cancellation reason:</strong> {order.reason}
-                </div>
-              )}
-
-              {order.orderStatus === "cancelled" && order.deliveryMethod === "shipper" && order.paymentMethod === "PAYOS" && order.isPaid && order.cancellationCode === "NO_SHIPPER_AVAILABLE" && !["requested", "paid"].includes(order.refundStatus) && (
-                <div className="order-actions">
+              <div className="my-orders-search">
+                <Search size={16} className="search-icon" />
+                <input
+                  type="text"
+                  placeholder="Tìm theo mã đơn, món ăn..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  aria-label="Tìm kiếm đơn hàng"
+                />
+                {searchQuery && (
                   <button
                     type="button"
-                    onClick={() => setShowCancelModal(order._id)}
-                    className="continue-shipper-search-btn"
+                    className="search-clear-btn"
+                    onClick={() => setSearchQuery("")}
                   >
-                    Gửi yêu cầu hoàn tiền
+                    <X size={14} />
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
-          ))}
-        </div>
-      )}
+
+            {/* Orders Feed */}
+            {filteredOrders.length === 0 ? (
+              <div className="my-orders-no-match">
+                <Package size={40} className="no-match-icon" />
+                <h3>Không tìm thấy đơn hàng phù hợp</h3>
+                <p>Thử chọn tab khác hoặc tìm kiếm với từ khóa khác.</p>
+                <button
+                  type="button"
+                  className="reset-filter-btn"
+                  onClick={() => {
+                    setActiveTab("all");
+                    setSearchQuery("");
+                  }}
+                >
+                  Xem tất cả đơn hàng
+                </button>
+              </div>
+            ) : (
+              <div className="my-orders-feed">
+                {filteredOrders.map((order) => {
+                  const statusInfo = STATUS_CONFIG[order.orderStatus] || {
+                    label: order.orderStatus,
+                    colorClass: "status-default",
+                  };
+                  const isDrone = order.deliveryMethod === "drone";
+                  const orderCode = order._id.slice(-8).toUpperCase();
+                  const orderDate = formatDate(order.createdAt || order.orderDate);
+                  const restaurantName = order.restaurantId?.name || "Nhà hàng đối tác";
+
+                  return (
+                    <article key={order._id} className="order-card">
+                      {/* Card Header */}
+                      <div className="order-card-header">
+                        <div className="order-card-restaurant">
+                          <div className="restaurant-icon-box">
+                            <Store size={18} />
+                          </div>
+                          <div className="restaurant-meta">
+                            <h3 className="restaurant-name">{restaurantName}</h3>
+                            <div className="order-meta-chips">
+                              <span className="order-code">#{orderCode}</span>
+                              <span className="order-dot">·</span>
+                              <span className="order-date-text">
+                                <Clock size={13} />
+                                {orderDate}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="order-card-badges">
+                          <div className={`delivery-method-tag ${isDrone ? "drone" : "shipper"}`}>
+                            {isDrone ? (
+                              <>
+                                <Navigation size={13} className="drone-nav-icon" />
+                                <span>Giao bằng Drone</span>
+                              </>
+                            ) : (
+                              <>
+                                <Bike size={13} />
+                                <span>Tài xế giao</span>
+                              </>
+                            )}
+                          </div>
+
+                          <div className={`order-status-pill ${statusInfo.colorClass}`}>
+                            {order.orderStatus === "delivering" && (
+                              <span className="live-pulse-dot" aria-hidden="true" />
+                            )}
+                            <span>{statusInfo.label}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Items Preview */}
+                      <div className="order-items-preview">
+                        <div className="order-items-list">
+                          {order.orderItems?.map((item, idx) => {
+                            const imgSrc = getItemImage(item);
+                            return (
+                              <div key={`${item.name}-${idx}`} className="order-item-row">
+                                <div className="item-thumbnail-box">
+                                  {imgSrc ? (
+                                    <img
+                                      src={imgSrc}
+                                      alt={item.name}
+                                      className="item-thumbnail-img"
+                                      onError={(e) => {
+                                        e.target.style.display = "none";
+                                        if (e.target.nextSibling) {
+                                          e.target.nextSibling.style.display = "flex";
+                                        }
+                                      }}
+                                    />
+                                  ) : null}
+                                  <div
+                                    className="item-thumbnail-fallback"
+                                    style={{ display: imgSrc ? "none" : "flex" }}
+                                  >
+                                    <UtensilsCrossed size={16} />
+                                  </div>
+                                </div>
+
+                                <div className="item-info-col">
+                                  <div className="item-title-line">
+                                    <span className="item-name">{item.name}</span>
+                                    <span className="item-qty">×{item.quantity}</span>
+                                  </div>
+
+                                  {item.selectedOptions?.length > 0 && (
+                                    <div className="item-options-line">
+                                      {item.selectedOptions.map((opt) => opt.optionName).join(" · ")}
+                                    </div>
+                                  )}
+
+                                  {item.note && (
+                                    <div className="item-note-line">
+                                      Ghi chú: “{item.note}”
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="item-price-col">
+                                  {formatVND(item.price * item.quantity)}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Special Alert Banners */}
+                      {order.refundStatus === "requested" && (
+                        <div className="order-alert-banner alert-warning" role="status">
+                          <AlertCircle size={16} />
+                          <span>
+                            {order.paymentMethod === "PAYOS"
+                              ? "Yêu cầu hoàn tiền đang chờ Ban Quản trị xét duyệt và xử lý."
+                              : `Yêu cầu hoàn tiền VNPay đã được gửi. Mã yêu cầu: ${order.refundRequestId}.`}
+                          </span>
+                        </div>
+                      )}
+
+                      {order.refundStatus === "failed" && (
+                        <div className="order-alert-banner alert-danger" role="alert">
+                          <XCircle size={16} />
+                          <span>Chưa thể gửi yêu cầu hoàn tiền. Vui lòng liên hệ bộ phận hỗ trợ khách hàng.</span>
+                        </div>
+                      )}
+
+                      {order.cancellationCode === "NO_SHIPPER_AVAILABLE" && (
+                        <div className="order-alert-banner alert-warning" role="alert">
+                          <AlertCircle size={16} />
+                          <div>
+                            <strong>Không tìm được tài xế nhận đơn</strong>
+                            <p>
+                              {order.reason ||
+                                "Đã quá 10 phút nhưng chưa có tài xế nhận đơn. Bạn có thể gia hạn tìm kiếm hoặc gửi yêu cầu hoàn tiền."}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {order.orderStatus === "cancelled" &&
+                        order.reason &&
+                        order.cancellationCode !== "NO_SHIPPER_AVAILABLE" && (
+                          <div className="order-alert-banner alert-neutral">
+                            <span className="cancel-reason-label">Lý do hủy đơn:</span>
+                            <span className="cancel-reason-text">{order.reason}</span>
+                          </div>
+                        )}
+
+                      {/* Review Flow Integration */}
+                      <OrderReviewPrompt
+                        order={order}
+                        url={url}
+                        token={token}
+                        onFlowChanged={handleReviewFlowChanged}
+                      />
+
+                      {/* Card Footer */}
+                      <div className="order-card-footer">
+                        <div className="order-footer-details">
+                          <div className="footer-address">
+                            <MapPin size={14} className="address-icon" />
+                            <span className="address-text">
+                              {[
+                                order.shippingAddress?.fullName,
+                                order.shippingAddress?.address,
+                                order.shippingAddress?.city,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ") || "Chưa có địa chỉ"}
+                            </span>
+                          </div>
+
+                          <div className="footer-payment">
+                            {getPaymentBadge(order.paymentMethod, order.isPaid)}
+                          </div>
+                        </div>
+
+                        <div className="order-footer-actions">
+                          <div className="order-total-block">
+                            <span className="total-label">Tổng tiền</span>
+                            <span className="total-amount">{formatVND(order.totalPrice)}</span>
+                          </div>
+
+                          <div className="order-btn-group">
+                            {order.paymentMethod === "PAYOS" &&
+                              !order.isPaid &&
+                              order.orderStatus === "pending_payment" && (
+                                <button
+                                  type="button"
+                                  className="btn-retry-payment"
+                                  onClick={() => handleRetryPayosPayment(order._id)}
+                                  disabled={retryingPaymentId === order._id}
+                                  aria-busy={retryingPaymentId === order._id}
+                                >
+                                  <RotateCcw size={14} aria-hidden="true" className={retryingPaymentId === order._id ? "spin-icon" : ""} />
+                                  <span>{retryingPaymentId === order._id ? "Đang tạo link…" : "Thanh toán lại"}</span>
+                                </button>
+                              )}
+                            {/* Actions for Shipper timeout / Cancel */}
+                            {(order.orderStatus === "pending" ||
+                              order.orderStatus === "pending_payment" ||
+                              (order.orderStatus === "preparing" &&
+                                order.deliveryMethod === "shipper" &&
+                                order.shipperAssignmentStatus === "expired" &&
+                                order.paymentMethod === "PAYOS" &&
+                                order.isPaid)) && (
+                              <>
+                                {order.deliveryMethod === "shipper" &&
+                                  order.shipperAssignmentStatus === "expired" &&
+                                  order.paymentMethod === "PAYOS" &&
+                                  order.isPaid && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleExtendShipperSearch(order._id)}
+                                      className="btn-extend-search"
+                                      disabled={extendingSearchId === order._id}
+                                    >
+                                      {extendingSearchId === order._id
+                                        ? "Đang tìm kiếm…"
+                                        : "Tìm Shipper thêm 10 phút"}
+                                    </button>
+                                  )}
+                                <button
+                                  type="button"
+                                  onClick={() => setShowCancelModal(order._id)}
+                                  className="btn-cancel-order"
+                                >
+                                  Hủy đơn
+                                </button>
+                              </>
+                            )}
+
+                            {order.orderStatus === "cancelled" &&
+                              order.deliveryMethod === "shipper" &&
+                              order.paymentMethod === "PAYOS" &&
+                              order.isPaid &&
+                              order.cancellationCode === "NO_SHIPPER_AVAILABLE" &&
+                              !["requested", "paid"].includes(order.refundStatus) && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowCancelModal(order._id)}
+                                  className="btn-refund-request"
+                                >
+                                  Yêu cầu hoàn tiền
+                                </button>
+                              )}
+
+                            <button
+                              type="button"
+                              className="btn-view-details"
+                              onClick={() => navigate(`/myorders/${order._id}`)}
+                            >
+                              <span>{order.orderStatus === "delivering" ? "Theo dõi đơn" : "Chi tiết đơn"}</span>
+                              <ChevronRight size={15} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       {/* Cancel Order Modal */}
       {showCancelModal && (
         <div
-          className="drone-modal-overlay"
+          className="order-modal-backdrop"
           onClick={() => {
             setShowCancelModal(null);
             setCancelReason("");
           }}
         >
           <div
-            className="cancel-modal-content"
+            className="order-modal-dialog"
             onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cancel-dialog-title"
           >
-            <h3>{needsManualRefund ? "Yêu cầu hoàn tiền" : "Cancel order"}</h3>
-            <p>{needsManualRefund ? "Cho biết lý do và thông tin nhận tiền để Admin xử lý hoàn tiền." : "Please provide a reason for cancellation:"}</p>
-            <textarea
-              value={cancelReason}
-              onChange={(e) => setCancelReason(e.target.value)}
-              placeholder="Enter cancellation reason..."
-              rows={3}
-              className="cancel-reason-input"
-            />
-            {needsManualRefund && (
-              <div className="refund-bank-fields">
-                <p>Đơn đã thanh toán. Thông tin này chỉ được Admin dùng để hoàn tiền.</p>
-                <label>Tên ngân hàng<input required value={refundBank.bankName} onChange={(event) => setRefundBank((current) => ({ ...current, bankName: event.target.value }))} /></label>
-                <label>Số tài khoản<input required value={refundBank.accountNumber} onChange={(event) => setRefundBank((current) => ({ ...current, accountNumber: event.target.value }))} inputMode="numeric" /></label>
-                <label>Tên chủ tài khoản<input required value={refundBank.accountHolder} onChange={(event) => setRefundBank((current) => ({ ...current, accountHolder: event.target.value }))} /></label>
+            <div className="order-modal-header">
+              <div className="order-modal-title-box">
+                <AlertCircle size={20} className="modal-title-icon" />
+                <h3 id="cancel-dialog-title">
+                  {needsManualRefund ? "Yêu cầu hoàn tiền đơn hàng" : "Xác nhận hủy đơn hàng"}
+                </h3>
               </div>
-            )}
-            <div className="cancel-modal-actions">
               <button
+                type="button"
+                className="order-modal-close"
+                onClick={() => {
+                  setShowCancelModal(null);
+                  setCancelReason("");
+                }}
+                aria-label="Đóng cửa sổ"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="order-modal-body">
+              <p className="order-modal-desc">
+                {needsManualRefund
+                  ? "Đơn hàng đã được thanh toán trực tuyến qua PayOS. Vui lòng cung cấp lý do hủy và thông tin tài khoản ngân hàng thụ hưởng để Admin xử lý hoàn tiền."
+                  : "Vui lòng cho biết lý do bạn muốn hủy đơn hàng này:"}
+              </p>
+
+              <div className="form-group">
+                <label htmlFor="cancel-reason">Lý do hủy đơn *</label>
+                <textarea
+                  id="cancel-reason"
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="Nhập lý do hủy đơn hàng..."
+                  rows={3}
+                  className="modal-textarea"
+                />
+              </div>
+
+              {needsManualRefund && (
+                <div className="refund-bank-section">
+                  <div className="refund-section-title">
+                    <h4>Thông tin tài khoản nhận tiền hoàn</h4>
+                    <span>Admin sẽ chuyển khoản hoàn tiền theo thông tin này</span>
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="bank-name">Tên ngân hàng *</label>
+                    <input
+                      id="bank-name"
+                      required
+                      placeholder="VD: Vietcombank, MB Bank, Techcombank..."
+                      value={refundBank.bankName}
+                      onChange={(e) =>
+                        setRefundBank((curr) => ({ ...curr, bankName: e.target.value }))
+                      }
+                      className="modal-input"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="account-number">Số tài khoản *</label>
+                    <input
+                      id="account-number"
+                      required
+                      inputMode="numeric"
+                      placeholder="Nhập số tài khoản ngân hàng"
+                      value={refundBank.accountNumber}
+                      onChange={(e) =>
+                        setRefundBank((curr) => ({ ...curr, accountNumber: e.target.value }))
+                      }
+                      className="modal-input"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="account-holder">Tên chủ tài khoản (in hoa không dấu) *</label>
+                    <input
+                      id="account-holder"
+                      required
+                      placeholder="VD: NGUYEN VAN A"
+                      value={refundBank.accountHolder}
+                      onChange={(e) =>
+                        setRefundBank((curr) => ({ ...curr, accountHolder: e.target.value }))
+                      }
+                      className="modal-input"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="order-modal-footer">
+              <button
+                type="button"
                 onClick={() => {
                   setShowCancelModal(null);
                   setCancelReason("");
                   setRefundBank({ bankName: "", accountNumber: "", accountHolder: "" });
                 }}
-                className="cancel-modal-back-btn"
+                className="btn-modal-back"
               >
-                Go back
+                Quay lại
               </button>
               <button
+                type="button"
                 onClick={handleCancelOrder}
-                className="cancel-modal-confirm-btn"
-                disabled={!cancelReason.trim() || (() => {
-                  return needsManualRefund && Object.values(refundBank).some((value) => !value.trim());
-                })()}
+                className="btn-modal-confirm"
+                disabled={
+                  !cancelReason.trim() ||
+                  (needsManualRefund &&
+                    Object.values(refundBank).some((val) => !val.trim()))
+                }
               >
-                {needsManualRefund ? "Gửi yêu cầu hoàn tiền" : "Confirm cancellation"}
+                {needsManualRefund ? "Gửi yêu cầu hoàn tiền" : "Xác nhận hủy đơn"}
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Drone Delivery Modal */}
-      {showDroneModal && selectedOrder && selectedOrder.deliveryMethod !== "shipper" && (
-        <div
-          className="drone-modal-overlay"
-          onClick={() => setShowDroneModal(false)}
-        >
-          <div
-            className="drone-modal-content"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              className="drone-modal-close"
-              onClick={() => setShowDroneModal(false)}
-            >
-              ✕
-            </button>
-            <DroneDelivery
-              order={selectedOrder}
-              onDeliveryComplete={handleDeliveryComplete}
-            />
-            {canReceiveOrder[selectedOrder._id] && (
-              <div className="drone-modal-actions">
-                <button
-                  onClick={() => confirmReceived(selectedOrder._id)}
-                  className="confirm-received-btn enabled"
-                >
-                  Confirm received
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )}

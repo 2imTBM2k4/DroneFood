@@ -6,6 +6,8 @@ export const loginUser = async (req, res) => {
     const result = await userService.loginUser(req.body);
     res.json(result);
   } catch (error) {
+    const { recordAudit } = await import("../utils/auditLog.js");
+    await recordAudit({ action: "auth.login_failed", targetType: "authentication", category: "authentication", outcome: "failure", ip: req.ip, userAgent: req.get("user-agent") || "", metadata: { email: String(req.body?.email || "").replace(/^(.{2}).*(@.*)$/, "$1***$2") } });
     res
       .status(error.statusCode || 500)
       .json({ success: false, message: error.message });

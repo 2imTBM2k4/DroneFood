@@ -15,6 +15,9 @@ const StoreContextProvider = (props) => {
   const [cartRestaurantId, setCartRestaurantId] = useState(null);
   const [showLogin, setShowLogin] = useState(false);
   const [user, setUser] = useState(null);
+  // This is the explicit saved delivery choice used by navbar and checkout.
+  // It must never be overwritten by browser GPS updates.
+  const [activeAddressId, setActiveAddressIdState] = useState(() => localStorage.getItem("activeAddressId") || "");
   // This is intentionally separate from the saved delivery address. It is
   // only used to keep nearby-restaurant results current while the customer
   // moves, and must not silently change where an order will be delivered.
@@ -34,6 +37,13 @@ const StoreContextProvider = (props) => {
   // that redirect on "no token" or "empty cart" must wait for this, or a
   // direct hit on /checkout bounces before the session is restored.
   const [isHydrated, setIsHydrated] = useState(false);
+
+  const setActiveAddressId = useCallback((id) => {
+    const next = id || "";
+    setActiveAddressIdState(next);
+    if (next) localStorage.setItem("activeAddressId", next);
+    else localStorage.removeItem("activeAddressId");
+  }, []);
 
   const fetchFoodList = useCallback(async () => {
     try {
@@ -326,6 +336,15 @@ const StoreContextProvider = (props) => {
     }
   }, [clearLocalCart, fetchUserInfo, loadCartData, token]);
 
+  useEffect(() => {
+    if (!user?.addressBook?.length) return;
+    const stillExists = user.addressBook.some((entry) => String(entry.id || entry._id) === activeAddressId);
+    if (!stillExists) {
+      const fallback = user.addressBook.find((entry) => entry.isDefault) || user.addressBook[0];
+      setActiveAddressId(String(fallback.id || fallback._id));
+    }
+  }, [activeAddressId, setActiveAddressId, user?.addressBook]);
+
   const contextValue = {
     food_list,
     restaurant_list,
@@ -346,6 +365,8 @@ const StoreContextProvider = (props) => {
     cartRestaurantId,
     user,
     setUser,
+    activeAddressId,
+    setActiveAddressId,
     liveLocation,
     liveAddress,
     isLoadingFoods,

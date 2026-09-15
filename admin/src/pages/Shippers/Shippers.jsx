@@ -15,7 +15,7 @@ const Shippers = ({ url }) => {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState("");
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("pending");
+  const [filter, setFilter] = useState("all");
 
   const headers = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
   const load = useCallback(async () => {
@@ -48,6 +48,10 @@ const Shippers = ({ url }) => {
   const visible = useMemo(() => profiles.filter((profile) => {
     const text = `${profile.user?.name || ""} ${profile.user?.email || ""} ${profile.user?.phone || ""}`.toLowerCase();
     return (filter === "all" || profile.approvalStatus === filter) && text.includes(query.trim().toLowerCase());
+  }).sort((left, right) => {
+    const rank = { pending: 0, approved: 1, rejected: 2 };
+    const difference = (rank[left.approvalStatus] ?? 9) - (rank[right.approvalStatus] ?? 9);
+    return difference || new Date(right.createdAt || 0) - new Date(left.createdAt || 0);
   }), [profiles, filter, query]);
 
   const counts = profiles.reduce((result, profile) => ({ ...result, [profile.approvalStatus]: (result[profile.approvalStatus] || 0) + 1 }), {});

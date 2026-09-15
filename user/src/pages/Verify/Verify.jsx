@@ -26,8 +26,8 @@ const Verify = () => {
     }
 
     if (paymentCancelled) {
-      toast.info("Payment was cancelled.");
-      navigate("/checkout");
+      toast.info("Payment was cancelled. You can retry from your order.");
+      navigate("/myorders");
       return;
     }
 

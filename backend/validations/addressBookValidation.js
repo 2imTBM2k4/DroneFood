@@ -6,6 +6,8 @@ const phone = Joi.string().trim().pattern(/^[0-9+\-\s()]{8,15}$/).messages({
 
 const fields = {
   label: Joi.string().trim().min(1).max(30),
+  // Accepted only for backward-compatible clients. The service overwrites it
+  // with the account fullname, so it is never a second source of truth.
   recipient: Joi.string().trim().min(2).max(50),
   phone,
   address: Joi.string().trim().min(3).max(200),
@@ -20,7 +22,6 @@ const fields = {
 export const createAddressEntrySchema = Joi.object({
   ...fields,
   label: fields.label.required(),
-  recipient: fields.recipient.required(),
   phone: fields.phone.required(),
   address: fields.address.required(),
   city: fields.city.required(),

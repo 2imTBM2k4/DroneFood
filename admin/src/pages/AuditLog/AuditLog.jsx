@@ -7,6 +7,15 @@ import "./AuditLog.css";
 // Every action the backend records today. Kept as a list so the filter offers
 // real choices rather than whatever happens to be in the current page.
 const ACTIONS = [
+  "auth.login_succeeded",
+  "auth.login_failed",
+  "password.changed",
+  "email.updated",
+  "bank_account.viewed",
+  "bank_account.updated",
+  "money.transactions_viewed",
+  "money.withdrawals_viewed",
+  "withdrawal.requested",
   "order.status_changed",
   "order.status_overridden_by_admin",
   "user.updated_by_admin",
@@ -19,7 +28,8 @@ const ACTIONS = [
   "restaurant.deleted",
 ];
 
-const TARGET_TYPES = ["user", "restaurant", "order", "food", "drone"];
+const TARGET_TYPES = ["user", "restaurant", "order", "food", "drone", "authentication", "bank_account", "wallet", "refund", "withdrawal"];
+const CATEGORIES = [["authentication", "Đăng nhập & xác thực"], ["email", "Email"], ["password", "Mật khẩu"], ["banking", "Tài khoản ngân hàng"], ["money", "Tiền & giao dịch"], ["access", "Truy cập dữ liệu nhạy cảm"], ["operations", "Can thiệp vận hành"]];
 
 // Actions are graded by how much they need scrutiny, not by which entity they
 // touch: a deletion or an override should stand out when scanning the page.
@@ -39,6 +49,7 @@ const AuditLog = ({ url }) => {
   const [page, setPage] = useState(1);
   const [targetType, setTargetType] = useState("");
   const [action, setAction] = useState("");
+  const [category, setCategory] = useState("");
 
   const fetchLogs = useCallback(async () => {
     const token = localStorage.getItem("token");
@@ -53,6 +64,7 @@ const AuditLog = ({ url }) => {
       const params = new URLSearchParams({ page: String(page), limit: "25" });
       if (targetType) params.set("targetType", targetType);
       if (action) params.set("action", action);
+      if (category) params.set("category", category);
 
       const res = await axios.get(`${url}/api/audit?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -71,7 +83,7 @@ const AuditLog = ({ url }) => {
     } finally {
       setLoading(false);
     }
-  }, [url, page, targetType, action]);
+  }, [url, page, targetType, action, category]);
 
   useEffect(() => {
     fetchLogs();
@@ -132,13 +144,22 @@ const AuditLog = ({ url }) => {
           </select>
         </label>
 
-        {(targetType || action) && (
+        <label className="audit-filter">
+          <span>Nhóm dữ liệu</span>
+          <select value={category} onChange={(e) => changeFilter(setCategory)(e.target.value)}>
+            <option value="">Tất cả dữ liệu</option>
+            {CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+
+        {(targetType || action || category) && (
           <button
             type="button"
             className="audit-clear"
             onClick={() => {
               setTargetType("");
               setAction("");
+              setCategory("");
               setPage(1);
             }}
           >
@@ -163,6 +184,7 @@ const AuditLog = ({ url }) => {
               <b>When</b>
               <b>Who</b>
               <b>Action</b>
+              <b>Category</b>
               <b>Target</b>
               <b>Reason / details</b>
             </div>
@@ -173,7 +195,7 @@ const AuditLog = ({ url }) => {
               <div className="audit-empty">
                 <ScrollText size={22} />
                 <p>
-                  {targetType || action
+                  {targetType || action || category
                     ? "No entries match these filters."
                     : "Nothing has been recorded yet."}
                 </p>
@@ -200,9 +222,11 @@ const AuditLog = ({ url }) => {
                     {formatAction(log.action)}
                   </span>
 
+                  <span className="audit-category">{log.category || "operations"}</span>
+
                   <span className="audit-target">
                     <span className="audit-target-type">{log.targetType}</span>
-                    <code>{String(log.targetId).slice(-6)}</code>
+                    <code>{log.targetId ? String(log.targetId).slice(-6) : "—"}</code>
                   </span>
 
                   <span className="audit-details">

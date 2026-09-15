@@ -115,6 +115,7 @@ const Add = ({ url }) => {
         // Sử dụng prop url
         headers: {
           "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
       });
 

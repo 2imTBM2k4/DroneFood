@@ -14,14 +14,22 @@ export async function recordAudit({
   targetId,
   reason = "",
   metadata = {},
+  category = "operations",
+  outcome = "success",
+  ip = "",
+  userAgent = "",
 }) {
   try {
-    if (!actor?._id || !action || !targetType || !targetId) return null;
+    if (!action || !targetType) return null;
 
     return await AuditLog.create({
-      actor: actor._id,
-      actorEmail: actor.email || "",
-      actorRole: actor.role || "",
+      actor: actor?._id || null,
+      actorEmail: actor?.email || "",
+      actorRole: actor?.role || "",
+      category,
+      outcome,
+      ip,
+      userAgent,
       action,
       targetType,
       targetId,

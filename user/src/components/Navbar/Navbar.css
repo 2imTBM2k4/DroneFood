@@ -114,6 +114,9 @@
   white-space: nowrap;
 }
 
+.apple-location-select { min-width: 0; max-width: 190px; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; outline: none; }
+.apple-location-select:focus-visible { outline: 2px solid var(--apple-primary-focus); outline-offset: 2px; border-radius: 3px; }
+
 /* ── Right Actions ────────────────────────────────────────── */
 .apple-nav-actions {
   display: flex;

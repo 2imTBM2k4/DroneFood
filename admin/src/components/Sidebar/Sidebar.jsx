@@ -25,8 +25,7 @@ const Sidebar = ({ mobileOpen = false, onMobileToggle }) => {
     { path: "/drones", icon: Plane, label: "Drones" },
     { path: "/shippers", icon: Bike, label: "Shippers" },
     { path: "/vouchers", icon: Ticket, label: "Vouchers" },
-    { path: "/refunds", icon: HandCoins, label: "Refunds" },
-    { path: "/withdrawals", icon: HandCoins, label: "Withdrawals" },
+    { path: "/finance", icon: HandCoins, label: "Financial Management" },
     { path: "/audit", icon: ScrollText, label: "Audit Log" },
   ];
 

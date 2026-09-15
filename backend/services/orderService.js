@@ -633,8 +633,8 @@ export const updateStatus = async (user, updateData) => {
         throw new AppError("Cannot mark received yet (not delivering)", 400);
       }
     } else if (status === "cancelled") {
-      if (order.orderStatus !== "pending") {
-        throw new AppError("Chỉ có thể hủy đơn hàng khi đang chờ xác nhận", 400);
+      if (!["pending", "pending_payment"].includes(order.orderStatus)) {
+        throw new AppError("Chỉ có thể hủy đơn hàng khi đang chờ xác nhận hoặc chưa thanh toán", 400);
       }
       if (!reason || reason.trim() === "") {
         throw new AppError("Reason required for cancellation", 400);
@@ -673,6 +673,18 @@ export const updateStatus = async (user, updateData) => {
 
     if (order.paymentMethod === "PAYOS" && order.isPaid) {
       throw new AppError("Automatic PayOS refunds are not configured. Refund the customer before cancelling this paid order.", 409);
+    }
+
+    if (order.paymentMethod === "PAYOS" && !order.isPaid) {
+      try {
+        const { payOS } = payosConfig();
+        const linkRef = order.payosPaymentLinkId || Number(order.payosOrderCode);
+        if (linkRef) {
+          await payOS.paymentRequests.cancel(linkRef, reason || "Customer cancelled unpaid order");
+        }
+      } catch (err) {
+        // Safe to ignore if link was already cancelled or expired
+      }
     }
 
     // A paid VNPay order is cancelled only after the gateway has accepted the

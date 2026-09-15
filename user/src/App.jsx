@@ -18,6 +18,8 @@ import RestaurantsPage from "./pages/Restaurants/RestaurantsPage";
 import RestaurantPage from "./pages/Restaurant/RestaurantPage";
 import FloatingCartBar from "./components/FloatingCartBar/FloatingCartBar";
 import ResetPassword from "./pages/ResetPassword/ResetPassword";
+import OrderDetail from "./pages/OrderDetail/OrderDetail";
+import ActiveOrderBar from "./components/ActiveOrderBar/ActiveOrderBar";
 
 const PageTransition = ({ children }) => {
   const location = useLocation();
@@ -71,6 +73,7 @@ const App = () => {
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/verify" element={<Verify />} />
             <Route path="/myorders" element={<MyOrders />} />
+            <Route path="/myorders/:id" element={<OrderDetail />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/product/:id" element={<ProductDetail />} />
             <Route path="/reset-password/:token" element={<ResetPassword />} />
@@ -90,6 +93,7 @@ const App = () => {
       </div>
       <Footer />
       <FloatingCartBar />
+      <ActiveOrderBar />
       <ToastContainer />
     </>
   );

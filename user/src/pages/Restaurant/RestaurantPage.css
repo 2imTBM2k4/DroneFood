@@ -148,8 +148,13 @@
   margin: 0;
   padding: 0;
   overflow-y: auto;
+  scrollbar-width: none;
   background: transparent;
   border: 0;
+}
+
+.restaurant-catalog::-webkit-scrollbar {
+  display: none;
 }
 
 /* Scoped under .restaurant-catalog — FoodPage.css defines its own

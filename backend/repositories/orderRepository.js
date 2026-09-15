@@ -66,6 +66,56 @@ export const updateById = async (id, updates, { session } = {}) => {
   }).populate("orderItems.product");
 };
 
+// The sentinel makes retry creation an atomic claim: two browser tabs cannot
+// both replace one unpaid link with separate active PayOS links.
+export const claimPayosRetry = async ({
+  orderId,
+  userId,
+  previousOrderCode,
+  previousPaymentLinkId,
+  nextOrderCode,
+}) => {
+  return await Order.findOneAndUpdate(
+    {
+      _id: orderId,
+      user: userId,
+      paymentMethod: "PAYOS",
+      isPaid: false,
+      orderStatus: "pending_payment",
+      payosOrderCode: previousOrderCode,
+      payosPaymentLinkId: previousPaymentLinkId,
+    },
+    { $set: { payosOrderCode: nextOrderCode, payosPaymentLinkId: "__retrying__" } },
+    { new: true, runValidators: true }
+  ).populate("orderItems.product");
+};
+
+export const finishPayosRetry = async ({ orderId, nextOrderCode, paymentLinkId }) => {
+  return await Order.findOneAndUpdate(
+    { _id: orderId, payosOrderCode: nextOrderCode, payosPaymentLinkId: "__retrying__" },
+    { $set: { payosPaymentLinkId: paymentLinkId } },
+    { new: true, runValidators: true }
+  );
+};
+
+export const restorePayosRetry = async ({
+  orderId,
+  nextOrderCode,
+  previousOrderCode,
+  previousPaymentLinkId,
+}) => {
+  return await Order.findOneAndUpdate(
+    { _id: orderId, payosOrderCode: nextOrderCode, payosPaymentLinkId: "__retrying__" },
+    {
+      $set: {
+        payosOrderCode: previousOrderCode,
+        payosPaymentLinkId: previousPaymentLinkId,
+      },
+    },
+    { new: true, runValidators: true }
+  );
+};
+
 export const deleteById = async (id) => {
   return await Order.findByIdAndDelete(id);
 };

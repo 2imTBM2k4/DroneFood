@@ -41,11 +41,14 @@ const foodSchema = new mongoose.Schema({
     image:{type:String,required:true},
     category:{type:String,required:true},
     restaurantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Restaurant', required: true },  // Mới: Liên kết với restaurant
+    // Owners can temporarily hide an out-of-stock dish without deleting its
+    // menu record or breaking historical order snapshots.
+    isAvailable: { type: Boolean, default: true, index: true },
     // Dishes created before options existed simply have an empty array.
     optionGroups: { type: [optionGroupSchema], default: [] }
 });
 
 // Supports the canonical restaurant-menu filters without a collection scan.
-foodSchema.index({ restaurantId: 1, category: 1, price: 1 });
+foodSchema.index({ restaurantId: 1, isAvailable: 1, category: 1, price: 1 });
 
 module.exports = mongoose.models.Food || mongoose.model('Food', foodSchema);

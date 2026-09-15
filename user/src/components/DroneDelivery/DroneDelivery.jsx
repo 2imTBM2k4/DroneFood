@@ -61,10 +61,10 @@ const droneIcon = L.icon({
   iconAnchor: [12, 41],
 });
 
-const DroneAnimation = ({ path, onComplete }) => {
+const DroneAnimation = ({ path, onComplete, initialArrived }) => {
   const map = useMap();
   const [dronePosition, setDronePosition] = useState(null);
-  const [flightCompleted, setFlightCompleted] = useState(false);
+  const [flightCompleted, setFlightCompleted] = useState(Boolean(initialArrived));
   const droneRef = useRef(null);
   const animationFrameId = useRef(null);
   const startTimeRef = useRef(null);
@@ -76,10 +76,23 @@ const DroneAnimation = ({ path, onComplete }) => {
   }, [onComplete]);
 
   useEffect(() => {
-    if (!path || path.length < 2 || flightCompleted) return;
+    if (!path || path.length < 2) return;
 
     const startPoint = path[0];
     const endPoint = path[path.length - 1];
+
+    // Nếu drone đã từng bay đến đích (hoặc trang được reload lại), định vị ngay tại điểm đích
+    if (initialArrived) {
+      setDronePosition(endPoint);
+      if (droneRef.current) {
+        droneRef.current.setLatLng(endPoint);
+      }
+      setFlightCompleted(true);
+      return;
+    }
+
+    if (flightCompleted) return;
+
     setDronePosition(startPoint);
 
     if (animationFrameId.current) {
@@ -123,7 +136,7 @@ const DroneAnimation = ({ path, onComplete }) => {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [path, map, flightCompleted]);
+  }, [path, map, flightCompleted, initialArrived]);
 
   return dronePosition ? (
     <Marker position={dronePosition} icon={droneIcon} ref={droneRef} />
@@ -159,20 +172,48 @@ const MapBounds = ({ start, end }) => {
   return null;
 };
 
-
 const DroneDelivery = ({ order, onDeliveryComplete }) => {
+  const storageKeyArrived = `drone_arrived_${order._id}`;
+  const storageKeyArrivedTime = `drone_arrived_time_${order._id}`;
+
+  const isDeliveredState =
+    order.orderStatus === "delivered" || Boolean(order.cargoChecked);
+
+  const initialArrived = Boolean(
+    order.qrScanned ||
+    order.cargoChecked ||
+    order.orderStatus === "delivered" ||
+    localStorage.getItem(storageKeyArrived) === "true"
+  );
+
   const [start, setStart] = useState(null);
   const [end, setEnd] = useState(null);
   const [path, setPath] = useState([]);
-  const [startAddress, setStartAddress] = useState("Loading...");
-  const [endAddress, setEndAddress] = useState("Loading...");
-  const [droneArrived, setDroneArrived] = useState(false);
-  const [qrScanned, setQrScanned] = useState(false);
+  const [startAddress, setStartAddress] = useState("Đang tải địa chỉ nhà hàng...");
+  const [endAddress, setEndAddress] = useState("Đang tải địa chỉ nhận hàng...");
+
+  const [droneArrived, setDroneArrived] = useState(initialArrived);
+  const [qrScanned, setQrScanned] = useState(Boolean(order.qrScanned || isDeliveredState));
   const [lidOpen, setLidOpen] = useState(false);
-  const [canConfirm, setCanConfirm] = useState(false);
+  const [canConfirm, setCanConfirm] = useState(isDeliveredState);
   const [showScanner, setShowScanner] = useState(false);
-  const [countdown, setCountdown] = useState(300);
-  const [timeoutExpired, setTimeoutExpired] = useState(false);
+
+  // Tính thời gian countdown còn lại (5 phút = 300s)
+  const calculateRemainingCountdown = () => {
+    if (order.qrScanned || isDeliveredState) return 300;
+    const savedTime = localStorage.getItem(storageKeyArrivedTime);
+    if (savedTime) {
+      const elapsed = Math.floor((Date.now() - Number(savedTime)) / 1000);
+      return Math.max(0, 300 - elapsed);
+    }
+    return 300;
+  };
+
+  const [countdown, setCountdown] = useState(calculateRemainingCountdown);
+  const [timeoutExpired, setTimeoutExpired] = useState(
+    initialArrived && !order.qrScanned && !isDeliveredState && calculateRemainingCountdown() <= 0
+  );
+
   const timeoutRef = useRef(null);
   const countdownIntervalRef = useRef(null);
 
@@ -209,9 +250,6 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
       setStartAddress(restaurantAddr);
       setEndAddress(customerAddr);
 
-      // Prefer the exact coordinates saved on the order (customer picked their
-      // drop-off on the map; the restaurant was geocoded at signup). Fall back
-      // to the cached run, then to on-the-fly geocoding of the address string.
       const asCoord = (obj) =>
         obj && typeof obj.lat === "number" && typeof obj.lng === "number"
           ? [obj.lat, obj.lng]
@@ -245,28 +283,124 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
     initializeDelivery();
   }, [order]);
 
+  // Khởi chạy bộ đếm thời gian khi drone đã đến mà chưa quét QR
+  useEffect(() => {
+    if (initialArrived && !order.qrScanned && !isDeliveredState && countdown > 0) {
+      countdownIntervalRef.current = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(countdownIntervalRef.current);
+            setTimeoutExpired(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      timeoutRef.current = setTimeout(async () => {
+        setTimeoutExpired(true);
+        if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+
+        try {
+          const url = import.meta.env.VITE_API_URL || "http://localhost:4000";
+          const token = localStorage.getItem("token");
+
+          await fetch(`${url}/api/order/status`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              orderId: order._id,
+              status: "cancelled",
+              reason: "Hết thời gian nhận hàng - Drone đã chờ tại điểm giao nhưng không nhận được xác nhận.",
+            }),
+          });
+        } catch (error) {
+          console.error("Error updating order status:", error);
+        }
+
+        toast.error("Hết thời gian nhận hàng. Đơn hàng đã bị hủy.");
+        window.location.reload();
+      }, countdown * 1000);
+    }
+
+    return () => {
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [initialArrived, order.qrScanned, isDeliveredState]);
+
+  // Xử lý khi trang tải lại mà đơn hàng đã ở trạng thái delivered hoặc cargoChecked
+  useEffect(() => {
+    if (isDeliveredState) {
+      setDroneArrived(true);
+      setQrScanned(true);
+      setLidOpen(false);
+      setCanConfirm(true);
+      if (onDeliveryComplete) {
+        onDeliveryComplete();
+      }
+    } else if (order.qrScanned && !order.cargoChecked) {
+      // Khách hàng vừa quét QR và reload trong vòng 5s nắp đang mở
+      setDroneArrived(true);
+      setQrScanned(true);
+      setLidOpen(true);
+      const timer = setTimeout(async () => {
+        setLidOpen(false);
+        setCanConfirm(true);
+        try {
+          const url = import.meta.env.VITE_API_URL || "http://localhost:4000";
+          const token = localStorage.getItem("token");
+          await fetch(`${url}/api/drone/confirm-delivery`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ orderId: order._id }),
+          });
+        } catch (e) {
+          console.error("Auto confirm delivery error:", e);
+        }
+        toast.success("Đã hoàn tất nhận hàng từ Drone!");
+        if (onDeliveryComplete) onDeliveryComplete();
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [isDeliveredState, order.qrScanned, order.cargoChecked, onDeliveryComplete]);
+
+  // Xử lý khi drone vừa bay tới điểm giao lần đầu tiên
   const handleComplete = () => {
     setDroneArrived(true);
+    localStorage.setItem(storageKeyArrived, "true");
+    if (!localStorage.getItem(storageKeyArrivedTime)) {
+      localStorage.setItem(storageKeyArrivedTime, String(Date.now()));
+    }
     setCountdown(300);
-    
+
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     countdownIntervalRef.current = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(countdownIntervalRef.current);
+          setTimeoutExpired(true);
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
-    
+
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(async () => {
       setTimeoutExpired(true);
-      clearInterval(countdownIntervalRef.current);
-      
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+
       try {
         const url = import.meta.env.VITE_API_URL || "http://localhost:4000";
         const token = localStorage.getItem("token");
-        
+
         await fetch(`${url}/api/order/status`, {
           method: "POST",
           headers: {
@@ -276,14 +410,14 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
           body: JSON.stringify({
             orderId: order._id,
             status: "cancelled",
-            reason: "Pickup timed out - Drone waited at the delivery point but received no confirmation. Order has been cancelled.",
+            reason: "Hết thời gian nhận hàng - Drone đã chờ tại điểm giao nhưng không nhận được xác nhận.",
           }),
         });
       } catch (error) {
         console.error("Error updating order status:", error);
       }
-      
-      toast.error("Pickup timed out. The drone waited at the delivery point but received no confirmation. Order has been cancelled.");
+
+      toast.error("Hết thời gian nhận hàng. Đơn hàng đã bị hủy.");
       window.location.reload();
     }, 300000);
   };
@@ -292,11 +426,11 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
     try {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-      
+
       const url = import.meta.env.VITE_API_URL || "http://localhost:4000";
       const token = localStorage.getItem("token");
       const qrCodeToVerify = scannedCode || order.qrCode;
-      
+
       const response = await fetch(`${url}/api/drone/scan-qr`, {
         method: "POST",
         headers: {
@@ -310,23 +444,46 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
       });
 
       const data = await response.json();
-      
+
       if (data.success) {
         setQrScanned(true);
         setLidOpen(true);
         setShowScanner(false);
-        
-        setTimeout(() => {
+
+        // Sau 5s mở nắp khoang hàng, tự động đóng nắp và hoàn tất giao hàng
+        setTimeout(async () => {
           setLidOpen(false);
           setCanConfirm(true);
-          if (onDeliveryComplete) onDeliveryComplete();
+
+          try {
+            await fetch(`${url}/api/drone/confirm-delivery`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ orderId: order._id }),
+            });
+          } catch (e) {
+            console.error("Error confirming delivery automatically:", e);
+          }
+
+          toast.success("Đã hoàn tất nhận hàng từ Drone! Đơn hàng đã giao thành công.");
+
+          // Dọn dẹp storage
+          localStorage.removeItem(storageKeyArrived);
+          localStorage.removeItem(storageKeyArrivedTime);
+
+          if (onDeliveryComplete) {
+            onDeliveryComplete();
+          }
         }, 5000);
       } else {
-        toast.error(data.message || "QR code scan failed");
+        toast.error(data.message || "Xác nhận mã QR thất bại");
       }
     } catch (error) {
       console.error("Error scanning QR:", error);
-      toast.error("QR code scan failed");
+      toast.error("Xác nhận mã QR thất bại");
     }
   };
 
@@ -345,23 +502,29 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
     return (
       <div className="drone-delivery-loading">
         <div className="loading-spinner"></div>
-        <p>Loading delivery route...</p>
+        <p>Đang tải lộ trình bay của Drone...</p>
       </div>
     );
   }
 
-
   return (
     <div className="drone-delivery-container">
-      <div className="drone-delivery-header">z
-        <h3>Drone Delivery Tracking</h3>
+      <div className="drone-delivery-header">
+        <h3>Theo dõi hành trình Drone</h3>
         <div className="delivery-info">
-          <p><strong>From:</strong> {startAddress}</p>
-          <p><strong>To:</strong> {endAddress}</p>
-          <p><strong>Estimated arrival:</strong> 10 seconds</p>
+          <p><strong>Xuất phát:</strong> {startAddress}</p>
+          <p><strong>Điểm đến:</strong> {endAddress}</p>
+          <p>
+            <strong>Trạng thái:</strong>{" "}
+            {isDeliveredState
+              ? "Đã giao hàng thành công"
+              : droneArrived
+              ? "Drone đã đến điểm giao"
+              : "Đang bay đến điểm giao (dự kiến ~10 giây)"}
+          </p>
         </div>
       </div>
-      
+
       <div className="drone-delivery-map-container">
         <MapContainer center={HCMC_CENTER} zoom={13} style={{ height: "100%", width: "100%" }}>
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
@@ -369,47 +532,53 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
           {path.length > 0 && <Polyline positions={path} color="#FF6B6B" weight={5} />}
           {start && (
             <Marker position={start} icon={L.divIcon({ html: "🏪", className: "", iconSize: [30, 30] })}>
-              <Popup><strong>Restaurant:</strong><br/>{startAddress}</Popup>
+              <Popup><strong>Nhà hàng:</strong><br/>{startAddress}</Popup>
             </Marker>
           )}
           {end && (
             <Marker position={end} icon={L.divIcon({ html: "🏠", className: "", iconSize: [30, 30] })}>
-              <Popup><strong>Customer:</strong><br/>{endAddress}</Popup>
+              <Popup><strong>Điểm nhận hàng:</strong><br/>{endAddress}</Popup>
             </Marker>
           )}
-          {path.length > 0 && <DroneAnimation path={path} onComplete={handleComplete} />}
+          {path.length > 0 && (
+            <DroneAnimation
+              path={path}
+              onComplete={handleComplete}
+              initialArrived={initialArrived}
+            />
+          )}
         </MapContainer>
       </div>
 
       {droneArrived && order.qrCode && (
         <div className="qr-section">
           <div className="qr-header">
-            <h4>Drone has arrived! Please confirm</h4>
-            {qrScanned && <span className="qr-status success">Confirmed</span>}
+            <h4>{isDeliveredState ? "Đã giao hàng thành công" : "Drone đã đến điểm giao! Vui lòng xác nhận"}</h4>
+            {qrScanned && <span className="qr-status success">Đã xác nhận QR</span>}
           </div>
-          
+
           <div className="qr-code-display">
             <div className="qr-code-box">
               <QRCodeSVG value={order.qrCode} size={200} level="H" marginSize={2} />
-              <p className="qr-code-text">Your QR code: {order.qrCode}</p>
-              <p className="qr-instruction">Show this QR code to the drone to open the cargo lid</p>
+              <p className="qr-code-text">Mã QR của bạn: {order.qrCode}</p>
+              <p className="qr-instruction">Đưa mã QR này cho camera của Drone để mở nắp khoang hàng</p>
             </div>
-            
+
             {!qrScanned && !timeoutExpired && (
               <div className="qr-actions">
-                <button className="scan-qr-btn camera" onClick={handleOpenScanner}>
-                  Scan with Camera
+                <button type="button" className="scan-qr-btn camera" onClick={handleOpenScanner}>
+                  Quét bằng Camera
                 </button>
                 <div className="confirm-button-wrapper">
-                  <button className="scan-qr-btn manual" onClick={() => handleScanQR()}>
-                    Manual confirm
+                  <button type="button" className="scan-qr-btn manual" onClick={() => handleScanQR()}>
+                    Xác nhận đã quét (Manual)
                   </button>
                   <span className={`countdown-timer ${countdown <= 30 ? 'urgent' : ''}`}>
                     {Math.floor(countdown / 60)}:{String(countdown % 60).padStart(2, '0')}
                   </span>
                 </div>
                 <p className="timeout-warning">
-                  Please confirm within {Math.floor(countdown / 60)}m {countdown % 60}s
+                  Vui lòng nhận hàng trong vòng {Math.floor(countdown / 60)} phút {countdown % 60} giây
                 </p>
               </div>
             )}
@@ -419,13 +588,19 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
             <div className="delivery-status">
               <div className={`status-item ${lidOpen ? 'active' : 'completed'}`}>
                 <span className="status-icon">{lidOpen ? '🔓' : '🔒'}</span>
-                <span className="status-text">Cargo lid: {lidOpen ? 'Opening (5s)' : 'Closed'}</span>
+                <span className="status-text">
+                  Nắp khoang hàng: {lidOpen ? 'Đang mở (5 giây)' : 'Đã đóng nắp an toàn'}
+                </span>
               </div>
               {lidOpen && (
-                <div className="countdown-message">Lid is open for 5 seconds. Please collect your food now!</div>
+                <div className="countdown-message">
+                  Nắp khoang hàng đang mở trong 5 giây. Vui lòng lấy món ăn ra khỏi khoang hàng ngay!
+                </div>
               )}
-              {canConfirm && (
-                <div className="confirm-message">Pickup successful! You can confirm delivery below.</div>
+              {(canConfirm || isDeliveredState) && !lidOpen && (
+                <div className="confirm-message">
+                  Đã lấy món thành công! Đơn hàng đã hoàn tất giao.
+                </div>
               )}
             </div>
           )}

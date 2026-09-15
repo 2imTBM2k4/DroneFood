@@ -6,10 +6,12 @@ export const listAuditLogs = async ({
   limit = 50,
   action,
   targetType,
+  category,
 } = {}) => {
   const filter = {};
   if (action) filter.action = action;
   if (targetType) filter.targetType = targetType;
+  if (category) filter.category = category;
 
   const safeLimit = Math.min(Math.max(limit, 1), 200);
   const skip = (Math.max(page, 1) - 1) * safeLimit;

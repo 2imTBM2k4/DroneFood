@@ -61,7 +61,14 @@ export const requestManualPayosRefund = async (customer, { orderId, reason, bank
   } finally {
     await session.endSession();
   }
-  await recordAudit({ actor: customer, action: "refund_requested", targetType: "Order", targetId: order._id, details: { refundRequestId: refund._id } });
+  await recordAudit({
+    actor: customer,
+    action: "refund_requested",
+    targetType: "order",
+    targetId: order._id,
+    category: "money",
+    metadata: { refundRequestId: refund._id },
+  });
   return refund;
 };
 
@@ -86,7 +93,14 @@ export const markManualRefundPaid = async (admin, refundId, { transferReference,
   } finally {
     await session.endSession();
   }
-  await recordAudit({ actor: admin, action: "manual_refund_paid", targetType: "Order", targetId: refund.order._id, details: { refundRequestId: refund._id, transferReference } });
+  await recordAudit({
+    actor: admin,
+    action: "manual_refund_paid",
+    targetType: "order",
+    targetId: refund.order._id,
+    category: "money",
+    metadata: { refundRequestId: refund._id, transferReference },
+  });
   return { orderId: refund.order._id, refundId: refund._id };
 };
 
@@ -108,6 +122,13 @@ export const rejectManualRefund = async (admin, refundId, { adminNote }) => {
   } finally {
     await session.endSession();
   }
-  await recordAudit({ actor: admin, action: "manual_refund_rejected", targetType: "Order", targetId: refund.order._id, details: { refundRequestId: refund._id } });
+  await recordAudit({
+    actor: admin,
+    action: "manual_refund_rejected",
+    targetType: "order",
+    targetId: refund.order._id,
+    category: "money",
+    metadata: { refundRequestId: refund._id },
+  });
   return { orderId: refund.order._id, refundId: refund._id };
 };

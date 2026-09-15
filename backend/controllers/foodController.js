@@ -54,3 +54,12 @@ export const getFoodById = async (req, res) => {
       .json({ success: false, message: error.message });
   }
 };
+
+export const setFoodAvailability = async (req, res) => {
+  try {
+    const result = await foodService.setFoodAvailability(req.user, req.params.id, req.body.isAvailable);
+    res.json(result);
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};

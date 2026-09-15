@@ -74,6 +74,7 @@
   font-variant-numeric: tabular-nums;
   color: var(--text-color);
   transition: all 0.2s ease;
+  cursor: pointer;
 }
 
 .wallet-badge svg {

@@ -8,10 +8,12 @@ const assertEntryId = (entryId) => {
   if (!mongoose.isValidObjectId(entryId)) throw new AppError("Address entry ID is invalid", 400);
 };
 
-const serialise = (entry) => ({
+const serialise = (entry, fullName = "") => ({
   id: String(entry._id),
   label: entry.label,
-  recipient: entry.recipient,
+  // Orders retain their own shipping snapshot; saved addresses deliberately
+  // render the current account fullname instead of owning a second name.
+  recipient: fullName || entry.recipient,
   phone: entry.phone,
   address: entry.address,
   city: entry.city,
@@ -26,12 +28,13 @@ const serialise = (entry) => ({
 export const listAddressBook = async (userId) => {
   const user = await addressBookRepo.findForUser(userId);
   if (!user) throw new AppError("User not found", 404);
-  return { success: true, data: (user.addressBook || []).map(serialise) };
+  return { success: true, data: (user.addressBook || []).map((entry) => serialise(entry, user.name)) };
 };
 
 export const createAddressEntry = async (userId, data) => {
   const session = await mongoose.startSession();
   let entry;
+  let fullName = "";
   try {
     await session.withTransaction(async () => {
       const user = await addressBookRepo.findForUser(userId, { session });
@@ -41,14 +44,15 @@ export const createAddressEntry = async (userId, data) => {
       }
       const makeDefault = data.isDefault === true || user.addressBook.length === 0;
       if (makeDefault) user.addressBook.forEach((item) => { item.isDefault = false; });
-      user.addressBook.push({ ...data, isDefault: makeDefault });
+      fullName = user.name || data.recipient || "Customer";
+      user.addressBook.push({ ...data, recipient: fullName, isDefault: makeDefault });
       entry = user.addressBook.at(-1);
       await addressBookRepo.save(user, { session });
     });
   } finally {
     await session.endSession();
   }
-  return { success: true, data: serialise(entry) };
+  return { success: true, data: serialise(entry, fullName) };
 };
 
 export const updateAddressEntry = async (userId, entryId, data) => {
@@ -56,14 +60,14 @@ export const updateAddressEntry = async (userId, entryId, data) => {
   const user = await addressBookRepo.updateNonDefault(userId, entryId, data);
   if (!user) throw new AppError("Address entry not found", 404);
   const entry = user.addressBook.id(entryId);
-  return { success: true, data: serialise(entry) };
+  return { success: true, data: serialise(entry, user.name) };
 };
 
 export const setDefaultAddressEntry = async (userId, entryId) => {
   assertEntryId(entryId);
   const user = await addressBookRepo.setDefault(userId, entryId);
   if (!user) throw new AppError("Address entry not found", 404);
-  return { success: true, data: user.addressBook.map(serialise) };
+  return { success: true, data: user.addressBook.map((entry) => serialise(entry, user.name)) };
 };
 
 export const deleteAddressEntry = async (userId, entryId) => {
@@ -75,7 +79,7 @@ export const deleteAddressEntry = async (userId, entryId) => {
   if (target.isDefault) throw new AppError("The default address must be changed before deletion", 409);
   const user = await addressBookRepo.removeNonDefault(userId, entryId);
   if (!user) throw new AppError("Address entry not found", 404);
-  return { success: true, data: user.addressBook.map(serialise) };
+  return { success: true, data: user.addressBook.map((entry) => serialise(entry, user.name)) };
 };
 
 // Used by quote/order services. It returns a plain snapshot, never a live
@@ -87,7 +91,7 @@ export const resolveAddressSnapshot = async (userId, entryId) => {
   const entry = user.addressBook.id(entryId);
   if (!entry) throw new AppError("Address entry not found", 404);
   return {
-    fullName: entry.recipient,
+    fullName: user.name || entry.recipient,
     phone: entry.phone,
     address: entry.address,
     city: entry.city,

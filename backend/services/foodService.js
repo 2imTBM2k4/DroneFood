@@ -48,6 +48,10 @@ export const listFood = async (user, query = {}) => {
     filter.restaurantId = restaurantId;
   } else if (user && user.role === "restaurant_owner" && user.restaurantId) {
     filter.restaurantId = user.restaurantId;
+  } else {
+    // Storefront discovery must not expose dishes an owner has marked sold
+    // out. Restaurant owners still receive their entire menu above.
+    filter.isAvailable = true;
   }
 
   if (q) {
@@ -173,4 +177,14 @@ export const getFoodById = async (foodId) => {
     console.error("Service getFoodById error:", error);
     throw new AppError("Failed to fetch food", 500);
   }
+};
+
+export const setFoodAvailability = async (user, foodId, isAvailable) => {
+  const food = await foodRepo.findById(foodId);
+  if (!food) throw new AppError("Food not found", 404);
+  if (user.role !== "admin" && String(user.restaurantId || "") !== String(food.restaurantId || "")) {
+    throw new AppError("Unauthorized: Not your restaurant's food", 403);
+  }
+  const updated = await foodRepo.updateById(foodId, { isAvailable });
+  return { success: true, food: updated };
 };

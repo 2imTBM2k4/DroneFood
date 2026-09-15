@@ -238,7 +238,7 @@ const Profile = () => {
         )}
 
         {activeTab === "address" && (
-          <AddressBookManager url={url} token={token} onChange={handleAddressBookChange} />
+          <AddressBookManager url={url} token={token} fullName={user?.name} onChange={handleAddressBookChange} />
         )}
 
         {activeTab === "security" && (

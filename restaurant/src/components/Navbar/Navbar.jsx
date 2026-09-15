@@ -52,10 +52,10 @@ const Navbar = () => {
 
         {user ? (
           <>
-            <div className="wallet-badge">
+            <button type="button" className="wallet-badge" onClick={() => navigate("/wallet")} aria-label="Open restaurant wallet">
               <Wallet size={16} />
               <span>{formatVND(user.walletBalance)}</span>
-            </div>
+            </button>
 
             <div className="account-menu" ref={dropdownRef}>
               <button
@@ -64,8 +64,8 @@ const Navbar = () => {
               >
                 <img
                   className="avatar"
-                  src={assets.profile_image}
-                  alt="Profile"
+                  src={user.restaurantImage || user.restaurant?.image || assets.profile_image}
+                  alt="Restaurant profile"
                 />
                 <span className="account-name">
                   {user.name || "Restaurant"}
@@ -83,7 +83,7 @@ const Navbar = () => {
                     }}
                   >
                     <Settings size={16} />
-                    <span>Settings</span>
+                    <span>Profile</span>
                   </button>
                   <div className="dropdown-divider" />
                   <button

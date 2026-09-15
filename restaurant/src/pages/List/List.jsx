@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useContext } from "react";
 import { AuthContext } from "../../context/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import "./List.css";
 import axios from "axios";
 import { toast } from "react-toastify";
 import EditProduct from "../Products/EditProduct";
-import { Pencil, Trash2, Search, X } from "lucide-react";
+import { Pencil, Trash2, Search, X, Plus, Power } from "lucide-react";
+import Add from "../Add/Add";
 import { formatVND } from "../../../../shared/utils/money";
 
 const List = ({ url }) => {
@@ -16,6 +17,9 @@ const List = ({ url }) => {
   // Deleting a dish also drops its image, so it asks first.
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [changingAvailability, setChangingAvailability] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [addOpen, setAddOpen] = useState(() => searchParams.get("add") === "1");
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
 
@@ -101,6 +105,19 @@ const List = ({ url }) => {
     setEditingProduct(product);
   };
 
+  const toggleAvailability = async (item) => {
+    const token = localStorage.getItem("token");
+    if (!token || changingAvailability) return;
+    setChangingAvailability(item._id);
+    try {
+      const response = await axios.patch(`${url}/api/food/${item._id}/availability`, { isAvailable: item.isAvailable === false }, { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.data.success) throw new Error(response.data.message);
+      setList((current) => current.map((food) => food._id === item._id ? { ...food, isAvailable: response.data.food.isAvailable } : food));
+      toast.success(item.isAvailable === false ? "Dish is available" : "Dish marked sold out");
+    } catch (error) { toast.error(error.response?.data?.message || error.message || "Could not update availability"); }
+    finally { setChangingAvailability(""); }
+  };
+
   const closeEditModal = () => {
     setEditingProduct(null);
   };
@@ -130,8 +147,8 @@ const List = ({ url }) => {
           <h1 className="list-title">Menu Items</h1>
           <p className="list-subtitle">Manage your restaurant menu</p>
         </div>
-        <button className="add-item-btn" onClick={() => navigate("/add")}>
-          + Add Item
+        <button className="add-item-btn" onClick={() => { setAddOpen(true); setSearchParams({ add: "1" }); }}>
+          <Plus size={17} aria-hidden="true" /> Add Item
         </button>
       </div>
 
@@ -181,6 +198,7 @@ const List = ({ url }) => {
             <b>Name</b>
             <b>Category</b>
             <b>Price</b>
+            <b>Availability</b>
             <b>Actions</b>
           </div>
           {visible.length === 0 ? (
@@ -204,6 +222,9 @@ const List = ({ url }) => {
                 <p className="item-name">{item.name}</p>
                 <span className="category-badge">{item.category}</span>
                 <p className="item-price">{formatVND(item.price)}</p>
+                <button type="button" className={`availability-toggle ${item.isAvailable === false ? "sold-out" : ""}`} onClick={() => toggleAvailability(item)} disabled={changingAvailability === item._id} aria-pressed={item.isAvailable !== false}>
+                  <Power size={15} aria-hidden="true" /><span>{changingAvailability === item._id ? "Saving…" : item.isAvailable === false ? "Sold out" : "Available"}</span>
+                </button>
                 <div className="actions">
                   <button
                     onClick={() => editFood(item)}
@@ -275,6 +296,7 @@ const List = ({ url }) => {
           onUpdate={fetchList}
         />
       )}
+      {addOpen && <div className="edit-modal" role="dialog" aria-modal="true" aria-label="Add menu item" onMouseDown={(event) => { if (event.target === event.currentTarget) { setAddOpen(false); setSearchParams({}); fetchList(); } }}><div className="modal-content list-add-modal" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><h3>Add menu item</h3><button type="button" className="close" aria-label="Close add item form" onClick={() => { setAddOpen(false); setSearchParams({}); fetchList(); }}>×</button></div><Add url={url} /></div></div>}
     </div>
   );
 };

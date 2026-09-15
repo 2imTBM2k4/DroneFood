@@ -54,6 +54,7 @@ const save = async ({ actor, model, id, targetType, account }) => {
     targetType,
     targetId: updated._id,
     metadata: { bankName: bankAccount.bankName, accountNumberLast4: bankAccount.accountNumberLast4 },
+    category: "banking",
   });
   return { success: true, data: responseFor(updated) };
 };
@@ -71,10 +72,11 @@ export const updateShipperBankAccount = async (user, account) => {
 
 export const getRestaurantBankAccount = async (user) => {
   const restaurant = await restaurantForOwner(user);
+  await recordAudit({ actor: user, action: "bank_account.viewed", targetType: "bank_account", targetId: restaurant._id, category: "banking" });
   return { success: true, data: responseFor(restaurant) };
 };
 
 export const updateRestaurantBankAccount = async (user, account) => {
   const restaurant = await restaurantForOwner(user);
-  return save({ actor: user, model: Restaurant, id: restaurant._id, targetType: "restaurant", account });
+  return save({ actor: user, model: Restaurant, id: restaurant._id, targetType: "bank_account", account });
 };

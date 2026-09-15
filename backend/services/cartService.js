@@ -91,6 +91,9 @@ export const addToCart = async (
   if (!food) {
     throw new AppError("Food not found", 404);
   }
+  if (food.isAvailable === false) {
+    throw new AppError("This dish is currently sold out", 409);
+  }
 
   // Throws if the picks don't satisfy the dish's own option groups.
   const resolvedOptions = resolveSelectedOptions(food, selectedOptions);

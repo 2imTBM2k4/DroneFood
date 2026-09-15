@@ -13,22 +13,26 @@ const auditLogSchema = new mongoose.Schema(
     actor: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      default: null,
     },
     // Copied at write time so the trail still reads correctly if the account
     // is later renamed or removed.
     actorEmail: { type: String, default: "" },
     actorRole: { type: String, default: "" },
+    category: { type: String, enum: ["authentication", "email", "password", "banking", "money", "access", "operations"], default: "operations", index: true },
+    outcome: { type: String, enum: ["success", "failure"], default: "success" },
+    ip: { type: String, default: "" },
+    userAgent: { type: String, default: "" },
 
     // Dotted verb describing the action, e.g. "order.status_changed".
     action: { type: String, required: true, index: true },
 
     targetType: {
       type: String,
-      enum: ["user", "restaurant", "order", "food", "drone"],
+      enum: ["user", "restaurant", "order", "food", "drone", "authentication", "bank_account", "wallet", "refund", "withdrawal"],
       required: true,
     },
-    targetId: { type: mongoose.Schema.Types.ObjectId, required: true },
+    targetId: { type: mongoose.Schema.Types.ObjectId, default: null },
 
     // Required for anything destructive or overriding — the UI collects it.
     reason: { type: String, default: "" },

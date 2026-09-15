@@ -72,3 +72,11 @@ export const verifyOrderSchema = Joi.object({
     "any.required": "orderId là bắt buộc",
   }),
 });
+
+export const retryPayosPaymentSchema = Joi.object({
+  orderId: Joi.string().trim().hex().length(24).required().messages({
+    "string.hex": "orderId không hợp lệ",
+    "string.length": "orderId không hợp lệ",
+    "any.required": "orderId là bắt buộc",
+  }),
+});

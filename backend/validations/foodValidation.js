@@ -109,6 +109,10 @@ export const removeFoodSchema = Joi.object({
   }),
 });
 
+export const foodAvailabilitySchema = Joi.object({
+  isAvailable: Joi.boolean().required(),
+});
+
 export const listFoodQuerySchema = Joi.object({
   restaurantId: Joi.string().trim().hex().length(24).allow("", null),
   q: Joi.string().trim().max(100).allow("", null),

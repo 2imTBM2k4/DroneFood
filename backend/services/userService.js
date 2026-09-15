@@ -12,6 +12,11 @@ import { geocodeAddress } from "../utils/geocode.js";
 import { recordAudit } from "../utils/auditLog.js";
 import { ShipperProfile } from "../models/index.cjs";
 
+const maskEmail = (email = "") => {
+  const [local, domain] = email.split("@");
+  return domain ? `${local.slice(0, 2)}***@${domain}` : "";
+};
+
 const createAccessToken = (id) => {
   return jwt.sign({ id, type: "access" }, process.env.JWT_SECRET, { expiresIn: "30m" });
 };
@@ -51,6 +56,7 @@ export const loginUser = async ({ email, password }) => {
 
   const hashedRefreshToken = crypto.createHash("sha256").update(refreshToken).digest("hex");
   await userRepo.updateById(user._id, { refreshToken: hashedRefreshToken }, "+refreshToken");
+  await recordAudit({ actor: user, action: "auth.login_succeeded", targetType: "authentication", targetId: user._id, category: "authentication" });
 
   const userRole = user.role || "user";
   return {
@@ -222,6 +228,9 @@ export const updateProfile = async (userId, currentEmail, updates) => {
     }
   }
   const user = await userRepo.updateById(userId, { name, email, phone });
+  if (email && email !== currentEmail) {
+    await recordAudit({ actor: user, action: "email.updated", targetType: "user", targetId: userId, category: "email", metadata: { emailBefore: maskEmail(currentEmail), emailAfter: maskEmail(email) } });
+  }
   return { success: true, data: user };
 };
 
@@ -242,6 +251,7 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
   }
   const hash = await bcrypt.hash(newPassword, 10);
   await userRepo.updateById(userId, { password: hash });
+  await recordAudit({ actor: user, action: "password.changed", targetType: "user", targetId: userId, category: "password" });
   return { success: true, message: "Đổi mật khẩu thành công" };
 };
 

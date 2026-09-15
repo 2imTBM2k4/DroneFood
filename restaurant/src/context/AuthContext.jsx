@@ -78,6 +78,7 @@ export const AuthProvider = ({ children }) => {
             let restaurantBalance =
               restaurantData.data?.balance || restaurantData.balance || 0;
             fetchedUser.walletBalance = restaurantBalance;
+            fetchedUser.restaurantImage = restaurantData.data?.image || restaurantData.image || "";
           } else {
             fetchedUser.walletBalance = 0;
           }
@@ -126,7 +127,7 @@ export const AuthProvider = ({ children }) => {
         if (fetchedUser && fetchedUser._id) {
           // Delay navigation để toast kịp hiển thị
           setTimeout(() => {
-            navigate("/list");
+            navigate("/dashboard");
           }, 500);
         } else {
           // User không tồn tại hoặc bị lock (đã được handle trong fetchUserInfo hoặc backend)

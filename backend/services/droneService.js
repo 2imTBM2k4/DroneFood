@@ -199,8 +199,17 @@ export const scanQRCode = async (user, orderId, qrCode) => {
     throw new AppError("Invalid QR code", 400);
   }
 
+  // Nếu đã quét trước đó, trả về thành công an toàn không ném lỗi 400
   if (order.qrScanned) {
-    throw new AppError("QR code already scanned", 400);
+    return {
+      success: true,
+      message: "QR code already scanned",
+      data: {
+        qrScanned: true,
+        qrScannedAt: order.qrScannedAt,
+        cargoChecked: order.cargoChecked,
+      },
+    };
   }
 
   // Đánh dấu đã quét QR (khách hàng đã xác nhận)
@@ -215,7 +224,7 @@ export const scanQRCode = async (user, orderId, qrCode) => {
       drone.cargoLidStatus = "open";
       await drone.save();
 
-      // Tự động đóng nắp sau 5 giây
+      // Tự động đóng nắp sau 5 giây và hoàn tất đơn hàng
       setTimeout(async () => {
         await closeCargoLid(order.droneId, orderId);
       }, 5000);
@@ -233,7 +242,7 @@ export const scanQRCode = async (user, orderId, qrCode) => {
 };
 
 /**
- * Đóng nắp khoang hàng
+ * Đóng nắp khoang hàng & tự động hoàn tất giao đơn hàng
  */
 export const closeCargoLid = async (droneId, orderId) => {
   const drone = await droneRepo.findById(droneId);
@@ -254,13 +263,32 @@ export const closeCargoLid = async (droneId, orderId) => {
   
   // Đánh dấu đã kiểm tra khoang hàng (trọng lượng = 0)
   order.cargoChecked = true;
+
+  // Sau khi đóng nắp khoang hàng, chuyển trạng thái đơn sang đã giao thành công
+  order.orderStatus = "delivered";
+  order.isDelivered = true;
+  order.deliveredAt = new Date();
+  order.isPaid = true;
+  if (!order.paidAt) {
+    order.paidAt = new Date();
+  }
+
+  drone.status = "available";
+  drone.currentOrder = null;
+  drone.totalDeliveries = (drone.totalDeliveries || 0) + 1;
   
   await drone.save();
   await order.save();
 
+  // Cập nhật lịch sử giao hàng
+  await DroneDeliveryHistory.findOneAndUpdate(
+    { orderId: order._id, droneId: drone._id },
+    { status: "delivered", endTime: new Date() }
+  );
+
   return {
     success: true,
-    message: "Cargo lid closed",
+    message: "Cargo lid closed and delivery completed successfully",
   };
 };
 
@@ -276,17 +304,29 @@ export const confirmDelivery = async (user, orderId) => {
     throw new AppError("Unauthorized: Not your order", 403);
   }
 
+  if (order.orderStatus === "delivered") {
+    return {
+      success: true,
+      message: "Delivery already confirmed",
+      data: {
+        orderId: order._id,
+        deliveredAt: order.deliveredAt,
+      },
+    };
+  }
+
   if (!order.qrScanned) {
     throw new AppError("QR code has not been scanned yet", 400);
   }
 
-  if (!order.cargoChecked) {
-    throw new AppError("Cargo has not been checked yet. Please wait for the lid to close.", 400);
-  }
-
+  order.cargoChecked = true;
   order.orderStatus = "delivered";
   order.isDelivered = true;
   order.deliveredAt = new Date();
+  order.isPaid = true;
+  if (!order.paidAt) {
+    order.paidAt = new Date();
+  }
   await order.save();
 
   if (order.droneId) {
@@ -296,7 +336,7 @@ export const confirmDelivery = async (user, orderId) => {
       drone.currentOrder = null;
       drone.cargoWeight = 0;
       drone.cargoLidStatus = "closed";
-      drone.totalDeliveries += 1;
+      drone.totalDeliveries = (drone.totalDeliveries || 0) + 1;
       await drone.save();
 
       // Cập nhật lịch sử giao hàng

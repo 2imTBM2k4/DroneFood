@@ -5,6 +5,11 @@ import app from "../../app.js";
 import { Order, RefundRequest } from "../../models/index.cjs";
 import { createAdmin, createRestaurantOwner, createUser, generateToken } from "../helpers.js";
 
+const findAudit = async (action, targetId) => {
+  const AuditLog = (await import("../../models/auditLogModel.cjs")).default;
+  return AuditLog.findOne({ action, targetId }).lean();
+};
+
 const address = {
   fullName: "Test Customer", address: "123 Test Street", city: "Ho Chi Minh City",
   state: "District 1", country: "Vietnam", zipCode: "700000", phone: "0900000000", lat: 10.77, lng: 106.7,
@@ -35,6 +40,11 @@ describe("manual PayOS refunds", () => {
     expect(created.body.data.status).toBe("requested");
     expect(created.body.data.amount).toBe(60000);
     expect((await Order.findById(order._id)).orderStatus).toBe("refund_pending");
+    const audit = await findAudit("refund_requested", order._id);
+    expect(audit).toBeTruthy();
+    expect(String(audit.actor)).toBe(String(customer._id));
+    expect(audit.targetType).toBe("order");
+    expect(String(audit.metadata.refundRequestId)).toBe(created.body.data._id);
 
     const duplicate = await request(app).post("/api/refunds/request").set("Authorization", `Bearer ${token}`).send(body);
     expect(duplicate.status).toBe(409);
@@ -58,6 +68,12 @@ describe("manual PayOS refunds", () => {
     const cancelled = await Order.findById(order._id);
     expect(cancelled.orderStatus).toBe("cancelled");
     expect(cancelled.refundStatus).toBe("paid");
+    const audit = await findAudit("manual_refund_paid", order._id);
+    expect(audit).toBeTruthy();
+    expect(String(audit.actor)).toBe(String(admin._id));
+    expect(audit.targetType).toBe("order");
+    expect(String(audit.metadata.refundRequestId)).toBe(String(refund._id));
+    expect(audit.metadata.transferReference).toBe("MB123");
   });
 
   it("allows a customer to correct details and resubmit after an admin rejects a request", async () => {
@@ -74,6 +90,11 @@ describe("manual PayOS refunds", () => {
       .send({ adminNote: "Please verify account information" });
     expect(rejected.status).toBe(200);
     expect((await Order.findById(order._id)).orderStatus).toBe("pending");
+    const audit = await findAudit("manual_refund_rejected", order._id);
+    expect(audit).toBeTruthy();
+    expect(String(audit.actor)).toBe(String(admin._id));
+    expect(audit.targetType).toBe("order");
+    expect(String(audit.metadata.refundRequestId)).toBe(created.body.data._id);
 
     const resubmitted = await request(app).post("/api/refunds/request").set("Authorization", `Bearer ${token}`).send({
       ...body,

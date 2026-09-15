@@ -44,10 +44,10 @@ describe("Address book API", () => {
     expect(placed.status).toBe(200);
 
     const order = await Order.findById(placed.body.orderId);
-    expect(order.shippingAddress).toMatchObject({ fullName: "Trần Bình", address: "3 Pasteur", phone: "0901234567" });
+    expect(order.shippingAddress).toMatchObject({ fullName: "Test User", address: "3 Pasteur", phone: "0901234567" });
 
     await request(app).patch(`/api/address-book/${entryId}`).set("Authorization", `Bearer ${token}`).send({ recipient: "Tên mới" });
     const unchanged = await Order.findById(placed.body.orderId);
-    expect(unchanged.shippingAddress.fullName).toBe("Trần Bình");
+    expect(unchanged.shippingAddress.fullName).toBe("Test User");
   });
 });

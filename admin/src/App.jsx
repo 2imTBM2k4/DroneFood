@@ -13,6 +13,7 @@ import Shippers from "./pages/Shippers/Shippers";
 import Vouchers from "./pages/Vouchers/Vouchers";
 import Refunds from "./pages/Refunds/Refunds";
 import Withdrawals from "./pages/Withdrawals/Withdrawals";
+import Finance from "./pages/Finance/Finance";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { AuthContext } from "./context/AuthContext";
@@ -79,6 +80,7 @@ const App = () => {
               <Route path="/drones" element={<Drones url={url} />} />
               <Route path="/shippers" element={<Shippers url={url} />} />
               <Route path="/vouchers" element={<Vouchers url={url} />} />
+              <Route path="/finance" element={<Finance url={url} />} />
               <Route path="/refunds" element={<Refunds url={url} />} />
               <Route path="/withdrawals" element={<Withdrawals url={url} />} />
               <Route path="/audit" element={<AuditLog url={url} />} />

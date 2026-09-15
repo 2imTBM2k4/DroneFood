@@ -71,6 +71,17 @@ export const verifyOrder = async (req, res) => {
   }
 };
 
+export const retryPayosPayment = async (req, res) => {
+  try {
+    const result = await orderService.retryPayosPayment(req.user, req.body.orderId);
+    res.json(result);
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ success: false, message: error.message });
+  }
+};
+
 export const vnpayReturn = async (req, res) => {
   try {
     const result = await orderService.handleVnpayReturn(req.query);
@@ -119,6 +130,15 @@ export const userOrders = async (req, res) => {
     res
       .status(error.statusCode || 500)
       .json({ success: false, message: error.message });
+  }
+};
+
+export const customerOrderDetail = async (req, res) => {
+  try {
+    const result = await orderService.customerOrderDetail(req.user._id, req.params.id);
+    res.json(result);
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
 };
 

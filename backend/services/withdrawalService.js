@@ -3,6 +3,7 @@ import * as restaurantRepo from "../repositories/restaurantRepository.js";
 import * as withdrawalRepo from "../repositories/restaurantWithdrawalRepository.js";
 import * as walletRepo from "../repositories/walletRepository.js";
 import { addLedgerEntry, runInTransaction } from "./walletService.js";
+import { recordAudit } from "../utils/auditLog.js";
 
 export const MIN_WITHDRAWAL = 500000;
 export const MAX_WITHDRAWALS_PER_DAY = 3;
@@ -62,7 +63,9 @@ const createFor = async ({ actorType, actorId, amount }) => runInTransaction(asy
 
 export const createRestaurantWithdrawal = async (user, amount) => {
   const restaurant = await restaurantForOwner(user);
-  return createFor({ actorType: "restaurant", actorId: restaurant._id, amount });
+  const request = await createFor({ actorType: "restaurant", actorId: restaurant._id, amount });
+  await recordAudit({ actor: user, action: "withdrawal.requested", targetType: "withdrawal", targetId: request._id, category: "money", metadata: { amount } });
+  return request;
 };
 
 export const createShipperWithdrawal = async (user, amount) =>
@@ -70,7 +73,15 @@ export const createShipperWithdrawal = async (user, amount) =>
 
 export const listRestaurantWithdrawals = async (user) => {
   const restaurant = await restaurantForOwner(user);
+  await recordAudit({ actor: user, action: "money.withdrawals_viewed", targetType: "wallet", targetId: restaurant._id, category: "money" });
   return withdrawalRepo.findByRestaurant(restaurant._id);
+};
+
+/** Immutable ledger entries are the wallet's transaction history. */
+export const listRestaurantWalletTransactions = async (user) => {
+  const restaurant = await restaurantForOwner(user);
+  await recordAudit({ actor: user, action: "money.transactions_viewed", targetType: "wallet", targetId: restaurant._id, category: "money" });
+  return walletRepo.listTransactions({ ownerId: restaurant._id, walletType: "restaurant_balance" });
 };
 
 export const listShipperWithdrawals = async (user) => withdrawalRepo.findByShipper(user._id);

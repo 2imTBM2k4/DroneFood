@@ -18,7 +18,7 @@ const Navbar = ({ setShowLogin }) => {
   const [profileOpen, setProfileOpen] = useState(false);
   const [isDark, setIsDark] = useState(() => localStorage.getItem("mode") === "dark");
   const [scrolled, setScrolled] = useState(false);
-  const { getCartItemCount, token, setToken, user, liveLocation, liveAddress } =
+  const { getCartItemCount, token, setToken, user, liveLocation, liveAddress, activeAddressId, setActiveAddressId } =
     useContext(StoreContext);
   const navigate = useNavigate();
   const location = useLocation();
@@ -48,7 +48,9 @@ const Navbar = ({ setShowLogin }) => {
     setProfileOpen(false);
   }, [location.pathname]);
 
-  const addr = liveAddress || user?.address;
+  const savedAddresses = user?.addressBook || [];
+  const selectedSavedAddress = savedAddresses.find((entry) => String(entry.id || entry._id) === activeAddressId);
+  const addr = selectedSavedAddress || liveAddress || user?.address;
   const deliveryAddress = addr
     ? addr.formatted || [addr.address || addr.street, addr.city].filter(Boolean).join(", ")
     : liveLocation
@@ -103,10 +105,12 @@ const Navbar = ({ setShowLogin }) => {
             )}
 
             {deliveryAddress && (
-              <div className="apple-nav-location" title={deliveryAddress}>
+              <label className="apple-nav-location" title={deliveryAddress}>
                 <MapPin size={12} className="apple-location-icon" />
-                <span className="apple-location-text">{deliveryAddress}</span>
-              </div>
+                {savedAddresses.length > 0 ? <select className="apple-location-select" value={activeAddressId} onChange={(event) => setActiveAddressId(event.target.value)} aria-label="Delivery address">
+                  {savedAddresses.map((entry) => <option key={entry.id || entry._id} value={entry.id || entry._id}>{entry.label}: {entry.address}, {entry.city}</option>)}
+                </select> : <span className="apple-location-text">{deliveryAddress}</span>}
+              </label>
             )}
           </div>
 
@@ -214,7 +218,9 @@ const Navbar = ({ setShowLogin }) => {
           {deliveryAddress && (
             <div className="apple-mobile-addr">
               <MapPin size={13} />
-              <span>{deliveryAddress}</span>
+              {savedAddresses.length > 0 ? <select className="apple-location-select" value={activeAddressId} onChange={(event) => setActiveAddressId(event.target.value)} aria-label="Delivery address">
+                {savedAddresses.map((entry) => <option key={entry.id || entry._id} value={entry.id || entry._id}>{entry.label}: {entry.address}, {entry.city}</option>)}
+              </select> : <span>{deliveryAddress}</span>}
             </div>
           )}
         </div>

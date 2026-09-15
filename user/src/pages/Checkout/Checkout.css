@@ -93,6 +93,11 @@
   margin: 0;
 }
 
+.checkout-lead { margin: -8px 0 0; color: var(--text-secondary); font-size: 14px; line-height: 1.5; }
+.checkout-other-address { min-height: 44px; width: fit-content; display: inline-flex; align-items: center; gap: 8px; padding: 0 13px; border: 1px dashed var(--accent-border); border-radius: var(--radius); background: transparent; color: var(--accent-color); font: inherit; font-weight: 650; cursor: pointer; }
+.checkout-one-time-address { display: flex; gap: 11px; padding: 13px; border: 1px solid var(--accent-color); border-radius: var(--radius); background: var(--accent-light); color: var(--text-color); }.checkout-one-time-address svg { color: var(--accent-color); flex: none; margin-top: 2px; }.checkout-one-time-address p,.checkout-one-time-address small { display: block; margin: 3px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.4; }.checkout-empty-address { margin: 0; color: var(--text-secondary); font-size: 14px; }
+.checkout-other-address:focus-visible { outline: 3px solid var(--accent-color); outline-offset: 2px; }
+
 /* ---------- Address form ---------- */
 
 .checkout-fields {

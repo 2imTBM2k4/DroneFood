@@ -67,6 +67,11 @@
   border-bottom: 1px solid var(--border-color);
   margin-bottom: 28px;
   overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.profile-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .profile-tab {

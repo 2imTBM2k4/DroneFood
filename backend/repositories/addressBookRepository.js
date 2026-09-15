@@ -1,7 +1,10 @@
 import mongoose from "mongoose";
 import { User } from "../models/index.cjs";
 
-const addressBookSelect = "addressBook";
+// The profile name is the single source of truth for delivery recipient names.
+// Keep the legacy `recipient` field selected too so existing documents stay
+// readable while every new response is normalised from `name`.
+const addressBookSelect = "name addressBook";
 
 export const findForUser = async (userId, options = {}) =>
   User.findById(userId).select(addressBookSelect).session(options.session || null);
