@@ -5,10 +5,18 @@ import * as userRepo from "../repositories/userRepository.js";
 import AppError from "../utils/AppError.js";
 import { geocodeAddress } from "../utils/geocode.js";
 import { recordAudit } from "../utils/auditLog.js";
+import { getRestaurantRatingSummaries } from "./orderReviewService.js";
 
 export const listRestaurants = async ({ page, limit } = {}) => {
   const result = await restaurantRepo.findAll({ page, limit });
-  return { success: true, data: result.data, ...(result.pagination && { pagination: result.pagination }) };
+  const ratingSummaries = await getRestaurantRatingSummaries(
+    result.data.map((restaurant) => restaurant._id)
+  );
+  const data = result.data.map((restaurant) => ({
+    ...restaurant.toObject(),
+    ...(ratingSummaries.get(String(restaurant._id)) || {}),
+  }));
+  return { success: true, data, ...(result.pagination && { pagination: result.pagination }) };
 };
 
 export const updateRestaurant = async (user, id, updates, file) => {

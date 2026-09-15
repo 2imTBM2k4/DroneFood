@@ -1,13 +1,13 @@
 // backend/repositories/orderRepository.js
 import { Order } from "../models/index.cjs";
 
-export const create = async (orderData) => {
+export const create = async (orderData, { session } = {}) => {
   const { totalPrice, paymentMethod, restaurantId } = orderData;
   if (totalPrice <= 0 || !paymentMethod || !restaurantId) {
     throw new Error("Invalid order data");
   }
   const order = new Order(orderData);
-  return await order.save();
+  return await order.save({ session });
 };
 
 export const findById = async (id) => {
@@ -28,6 +28,7 @@ export const findByUser = async (userId) => {
   return await Order.find({ user: userId })
     .populate("orderItems.product")
     .populate("restaurantId")
+    .populate("shipperId", "name")
     .sort({ createdAt: -1 }); // Recent first
 };
 
@@ -48,11 +49,11 @@ export const findAll = async (filter = {}, { page, limit } = {}) => {
   return { data };
 };
 
-export const updateById = async (id, updates) => {
+export const updateById = async (id, updates, { session } = {}) => {
   // Handle specific updates like orderStatus enum
   if (
     updates.orderStatus &&
-    !["pending_payment", "pending", "preparing", "delivering", "delivered", "cancelled"].includes(
+    !["pending_payment", "pending", "refund_pending", "preparing", "delivering", "delivered", "cancelled"].includes(
       updates.orderStatus
     )
   ) {
@@ -61,6 +62,7 @@ export const updateById = async (id, updates) => {
   return await Order.findByIdAndUpdate(id, updates, {
     new: true,
     runValidators: true,
+    session,
   }).populate("orderItems.product");
 };
 

@@ -2,7 +2,7 @@
 import { Restaurant } from "../models/index.cjs";
 
 export const findAll = async ({ page, limit } = {}) => {
-  let query = Restaurant.find({}).populate("owner", "name email");
+  let query = Restaurant.find({}).select("-bankAccount").populate("owner", "name email");
 
   if (page && limit) {
     const total = await Restaurant.countDocuments();
@@ -15,7 +15,7 @@ export const findAll = async ({ page, limit } = {}) => {
 };
 
 export const findById = async (id) => {
-  return await Restaurant.findById(id).populate("owner", "name email");
+  return await Restaurant.findById(id).select("-bankAccount").populate("owner", "name email");
 };
 
 export const findByOwner = async (ownerId) => {
@@ -36,7 +36,7 @@ export const updateById = async (id, updates, options = {}) => {
     new: true,
     runValidators: true,
     ...options,
-  });
+  }).select("-bankAccount");
 };
 
 export const deleteById = async (id) => {

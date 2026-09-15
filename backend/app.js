@@ -14,7 +14,12 @@ import auditRouter from "./routes/auditRoute.js";
 import shipperRouter from "./routes/shipperRoute.js";
 import walletRouter from "./routes/walletRoute.js";
 import restaurantWithdrawalRouter from "./routes/restaurantWithdrawalRoute.js";
+import withdrawalRouter from "./routes/withdrawalRoute.js";
 import shipperAccountClosureRouter from "./routes/shipperAccountClosureRoute.js";
+import voucherRouter from "./routes/voucherRoute.js";
+import refundRouter from "./routes/refundRoute.js";
+import addressBookRouter from "./routes/addressBookRoute.js";
+import orderReviewRouter from "./routes/orderReviewRoute.js";
 
 const app = express();
 
@@ -55,7 +60,12 @@ app.use("/api/audit", auditRouter);
 app.use("/api/shippers", shipperRouter);
 app.use("/api/wallet", walletRouter);
 app.use("/api/restaurant-withdrawals", restaurantWithdrawalRouter);
+app.use("/api/withdrawals", withdrawalRouter);
 app.use("/api/shipper/account-closure", shipperAccountClosureRouter);
+app.use("/api/vouchers", voucherRouter);
+app.use("/api/refunds", refundRouter);
+app.use("/api/address-book", addressBookRouter);
+app.use("/api/order-reviews", orderReviewRouter);
 
 app.get("/api/health", (req, res) => {
   const dbState = mongoose.connection.readyState;

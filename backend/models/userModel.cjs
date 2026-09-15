@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const addressBookEntrySchema = require("./addressBookEntrySchema.cjs");
 
 const userSchema = new mongoose.Schema(
   {
@@ -49,6 +50,9 @@ const userSchema = new mongoose.Schema(
       lat: { type: Number, default: null },
       lng: { type: Number, default: null },
     },
+    // `address` remains as a temporary read-compatibility field for clients
+    // that have not moved to the address-book APIs yet.
+    addressBook: { type: [addressBookEntrySchema], default: [] },
     cart: [
       {
         productId: {

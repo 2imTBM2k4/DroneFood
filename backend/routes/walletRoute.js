@@ -10,6 +10,7 @@ router.get("/shipper/me", protect, authorize("shipper"), controller.shipperSumma
 router.get("/shipper/transactions", protect, authorize("shipper"), controller.shipperTransactions);
 router.get("/shipper/earnings-report", protect, authorize("shipper"), controller.shipperEarningsReport);
 router.post("/shipper/deposit/payos", protect, authorize("shipper"), validate(depositPaymentSchema), controller.createDepositPayment);
+router.post("/shipper/earnings/payos", protect, authorize("shipper"), validate(depositPaymentSchema), controller.createEarningsTopUpPayment);
 router.get("/payos/deposit-return", controller.payosDepositReturn);
 router.get("/vnpay/deposit-ipn", controller.depositVnpayIpn);
 router.get("/vnpay/deposit-return", controller.depositVnpayIpn);

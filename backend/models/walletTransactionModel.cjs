@@ -19,9 +19,11 @@ const walletTransactionSchema = new mongoose.Schema(
       enum: [
         "restaurant_order_settlement",
         "shipper_deposit_top_up",
+        "shipper_earnings_top_up",
         "shipper_online_delivery_earnings",
         "shipper_cod_collection",
         "restaurant_withdrawal",
+        "shipper_withdrawal",
         "shipper_closure_earnings_offset",
         "shipper_closure_deposit_refund",
       ],

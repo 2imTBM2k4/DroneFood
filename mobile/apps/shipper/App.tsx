@@ -36,9 +36,12 @@ type Profile = { status: ShipperStatus; approvalStatus: "pending" | "approved" |
 type User = { name: string; email: string; role: string };
 type WalletSummary = {
   depositBalance: number; earningsBalance: number; reservedCodLiability: number;
+  reservedWithdrawalAmount: number; earningsAvailable: number;
   warningThreshold: number; lockThreshold: number; isEarlyWarning: boolean; isAcceptanceLocked: boolean;
 };
 type WalletTransaction = { _id: string; amount: number; transactionType: string; createdAt: string };
+type WithdrawalRequest = { _id: string; amount: number; status: "pending" | "approved" | "paid" | "rejected"; createdAt: string };
+type BankAccount = { bankName: string; accountHolder: string; accountNumberMasked: string; updatedAt?: string | null; isConfigured: boolean };
 type EarningsReport = {
   totalEarned: number;
   daily: { period: string; amount: number; deliveries: number }[];
@@ -141,6 +144,16 @@ function ShipperApp() {
     enabled: Boolean(token),
     queryFn: async () => (await axios.get<{ data: EarningsReport }>(`${API_URL}/api/wallet/shipper/earnings-report`, { headers: authHeaders(token!) })).data.data,
   });
+  const withdrawals = useQuery({
+    queryKey: ["shipper-withdrawals", token],
+    enabled: Boolean(token),
+    queryFn: async () => (await axios.get<{ data: WithdrawalRequest[] }>(`${API_URL}/api/withdrawals/shipper`, { headers: authHeaders(token!) })).data.data || [],
+  });
+  const bankAccount = useQuery({
+    queryKey: ["shipper-bank-account", token],
+    enabled: Boolean(token),
+    queryFn: async () => (await axios.get<{ data: BankAccount }>(`${API_URL}/api/shippers/me/bank-account`, { headers: authHeaders(token!) })).data.data,
+  });
 
   const isApproved = profile.data?.approvalStatus === "approved";
   const isWorking = profile.data?.status === "assigned" || profile.data?.status === "delivering";
@@ -154,6 +167,8 @@ function ShipperApp() {
       queryClient.invalidateQueries({ queryKey: ["shipper-wallet", token] }),
       queryClient.invalidateQueries({ queryKey: ["shipper-wallet-transactions", token] }),
       queryClient.invalidateQueries({ queryKey: ["shipper-earnings-report", token] }),
+      queryClient.invalidateQueries({ queryKey: ["shipper-withdrawals", token] }),
+      queryClient.invalidateQueries({ queryKey: ["shipper-bank-account", token] }),
     ]);
   };
 
@@ -327,13 +342,13 @@ function ShipperApp() {
     } catch (error) { Alert.alert("Không thể cập nhật đơn", apiError(error)); }
     finally { setWorking(false); }
   };
-  /** Creates a PayOS deposit payment and opens the checkout safely. */
-  const topUpDeposit = async (amount: number) => {
+  /** Creates a PayOS wallet payment and opens the checkout safely. */
+  const topUpWallet = async (amount: number, wallet: "deposit" | "earnings") => {
     if (!token) return;
     try {
       setWorking(true);
       const response = await axios.post<{ checkoutUrl?: string; paymentUrl?: string }>(
-        `${API_URL}/api/wallet/shipper/deposit/payos`,
+        `${API_URL}/api/wallet/shipper/${wallet}/payos`,
         { amount },
         { headers: authHeaders(token) }
       );
@@ -343,8 +358,33 @@ function ShipperApp() {
       if (!supported) throw new Error("Thiết bị không thể mở trang thanh toán PayOS.");
       await Linking.openURL(checkoutUrl);
       Alert.alert("Tiếp tục thanh toán", "Sau khi PayOS xác nhận, hãy quay lại app và bấm “Làm mới số dư”.");
-    } catch (error) { Alert.alert("Không thể nạp ký quỹ", apiError(error, error instanceof Error ? error.message : "Có lỗi xảy ra")); }
+    } catch (error) { Alert.alert(wallet === "deposit" ? "Không thể nạp ký quỹ" : "Không thể nạp ví earnings", apiError(error, error instanceof Error ? error.message : "Có lỗi xảy ra")); }
     finally { setWorking(false); }
+  };
+  const topUpDeposit = (amount: number) => topUpWallet(amount, "deposit");
+  const topUpEarnings = (amount: number) => topUpWallet(amount, "earnings");
+  const requestWithdrawal = async (amount: number) => {
+    if (!token) return;
+    try {
+      setWorking(true);
+      await axios.post(`${API_URL}/api/withdrawals/shipper`, { amount }, { headers: authHeaders(token) });
+      Alert.alert("Đã gửi yêu cầu", "Số tiền đã được giữ chỗ. Admin sẽ duyệt và xác nhận chuyển khoản.");
+      await refreshViews();
+    } catch (error) { Alert.alert("Không thể gửi yêu cầu rút tiền", apiError(error)); }
+    finally { setWorking(false); }
+  };
+  const saveBankAccount = async (account: { bankName: string; accountHolder: string; accountNumber: string }) => {
+    if (!token) return;
+    try {
+      setWorking(true);
+      await axios.put(`${API_URL}/api/shippers/me/bank-account`, account, { headers: authHeaders(token) });
+      Alert.alert("Đã lưu", "Tài khoản ngân hàng đã được cập nhật.");
+      await queryClient.invalidateQueries({ queryKey: ["shipper-bank-account", token] });
+      await queryClient.invalidateQueries({ queryKey: ["shipper-profile", token] });
+    } catch (error) {
+      Alert.alert("Không thể lưu tài khoản ngân hàng", apiError(error));
+      throw error;
+    } finally { setWorking(false); }
   };
   /** Sends a fresh GPS point and restarts foreground tracking on demand. */
   const refreshLocation = async () => {
@@ -372,7 +412,7 @@ function ShipperApp() {
     {!isApproved ? <ApprovalScreen status={profile.data?.approvalStatus || "pending"} /> : <>
       {tab === "offers" && <OffersScreen orders={offers.data || []} loading={offers.isLoading} online={profile.data?.status === "available"} working={working} isWorking={isWorking} error={offersError} onRefresh={refreshViews} onRefreshLocation={refreshLocation} onToggle={changeStatus} onAccept={acceptOrder} />}
       {tab === "delivery" && <DeliveryScreen order={currentOrder.data || null} loading={currentOrder.isLoading} working={working} onAdvance={advanceDelivery} />}
-      {tab === "account" && <AccountScreen user={user.data} profile={profile.data} wallet={wallet.data} transactions={walletTransactions.data || []} report={earningsReport.data} walletLoading={wallet.isLoading || earningsReport.isLoading} working={working} isWorking={isWorking} onToggle={changeStatus} onRefresh={refreshViews} onTopUp={topUpDeposit} />}
+      {tab === "account" && <AccountScreen user={user.data} profile={profile.data} bankAccount={bankAccount.data} wallet={wallet.data} transactions={walletTransactions.data || []} withdrawals={withdrawals.data || []} report={earningsReport.data} walletLoading={wallet.isLoading || earningsReport.isLoading} working={working} isWorking={isWorking} onToggle={changeStatus} onRefresh={refreshViews} onTopUp={topUpDeposit} onTopUpEarnings={topUpEarnings} onRequestWithdrawal={requestWithdrawal} onSaveBankAccount={saveBankAccount} />}
       <BottomNav active={tab} onChange={setTab} hasDelivery={Boolean(currentOrder.data)} />
     </>}
   </SafeAreaView>;
@@ -419,13 +459,19 @@ function DeliveryScreen({ order, loading, working, onAdvance }: { order: Order |
 
 const walletTransactionLabel: Record<string, string> = {
   shipper_deposit_top_up: "Nạp ký quỹ", shipper_online_delivery_earnings: "Thu nhập giao hàng",
+  shipper_earnings_top_up: "Nạp ví earnings", shipper_withdrawal: "Rút tiền earnings",
   shipper_cod_collection: "Thu COD", shipper_closure_earnings_offset: "Đối trừ khi huỷ tài khoản",
   shipper_closure_deposit_refund: "Hoàn ký quỹ",
 };
 
-function AccountScreen({ user, profile, wallet, transactions, report, walletLoading, working, isWorking, onToggle, onRefresh, onTopUp }: { user?: User; profile?: Profile; wallet?: WalletSummary; transactions: WalletTransaction[]; report?: EarningsReport; walletLoading: boolean; working: boolean; isWorking: boolean; onToggle: () => void; onRefresh: () => void; onTopUp: (amount: number) => void }) {
-  const [view, setView] = useState<"menu" | "overview" | "deposit" | "transactions" | "report" | "deposit-history" | "profile">("menu");
+function AccountScreen({ user, profile, bankAccount, wallet, transactions, withdrawals, report, walletLoading, working, isWorking, onToggle, onRefresh, onTopUp, onTopUpEarnings, onRequestWithdrawal, onSaveBankAccount }: { user?: User; profile?: Profile; bankAccount?: BankAccount; wallet?: WalletSummary; transactions: WalletTransaction[]; withdrawals: WithdrawalRequest[]; report?: EarningsReport; walletLoading: boolean; working: boolean; isWorking: boolean; onToggle: () => void; onRefresh: () => void; onTopUp: (amount: number) => void; onTopUpEarnings: (amount: number) => void; onRequestWithdrawal: (amount: number) => void; onSaveBankAccount: (account: { bankName: string; accountHolder: string; accountNumber: string }) => Promise<void> }) {
+  const [view, setView] = useState<"menu" | "overview" | "deposit" | "earnings-topup" | "withdrawal" | "transactions" | "report" | "deposit-history" | "profile" | "bank-account">("menu");
   const [depositAmount, setDepositAmount] = useState("");
+  const [earningsAmount, setEarningsAmount] = useState("");
+  const [withdrawalAmount, setWithdrawalAmount] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [accountHolder, setAccountHolder] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
   const online = profile?.status !== "offline";
   const minimumDeposit = wallet?.depositBalance === 0 ? 350000 : 1;
   const depositHistory = transactions.filter((transaction) => transaction.transactionType === "shipper_deposit_top_up");
@@ -434,10 +480,42 @@ function AccountScreen({ user, profile, wallet, transactions, report, walletLoad
     if (!Number.isSafeInteger(amount) || amount < minimumDeposit) return Alert.alert("Số tiền chưa hợp lệ", minimumDeposit === 350000 ? "Lần nạp ký quỹ đầu tiên tối thiểu là 350.000 ₫." : "Hãy nhập số tiền nạp lớn hơn 0.");
     onTopUp(amount);
   };
+  const submitEarningsTopUp = () => {
+    const amount = Number(earningsAmount.replace(/[^0-9]/g, ""));
+    if (!Number.isSafeInteger(amount) || amount <= 0) return Alert.alert("Số tiền chưa hợp lệ", "Hãy nhập số tiền VND lớn hơn 0.");
+    onTopUpEarnings(amount);
+  };
+  const submitWithdrawal = () => {
+    const amount = Number(withdrawalAmount.replace(/[^0-9]/g, ""));
+    if (!Number.isSafeInteger(amount) || amount < 500000) return Alert.alert("Số tiền chưa hợp lệ", "Mỗi lần rút tối thiểu 500.000 ₫.");
+    Alert.alert("Xác nhận yêu cầu rút tiền", `Gửi yêu cầu rút ${formatVnd(amount)}? Số tiền sẽ được giữ chỗ đến khi admin xử lý.`, [
+      { text: "Quay lại", style: "cancel" },
+      { text: "Gửi yêu cầu", onPress: () => onRequestWithdrawal(amount) },
+    ]);
+  };
+  const submitBankAccount = async () => {
+    if (!bankName.trim() || !accountHolder.trim() || !accountNumber.trim()) {
+      Alert.alert("Thiếu thông tin", "Hãy nhập ngân hàng, chủ tài khoản và số tài khoản.");
+      return;
+    }
+    try {
+      await onSaveBankAccount({ bankName, accountHolder, accountNumber });
+      setAccountNumber("");
+    } catch {
+      // The parent has already shown the server error.
+    }
+  };
+  if (view === "earnings-topup" || view === "withdrawal") {
+    const isTopUp = view === "earnings-topup";
+    const amount = isTopUp ? earningsAmount : withdrawalAmount;
+    const setAmount = isTopUp ? setEarningsAmount : setWithdrawalAmount;
+    return <ScrollView contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled"><Pressable accessibilityRole="button" accessibilityLabel="Quay lại ví" onPress={() => setView("overview")}><Text style={styles.backLink}>‹ Ví</Text></Pressable><Text style={styles.screenTitle}>{isTopUp ? "Nạp ví earnings" : "Rút tiền earnings"}</Text><View style={styles.panel}><Text style={styles.cardTitle}>{isTopUp ? "Bù nghĩa vụ COD" : "Yêu cầu rút tiền"}</Text><Text style={styles.muted}>{isTopUp ? "Tiền nạp giúp tăng earnings khả dụng để nhận đơn COD trong hạn mức." : "Tối thiểu 500.000 ₫. Trạng thái sẽ lần lượt là Chờ duyệt, Đã duyệt, Đã thanh toán hoặc Từ chối."}</Text><Text style={styles.fieldLabel}>Số tiền</Text><TextInput accessibilityLabel={isTopUp ? "Số tiền nạp ví earnings" : "Số tiền yêu cầu rút"} style={styles.input} keyboardType="number-pad" value={amount} onChangeText={setAmount} placeholder={isTopUp ? "Số tiền VND" : "Tối thiểu 500.000 ₫"} /><PrimaryButton label={isTopUp ? "Nạp qua PayOS" : "Gửi yêu cầu rút"} onPress={isTopUp ? submitEarningsTopUp : submitWithdrawal} disabled={working || walletLoading} /></View></ScrollView>;
+  }
+  if (view === "bank-account") return <ScrollView contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled"><Pressable accessibilityRole="button" accessibilityLabel="Quay lại hồ sơ" onPress={() => setView("profile")}><Text style={styles.backLink}>‹ Hồ sơ</Text></Pressable><Text style={styles.screenTitle}>Tài khoản ngân hàng</Text><View style={styles.panel}><Text style={styles.muted}>Tài khoản dùng để nhận tiền rút. Số đầy đủ được mã hoá; sau khi lưu chỉ 4 số cuối được hiển thị.</Text>{bankAccount?.isConfigured ? <Text style={styles.walletReserve}>Đang dùng: {bankAccount.accountNumberMasked}</Text> : <Text style={styles.walletReserve}>Chưa thiết lập tài khoản nhận tiền.</Text>}<FormField label="Ngân hàng" value={bankName || bankAccount?.bankName || ""} placeholder="Ví dụ: Vietcombank" onChange={setBankName} /><FormField label="Chủ tài khoản" value={accountHolder || bankAccount?.accountHolder || ""} placeholder="NGUYEN VAN A" onChange={setAccountHolder} /><FormField label={bankAccount?.isConfigured ? "Số tài khoản mới" : "Số tài khoản"} value={accountNumber} placeholder={bankAccount?.isConfigured ? "Nhập đầy đủ để thay đổi" : "Chỉ gồm chữ số"} keyboardType="phone-pad" secure onChange={setAccountNumber} /><PrimaryButton label="Lưu tài khoản" disabled={working} onPress={submitBankAccount} /></View></ScrollView>;
   const detailTitle = view === "deposit" ? "Nạp ký quỹ" : view === "transactions" ? "Giao dịch" : view === "report" ? "Báo cáo thu nhập" : view === "profile" ? "Hồ sơ Shipper" : "Lịch sử nạp tiền";
-  if (view !== "menu" && view !== "overview") return <ScrollView contentContainerStyle={styles.list}><Pressable accessibilityRole="button" onPress={() => setView("menu")}><Text style={styles.backLink}>‹ Menu</Text></Pressable><Text style={styles.screenTitle}>{detailTitle}</Text>{view === "profile" ? <View style={styles.panel}><Text style={styles.cardTitle}>{user?.name || "Shipper"}</Text><Text style={styles.muted}>{user?.email}</Text><Text style={styles.muted}>Phương tiện: {profile?.vehicleType || "motorbike"}</Text><Text style={styles.muted}>Trạng thái hồ sơ: {profile?.approvalStatus === "approved" ? "Đã duyệt" : "Chờ duyệt"}</Text></View> : null}{view === "deposit" ? <View style={styles.panel}><Text style={styles.cardTitle}>Tài khoản ký quỹ</Text><Text style={styles.walletAmount}>{formatVnd(wallet?.depositBalance)}</Text><Text style={styles.muted}>Ký quỹ không âm và xác định hạn mức nhận đơn COD.</Text><View style={styles.depositForm}><Text style={styles.fieldLabel}>Số tiền nạp</Text><TextInput accessibilityLabel="Số tiền nạp ký quỹ" style={styles.input} keyboardType="number-pad" value={depositAmount} onChangeText={setDepositAmount} placeholder={minimumDeposit === 350000 ? "Tối thiểu 350.000 ₫" : "Số tiền VND"} /><PrimaryButton label="Nạp qua PayOS" onPress={submitDeposit} disabled={working || walletLoading} /></View></View> : null}{view === "report" ? <><View style={styles.panel}><Text style={styles.muted}>Tổng thu nhập từ đơn thanh toán online đã giao thành công</Text><Text style={styles.walletAmount}>{formatVnd(report?.totalEarned)}</Text></View><Text style={styles.sectionTitle}>Theo ngày</Text>{report?.daily.map((entry) => <ReportRow key={`day-${entry.period}`} label={entry.period.split("-").reverse().join("/")} amount={entry.amount} deliveries={entry.deliveries} />)}{!walletLoading && !report?.daily.length ? <Text style={styles.muted}>Chưa có thu nhập giao hàng.</Text> : null}<Text style={styles.sectionTitle}>Theo tháng</Text>{report?.monthly.map((entry) => <ReportRow key={`month-${entry.period}`} label={entry.period.split("-").reverse().join("/")} amount={entry.amount} deliveries={entry.deliveries} />)}</> : null}{view === "transactions" ? <TransactionList transactions={transactions} empty="Chưa có giao dịch ví." /> : null}{view === "deposit-history" ? <TransactionList transactions={depositHistory} empty="Chưa có giao dịch nạp ký quỹ." /> : null}</ScrollView>;
+  if (view !== "menu" && view !== "overview") return <ScrollView contentContainerStyle={styles.list}><Pressable accessibilityRole="button" onPress={() => setView("menu")}><Text style={styles.backLink}>‹ Menu</Text></Pressable><Text style={styles.screenTitle}>{detailTitle}</Text>{view === "profile" ? <View style={styles.panel}><Text style={styles.cardTitle}>{user?.name || "Shipper"}</Text><Text style={styles.muted}>{user?.email}</Text><Text style={styles.muted}>Phương tiện: {profile?.vehicleType || "motorbike"}</Text><Text style={styles.muted}>Trạng thái hồ sơ: {profile?.approvalStatus === "approved" ? "Đã duyệt" : "Chờ duyệt"}</Text><WalletMenuRow title="Tài khoản ngân hàng" value={bankAccount?.accountNumberMasked || "Chưa thiết lập"} onPress={() => { setBankName(bankAccount?.bankName || ""); setAccountHolder(bankAccount?.accountHolder || ""); setAccountNumber(""); setView("bank-account"); }} /></View> : null}{view === "deposit" ? <View style={styles.panel}><Text style={styles.cardTitle}>Tài khoản ký quỹ</Text><Text style={styles.walletAmount}>{formatVnd(wallet?.depositBalance)}</Text><Text style={styles.muted}>Ký quỹ không âm và xác định hạn mức nhận đơn COD.</Text><View style={styles.depositForm}><Text style={styles.fieldLabel}>Số tiền nạp</Text><TextInput accessibilityLabel="Số tiền nạp ký quỹ" style={styles.input} keyboardType="number-pad" value={depositAmount} onChangeText={setDepositAmount} placeholder={minimumDeposit === 350000 ? "Tối thiểu 350.000 ₫" : "Số tiền VND"} /><PrimaryButton label="Nạp qua PayOS" onPress={submitDeposit} disabled={working || walletLoading} /></View></View> : null}{view === "report" ? <><View style={styles.panel}><Text style={styles.muted}>Tổng thu nhập từ đơn thanh toán online đã giao thành công</Text><Text style={styles.walletAmount}>{formatVnd(report?.totalEarned)}</Text></View><Text style={styles.sectionTitle}>Theo ngày</Text>{report?.daily.map((entry) => <ReportRow key={`day-${entry.period}`} label={entry.period.split("-").reverse().join("/")} amount={entry.amount} deliveries={entry.deliveries} />)}{!walletLoading && !report?.daily.length ? <Text style={styles.muted}>Chưa có thu nhập giao hàng.</Text> : null}<Text style={styles.sectionTitle}>Theo tháng</Text>{report?.monthly.map((entry) => <ReportRow key={`month-${entry.period}`} label={entry.period.split("-").reverse().join("/")} amount={entry.amount} deliveries={entry.deliveries} />)}</> : null}{view === "transactions" ? <TransactionList transactions={transactions} empty="Chưa có giao dịch ví." /> : null}{view === "deposit-history" ? <TransactionList transactions={depositHistory} empty="Chưa có giao dịch nạp ký quỹ." /> : null}</ScrollView>;
   if (view === "menu") return <ScrollView contentContainerStyle={styles.profileMenu}><View style={styles.profileHeader}><View style={styles.profileAvatar}><Text style={styles.profileAvatarText}>{(user?.name || "S").trim().charAt(0).toUpperCase()}</Text></View><Text style={styles.profileName}>{user?.name || "Shipper"}</Text><Text style={styles.muted}>{user?.email}</Text></View><View style={styles.profileMenuList}><View style={styles.profileActivityRow}><View><Text style={styles.profileMenuTitle}>Trạng thái hoạt động</Text><Text style={styles.muted}>{online ? "Đang sẵn sàng nhận đơn" : "Đang ngoại tuyến"}</Text></View><Switch accessibilityLabel="Trạng thái hoạt động" value={online} disabled={working || isWorking} onValueChange={onToggle} trackColor={{ false: "#CBD5E1", true: "#86EFAC" }} thumbColor={online ? "#16A34A" : "#F8FAFC"} /></View><WalletMenuRow title="Hồ sơ của tôi" onPress={() => setView("profile")} /><WalletMenuRow title="Ví" subtitle={(wallet?.isEarlyWarning || wallet?.isAcceptanceLocked) ? "Cần chú ý số dư earnings" : undefined} onPress={() => setView("overview")} /><WalletMenuRow title="Thu nhập" onPress={() => setView("report")} /><WalletMenuRow title="Giao dịch" onPress={() => setView("transactions")} /></View>{isWorking ? <Text style={styles.notice}>Bạn không thể tắt hoạt động khi còn đơn được giao.</Text> : null}</ScrollView>;
-  return <ScrollView contentContainerStyle={styles.walletPage}><Pressable accessibilityRole="button" onPress={() => setView("menu")}><Text style={styles.walletBackLink}>‹ Menu</Text></Pressable><View style={styles.walletHero}><Text style={styles.walletHeroTitle}>Ví của tôi</Text><Text style={styles.walletHeroLabel}>Tài khoản chính</Text><Text style={[styles.walletHeroAmount, (wallet?.earningsBalance || 0) < 0 && styles.walletHeroDebt]}>{walletLoading ? "Đang tải…" : formatVnd(wallet?.earningsBalance)}</Text><View style={styles.walletActionBar}><Pressable accessibilityRole="button" style={styles.walletAction} onPress={() => setView("deposit")}><Text style={styles.walletActionIcon}>⊕</Text><Text style={styles.walletActionText}>Nạp tiền</Text></Pressable><View style={styles.walletDivider} /><Pressable accessibilityRole="button" style={styles.walletAction} onPress={() => Alert.alert("Chưa khả dụng", "Chưa có nghiệp vụ rút tiền từ ví earnings được thiết lập.")}><Text style={styles.walletActionIcon}>⇧</Text><Text style={styles.walletActionText}>Rút tiền</Text></Pressable></View></View><View style={styles.walletMenu}><WalletMenuRow title="Tài khoản ký quỹ" value={formatVnd(wallet?.depositBalance)} subtitle={(wallet?.depositBalance || 0) < 350000 ? "Số dư thấp" : undefined} onPress={() => setView("deposit")} /><WalletMenuRow title="Giao dịch" onPress={() => setView("transactions")} /><WalletMenuRow title="Báo cáo thu nhập" onPress={() => setView("report")} /><WalletMenuRow title="Lịch sử nạp & rút tiền" onPress={() => setView("deposit-history")} /></View><View style={styles.list}>{wallet ? <View style={[styles.walletStatus, wallet.isAcceptanceLocked ? styles.walletLocked : wallet.isEarlyWarning ? styles.walletWarning : styles.walletSafe]}><Text style={styles.cardTitle}>{wallet.isAcceptanceLocked ? "Đã khoá nhận đơn mới" : wallet.isEarlyWarning ? "Cảnh báo số dư earnings" : "Số dư an toàn"}</Text><Text style={styles.muted}>Ngưỡng cảnh báo: {formatVnd(wallet.warningThreshold)} · ngưỡng khoá: {formatVnd(wallet.lockThreshold)}</Text>{(wallet.reservedCodLiability || 0) > 0 ? <Text style={styles.walletReserve}>Đang giữ cho COD: {formatVnd(wallet.reservedCodLiability)}</Text> : null}</View> : null}<SecondaryButton label="Làm mới số dư" onPress={onRefresh} disabled={working} /></View></ScrollView>;
+  return <ScrollView contentContainerStyle={styles.walletPage}><Pressable accessibilityRole="button" accessibilityLabel="Quay lại menu" onPress={() => setView("menu")}><Text style={styles.walletBackLink}>‹ Menu</Text></Pressable><View style={styles.walletHero}><Text style={styles.walletHeroTitle}>Ví earnings</Text><Text style={styles.walletHeroLabel}>Số dư hiện tại</Text><Text style={[styles.walletHeroAmount, (wallet?.earningsBalance || 0) < 0 && styles.walletHeroDebt]}>{walletLoading ? "Đang tải…" : formatVnd(wallet?.earningsBalance)}</Text><View style={styles.walletActionBar}><Pressable accessibilityRole="button" accessibilityLabel="Nạp ví earnings" style={styles.walletAction} onPress={() => setView("earnings-topup")}><Text style={styles.walletActionIcon}>⊕</Text><Text style={styles.walletActionText}>Nạp earnings</Text></Pressable><View style={styles.walletDivider} /><Pressable accessibilityRole="button" accessibilityLabel="Rút tiền earnings" style={styles.walletAction} onPress={() => setView("withdrawal")}><Text style={styles.walletActionIcon}>⇧</Text><Text style={styles.walletActionText}>Rút tiền</Text></Pressable></View></View><View style={styles.walletMenu}><WalletMenuRow title="Tài khoản ký quỹ" value={formatVnd(wallet?.depositBalance)} subtitle={(wallet?.depositBalance || 0) < 350000 ? "Số dư thấp" : undefined} onPress={() => setView("deposit")} /><WalletMenuRow title="Giao dịch" onPress={() => setView("transactions")} /><WalletMenuRow title="Báo cáo thu nhập" onPress={() => setView("report")} /><WalletMenuRow title="Lịch sử nạp & rút tiền" onPress={() => setView("deposit-history")} /></View><View style={styles.list}>{wallet ? <View style={[styles.walletStatus, wallet.isAcceptanceLocked ? styles.walletLocked : wallet.isEarlyWarning ? styles.walletWarning : styles.walletSafe]}><Text style={styles.cardTitle}>{wallet.isAcceptanceLocked ? "Đã khoá nhận đơn mới" : wallet.isEarlyWarning ? "Cảnh báo số dư earnings" : "Số dư an toàn"}</Text><Text style={styles.muted}>Hạn mức COD: {formatVnd(wallet.depositBalance + wallet.earningsAvailable)} · earnings khả dụng: {formatVnd(wallet.earningsAvailable)}</Text>{(wallet.reservedCodLiability || 0) > 0 ? <Text style={styles.walletReserve}>Đang giữ cho COD: {formatVnd(wallet.reservedCodLiability)}</Text> : null}{(wallet.reservedWithdrawalAmount || 0) > 0 ? <Text style={styles.walletReserve}>Đang giữ cho yêu cầu rút: {formatVnd(wallet.reservedWithdrawalAmount)}</Text> : null}</View> : null}{withdrawals.filter((request) => request.status === "pending" || request.status === "approved").map((request) => <View key={request._id} style={styles.panel}><Text style={styles.cardTitle}>Yêu cầu rút {formatVnd(request.amount)}</Text><Text style={styles.muted}>Trạng thái: {request.status === "pending" ? "Chờ duyệt" : "Đã duyệt, chờ chuyển khoản"}</Text></View>)}<SecondaryButton label="Làm mới số dư" onPress={onRefresh} disabled={working} /></View></ScrollView>;
 }
 
 function WalletMenuRow({ title, value, subtitle, onPress }: { title: string; value?: string; subtitle?: string; onPress: () => void }) { return <Pressable accessibilityRole="button" style={styles.walletMenuRow} onPress={onPress}><View><Text style={styles.walletMenuTitle}>{title}</Text>{subtitle ? <Text style={styles.walletMenuWarning}>{subtitle}</Text> : null}</View><View style={styles.walletMenuRight}>{value ? <Text style={styles.walletMenuValue}>{value}</Text> : null}<Text style={styles.walletChevron}>›</Text></View></Pressable>; }

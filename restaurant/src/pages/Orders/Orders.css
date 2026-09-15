@@ -127,6 +127,7 @@
 
 .status-buttons {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -140,6 +141,25 @@
   font-size: 13px;
   font-weight: 500;
   transition: all 0.2s ease;
+}
+
+.status-buttons button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.status-buttons button:disabled:hover {
+  color: var(--text-color);
+  background: var(--body-color);
+  border-color: var(--border-color);
+}
+
+.shipper-assignment-wait {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .btn-accept:hover {

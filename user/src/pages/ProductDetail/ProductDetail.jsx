@@ -8,6 +8,13 @@ import ItemOptionsSheet from "../../components/ItemOptionsSheet/ItemOptionsSheet
 import { assets } from "../../assets/assets";
 import { formatVND } from "../../../../shared/utils/money";
 
+const BackButton = ({ onClick }) => (
+  <button type="button" className="back-btn" onClick={onClick}>
+    <ArrowLeft size={16} aria-hidden="true" />
+    Quay lại
+  </button>
+);
+
 /**
  * Deep-link page for a single dish. Adding to the cart goes through the same
  * ItemOptionsSheet the menu cards open, so options behave identically here.
@@ -20,6 +27,7 @@ const ProductDetail = () => {
   const [error, setError] = useState(null);
   const [item, setItem] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [reviewSummary, setReviewSummary] = useState({ averageRating: null, ratingCount: 0, reviews: [] });
 
   const fetchSingleProduct = useCallback(async () => {
     if (!id) return;
@@ -40,6 +48,17 @@ const ProductDetail = () => {
     }
   }, [id, url]);
 
+  const fetchReviews = useCallback(async () => {
+    if (!id) return;
+    try {
+      const response = await fetch(`${url}/api/order-reviews/food/${id}`);
+      const data = await response.json();
+      if (data.success) setReviewSummary(data.data);
+    } catch {
+      // Reviews are supplementary; a failed review request must not hide the dish.
+    }
+  }, [id, url]);
+
   useEffect(() => {
     if (isLoadingFoods) return;
     const foundItem = food_list.find((product) => product._id === id);
@@ -51,9 +70,14 @@ const ProductDetail = () => {
     }
   }, [food_list, id, isLoadingFoods, fetchSingleProduct]);
 
+  useEffect(() => {
+    fetchReviews();
+  }, [fetchReviews]);
+
   if (loading || isLoadingFoods) {
     return (
       <div className="product-detail">
+        <BackButton onClick={() => navigate(-1)} />
         <div className="product-detail-container">
           <div className="product-detail-image">
             <div className="skeleton product-detail-image-skeleton" />
@@ -75,6 +99,7 @@ const ProductDetail = () => {
   if (error || !item) {
     return (
       <div className="product-detail">
+        <BackButton onClick={() => navigate(-1)} />
         <ErrorState
           title={error ? "Could not load this dish" : "Dish not found"}
           description={error || "This dish may have been removed from the menu."}
@@ -94,9 +119,7 @@ const ProductDetail = () => {
 
   return (
     <div className="product-detail">
-      <button className="back-btn" onClick={() => navigate(-1)}>
-        <ArrowLeft size={16} /> Back
-      </button>
+      <BackButton onClick={() => navigate(-1)} />
       <div className="product-detail-container">
         <div className="product-detail-image">
           <img
@@ -112,7 +135,9 @@ const ProductDetail = () => {
             <h2>{item.name}</h2>
             <span className="product-detail-rating">
               <Star size={15} fill="currentColor" strokeWidth={0} />
-              4.8
+              {typeof reviewSummary.averageRating === "number"
+                ? `${reviewSummary.averageRating.toFixed(1)} (${reviewSummary.ratingCount})`
+                : "Chưa có đánh giá"}
             </span>
           </div>
           <p className="product-detail-desc">{item.description}</p>
@@ -139,6 +164,25 @@ const ProductDetail = () => {
           </div>
         </div>
       </div>
+
+      <section className="product-detail-reviews" aria-labelledby="food-reviews-title">
+        <h3 id="food-reviews-title">Đánh giá món ăn</h3>
+        {reviewSummary.reviews.length === 0 ? (
+          <p>Chưa có đánh giá nào cho món này.</p>
+        ) : (
+          <ul>
+            {reviewSummary.reviews.map((review) => (
+              <li key={review._id}>
+                <div className="product-review-head">
+                  <strong>{review.reviewerName}</strong>
+                  <span><Star size={14} fill="currentColor" aria-hidden="true" /> {review.rating}</span>
+                </div>
+                {review.comment && <p>{review.comment}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       {sheetOpen && (
         <ItemOptionsSheet item={item} onClose={() => setSheetOpen(false)} />

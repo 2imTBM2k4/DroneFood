@@ -9,6 +9,7 @@ import Orders from './pages/Orders/Orders';
 import EditRestaurant from './pages/EditRestaurant/EditRestaurant';
 import Login from './pages/Login/Login';
 import Register from './pages/Register/Register';
+import Withdrawals from './pages/Withdrawals/Withdrawals';
 import ProtectedRoute from './components/ProtectedRoute';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -71,6 +72,7 @@ const App = () => {
           <Route path="/list" element={<List url={url} />} />
           <Route path="/orders" element={<Orders url={url} />} />
           <Route path="/edit-restaurant" element={<EditRestaurant url={url} />} />
+          <Route path="/withdrawals" element={<Withdrawals url={url} />} />
         </Route>
       </Routes>
     </div>

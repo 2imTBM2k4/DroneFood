@@ -9,8 +9,9 @@ import { SkeletonList } from "../../components/Skeleton/Skeleton";
 import { EmptyState, ErrorState } from "../../../../shared/components/StateBlock";
 import "./MyOrders.css"; // Giả sử bạn có file CSS này cho style nhất quán với light mode
 import { formatVND } from "../../../../shared/utils/money";
+import OrderReviewPrompt from "../../components/OrderReviewPrompt/OrderReviewPrompt";
 
-const SHIPPER_WAIT_WINDOW_MS = 15 * 60 * 1000;
+const SHIPPER_WAIT_WINDOW_MS = 10 * 60 * 1000;
 
 const formatRemainingTime = (remainingMs) => {
   const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
@@ -52,6 +53,13 @@ const getTimelineDetails = (order) => {
         : "Đang tìm Shipper gần nhà hàng.",
     };
   }
+  if (isShipper && order.shipperAssignmentStatus === "expired") {
+    return {
+      steps,
+      activeStep: 1,
+      message: "Chưa tìm được Shipper. Hãy chọn tiếp tục tìm hoặc hủy đơn để hoàn tiền.",
+    };
+  }
   if (order.orderStatus === "preparing") {
     return {
       steps,
@@ -82,6 +90,14 @@ const OrderStatusTimeline = ({ order, now }) => {
           <strong>Đơn hàng đã hủy</strong>
           <p>{order.cancellationCode === "NO_SHIPPER_AVAILABLE" ? "Không có Shipper nào nhận đơn trong thời gian chờ." : "Đơn hàng không thể tiếp tục xử lý."}</p>
         </div>
+      </section>
+    );
+  }
+  if (order.orderStatus === "refund_pending") {
+    return (
+      <section className="order-timeline order-timeline-refund" aria-label="Trạng thái đơn hàng: chờ hoàn tiền">
+        <Clock3 size={20} aria-hidden="true" />
+        <div><strong>Đang chờ hoàn tiền</strong><p>Admin sẽ xác nhận sau khi đã chuyển tiền về tài khoản bạn cung cấp.</p></div>
       </section>
     );
   }
@@ -137,8 +153,12 @@ const MyOrders = () => {
   const [canReceiveOrder, setCanReceiveOrder] = useState({});
   const [showCancelModal, setShowCancelModal] = useState(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [refundBank, setRefundBank] = useState({ bankName: "", accountNumber: "", accountHolder: "" });
+  const [extendingSearchId, setExtendingSearchId] = useState(null);
   const [now, setNow] = useState(() => Date.now());
   const hasShipperAwaitingAcceptance = orders.some((order) => order.deliveryMethod === "shipper" && ["pending", "preparing"].includes(order.orderStatus) && order.shipperAssignmentStatus === "unassigned");
+  const cancellationOrder = orders.find((item) => item._id === showCancelModal);
+  const needsManualRefund = cancellationOrder?.paymentMethod === "PAYOS" && cancellationOrder.isPaid;
 
   const fetchOrders = useCallback(async ({ background = false } = {}) => {
     if (!token) {
@@ -220,21 +240,50 @@ const MyOrders = () => {
       return;
     }
     try {
+      const order = orders.find((item) => item._id === showCancelModal);
+      const needsManualRefund = order?.paymentMethod === "PAYOS" && order.isPaid;
       const response = await axios.post(
-        `${url}/api/order/status`,
-        { orderId: showCancelModal, status: "cancelled", reason: cancelReason },
+        needsManualRefund ? `${url}/api/refunds/request` : `${url}/api/order/status`,
+        needsManualRefund
+          ? { orderId: showCancelModal, reason: cancelReason, bank: refundBank }
+          : { orderId: showCancelModal, status: "cancelled", reason: cancelReason },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (response.data.success) {
-        toast.success("Order cancelled");
+        toast.success(needsManualRefund ? "Yêu cầu hoàn tiền đã được gửi." : "Order cancelled");
         setShowCancelModal(null);
         setCancelReason("");
+        setRefundBank({ bankName: "", accountNumber: "", accountHolder: "" });
         fetchOrders();
       } else {
         toast.error(response.data.message || "Cancellation failed");
       }
     } catch (error) {
       toast.error(error.response?.data?.message || "Cancellation failed");
+    }
+  };
+
+  const handleReviewFlowChanged = (orderId, reviewFlow) => {
+    setOrders((current) => current.map((order) =>
+      order._id === orderId ? { ...order, reviewFlow } : order
+    ));
+  };
+
+  const handleExtendShipperSearch = async (orderId) => {
+    setExtendingSearchId(orderId);
+    try {
+      const response = await axios.post(
+        `${url}/api/shippers/orders/${orderId}/extend-search`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!response.data.success) throw new Error(response.data.message || "Could not continue searching");
+      toast.success("Hệ thống sẽ tiếp tục tìm Shipper trong 10 phút.");
+      fetchOrders();
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message || "Could not continue searching");
+    } finally {
+      setExtendingSearchId(null);
     }
   };
 
@@ -254,6 +303,7 @@ const MyOrders = () => {
   const getStatusText = (status) => {
     const statusMap = {
       pending: "Pending",
+      refund_pending: "Refund pending",
       preparing: "Preparing",
       delivering: "Delivering",
       delivered: "Delivered",
@@ -265,6 +315,7 @@ const MyOrders = () => {
   const getStatusColor = (status) => {
     const colorMap = {
       pending: "#ffc107",
+      refund_pending: "#ff9500",
       preparing: "#17a2b8",
       delivering: "#007bff",
       delivered: "#28a745",
@@ -277,7 +328,7 @@ const MyOrders = () => {
     fetchOrders();
     if (!token) return undefined;
     // The expiry job runs outside the API process, so polling is required to
-    // surface the 15-minute cancellation without asking the customer to reload.
+    // Surface a shipper-search timeout without asking the customer to reload.
     const refreshId = window.setInterval(() => fetchOrders({ background: true }), 30000);
     return () => window.clearInterval(refreshId);
   }, [fetchOrders, token]);
@@ -392,7 +443,9 @@ const MyOrders = () => {
 
               {order.refundStatus === "requested" && (
                 <p className="refund-status" role="status">
-                  Hoàn tiền VNPay đã được yêu cầu. Mã yêu cầu: {order.refundRequestId}.
+                  {order.paymentMethod === "PAYOS"
+                    ? "Yêu cầu hoàn tiền đang chờ Admin xử lý."
+                    : `Hoàn tiền VNPay đã được yêu cầu. Mã yêu cầu: ${order.refundRequestId}.`}
                 </p>
               )}
               {order.refundStatus === "failed" && (
@@ -403,8 +456,31 @@ const MyOrders = () => {
 
               <OrderStatusTimeline order={order} now={now} />
 
-              {order.orderStatus === "pending" && (
+              <OrderReviewPrompt
+                order={order}
+                url={url}
+                token={token}
+                onFlowChanged={handleReviewFlowChanged}
+              />
+
+              {(order.orderStatus === "pending" || (
+                order.orderStatus === "preparing" &&
+                order.deliveryMethod === "shipper" &&
+                order.shipperAssignmentStatus === "expired" &&
+                order.paymentMethod === "PAYOS" &&
+                order.isPaid
+              )) && (
                 <div className="order-actions">
+                  {order.deliveryMethod === "shipper" && order.shipperAssignmentStatus === "expired" && order.paymentMethod === "PAYOS" && order.isPaid && (
+                    <button
+                      type="button"
+                      onClick={() => handleExtendShipperSearch(order._id)}
+                      className="continue-shipper-search-btn"
+                      disabled={extendingSearchId === order._id}
+                    >
+                      {extendingSearchId === order._id ? "Đang tìm Shipper…" : "Tìm Shipper thêm 10 phút"}
+                    </button>
+                  )}
                   <button
                     onClick={() => setShowCancelModal(order._id)}
                     className="cancel-order-btn"
@@ -440,7 +516,7 @@ const MyOrders = () => {
                 <div className="shipper-timeout-notice" role="alert">
                   <div>
                     <strong>Không tìm được Shipper</strong>
-                    <p>{order.reason || "Đơn đã tự hủy sau 15 phút vì chưa có Shipper nào nhận."}</p>
+                    <p>{order.reason || "Đã chờ 10 phút nhưng chưa có Shipper nhận đơn. Bạn có thể tiếp tục tìm hoặc hủy đơn để hoàn tiền."}</p>
                   </div>
                 </div>
               )}
@@ -448,6 +524,18 @@ const MyOrders = () => {
               {order.orderStatus === "cancelled" && order.reason && order.cancellationCode !== "NO_SHIPPER_AVAILABLE" && (
                 <div className="cancel-reason">
                   <strong>Cancellation reason:</strong> {order.reason}
+                </div>
+              )}
+
+              {order.orderStatus === "cancelled" && order.deliveryMethod === "shipper" && order.paymentMethod === "PAYOS" && order.isPaid && order.cancellationCode === "NO_SHIPPER_AVAILABLE" && !["requested", "paid"].includes(order.refundStatus) && (
+                <div className="order-actions">
+                  <button
+                    type="button"
+                    onClick={() => setShowCancelModal(order._id)}
+                    className="continue-shipper-search-btn"
+                  >
+                    Gửi yêu cầu hoàn tiền
+                  </button>
                 </div>
               )}
             </div>
@@ -468,8 +556,8 @@ const MyOrders = () => {
             className="cancel-modal-content"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3>Cancel order</h3>
-            <p>Please provide a reason for cancellation:</p>
+            <h3>{needsManualRefund ? "Yêu cầu hoàn tiền" : "Cancel order"}</h3>
+            <p>{needsManualRefund ? "Cho biết lý do và thông tin nhận tiền để Admin xử lý hoàn tiền." : "Please provide a reason for cancellation:"}</p>
             <textarea
               value={cancelReason}
               onChange={(e) => setCancelReason(e.target.value)}
@@ -477,11 +565,20 @@ const MyOrders = () => {
               rows={3}
               className="cancel-reason-input"
             />
+            {needsManualRefund && (
+              <div className="refund-bank-fields">
+                <p>Đơn đã thanh toán. Thông tin này chỉ được Admin dùng để hoàn tiền.</p>
+                <label>Tên ngân hàng<input required value={refundBank.bankName} onChange={(event) => setRefundBank((current) => ({ ...current, bankName: event.target.value }))} /></label>
+                <label>Số tài khoản<input required value={refundBank.accountNumber} onChange={(event) => setRefundBank((current) => ({ ...current, accountNumber: event.target.value }))} inputMode="numeric" /></label>
+                <label>Tên chủ tài khoản<input required value={refundBank.accountHolder} onChange={(event) => setRefundBank((current) => ({ ...current, accountHolder: event.target.value }))} /></label>
+              </div>
+            )}
             <div className="cancel-modal-actions">
               <button
                 onClick={() => {
                   setShowCancelModal(null);
                   setCancelReason("");
+                  setRefundBank({ bankName: "", accountNumber: "", accountHolder: "" });
                 }}
                 className="cancel-modal-back-btn"
               >
@@ -490,9 +587,11 @@ const MyOrders = () => {
               <button
                 onClick={handleCancelOrder}
                 className="cancel-modal-confirm-btn"
-                disabled={!cancelReason.trim()}
+                disabled={!cancelReason.trim() || (() => {
+                  return needsManualRefund && Object.values(refundBank).some((value) => !value.trim());
+                })()}
               >
-                Confirm cancellation
+                {needsManualRefund ? "Gửi yêu cầu hoàn tiền" : "Confirm cancellation"}
               </button>
             </div>
           </div>

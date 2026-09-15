@@ -1,4 +1,5 @@
 import * as restaurantService from "../services/restaurantService.js";
+import * as bankAccountService from "../services/bankAccountService.js";
 import fs from "fs";
 
 export const listRestaurants = async (req, res) => {
@@ -29,6 +30,22 @@ export const updateRestaurant = async (req, res) => {
     res
       .status(error.statusCode || 500)
       .json({ success: false, message: error.message });
+  }
+};
+
+export const bankAccount = async (req, res) => {
+  try {
+    res.json(await bankAccountService.getRestaurantBankAccount(req.user));
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};
+
+export const updateBankAccount = async (req, res) => {
+  try {
+    res.json(await bankAccountService.updateRestaurantBankAccount(req.user, req.body));
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
 };
 

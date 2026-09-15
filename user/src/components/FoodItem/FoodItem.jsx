@@ -1,5 +1,6 @@
 import { useContext, useState, useEffect } from "react";
-import { Plus, Star, Settings2, ChevronRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Settings2 } from "lucide-react";
 import "./FoodItem.css";
 import { assets } from "../../assets/assets";
 import { StoreContext } from "../../context/StoreContext";
@@ -8,6 +9,7 @@ import { formatVND } from "../../../../shared/utils/money";
 
 function FoodItem({ id, name, price, description, image, optionGroups = [] }) {
   const { url, food_list, fetchSingleFood } = useContext(StoreContext);
+  const navigate = useNavigate();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [currentOptionGroups, setCurrentOptionGroups] = useState(optionGroups);
 
@@ -48,6 +50,10 @@ function FoodItem({ id, name, price, description, image, optionGroups = [] }) {
     setSheetOpen(true);
   };
 
+  const handleOpenDetail = () => {
+    navigate(`/product/${id}`);
+  };
+
   const item = {
     _id: id,
     name,
@@ -70,13 +76,13 @@ function FoodItem({ id, name, price, description, image, optionGroups = [] }) {
     <>
       <div
         className="apple-store-utility-card food-item"
-        onClick={handleOpenSheet}
+        onClick={handleOpenDetail}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            handleOpenSheet(e);
+            handleOpenDetail();
           }
         }}
       >
@@ -108,20 +114,12 @@ function FoodItem({ id, name, price, description, image, optionGroups = [] }) {
         <div className="apple-card-content">
           <div className="apple-card-header">
             <h3 className="apple-card-title">{name}</h3>
-            <span className="apple-card-rating">
-              <Star size={12} fill="currentColor" strokeWidth={0} />
-              4.8
-            </span>
           </div>
 
           <p className="apple-card-desc">{description}</p>
 
           <div className="apple-card-footer">
             <span className="apple-card-price">{formatVND(price)}</span>
-            <span className="apple-text-link">
-              {hasOptions ? "Configure" : "Add to bag"}
-              <ChevronRight size={13} />
-            </span>
           </div>
         </div>
       </div>

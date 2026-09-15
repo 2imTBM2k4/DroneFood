@@ -18,7 +18,12 @@ const OrderSummary = ({ collapsible = true, deliveryQuote = null }) => {
   const subtotal = getTotalCartAmount();
   const deliveryFee = subtotal > 0 ? deliveryQuote?.shippingPrice ?? fees.deliveryFee : 0;
   const serviceFee = subtotal > 0 ? fees.serviceFee : 0;
-  const total = subtotal + deliveryFee + serviceFee;
+  // Voucher calculation is returned by the server quote. Never derive the
+  // discount from the typed code on the client: an expired/invalid code must
+  // not temporarily make the total look cheaper.
+  const discountAmount = subtotal > 0 ? deliveryQuote?.discountAmount ?? 0 : 0;
+  const total = Math.max(0, subtotal + deliveryFee + serviceFee - discountAmount);
+  const voucherCode = deliveryQuote?.voucher?.code;
 
   return (
     <aside
@@ -85,9 +90,15 @@ const OrderSummary = ({ collapsible = true, deliveryQuote = null }) => {
               <span className="ds-num">{formatVND(serviceFee)}</span>
             </div>
           )}
+          {discountAmount > 0 && (
+            <div className="order-summary-row order-summary-discount" aria-live="polite">
+              <span>{voucherCode ? `Voucher ${voucherCode}` : "Voucher"}</span>
+              <span className="ds-num">-{formatVND(discountAmount)}</span>
+            </div>
+          )}
           <div className="order-summary-row order-summary-total">
             <span>Total</span>
-            <span className="ds-num">{formatVND(total)}</span>
+            <span className="ds-num" aria-live="polite">{formatVND(total)}</span>
           </div>
         </div>
       </div>

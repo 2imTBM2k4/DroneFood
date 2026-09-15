@@ -26,3 +26,4 @@ afterEach(async () => {
 
 process.env.JWT_SECRET = "test-secret-key-for-testing";
 process.env.FRONTEND_URL = "http://localhost:5173";
+process.env.BANK_ACCOUNT_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");

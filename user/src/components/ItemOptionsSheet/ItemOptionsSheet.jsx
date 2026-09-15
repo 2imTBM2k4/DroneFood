@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, Plus, Minus, Star } from "lucide-react";
+import { X, Plus, Minus } from "lucide-react";
 import { toast } from "react-toastify";
 import "./ItemOptionsSheet.css";
 import { StoreContext } from "../../context/StoreContext";
@@ -213,10 +213,6 @@ const ItemOptionsSheet = ({
           <div className="ios-body">
             <div className="ios-heading">
               <h2>{item.name}</h2>
-              <span className="ios-rating">
-                <Star size={13} fill="currentColor" strokeWidth={0} />
-                4.8
-              </span>
             </div>
             <p className="ios-desc">{item.description}</p>
             <p className="ios-base-price ds-num">{formatVND(item.price)}</p>

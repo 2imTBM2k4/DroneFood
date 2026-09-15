@@ -5,8 +5,18 @@ import './RestaurantItem.css';
 import { StoreContext } from '../../context/StoreContext';
 import { assets } from '../../assets/assets';
 import { formatDistance } from '../../lib/distance';
+import { formatVND } from '../../../../shared/utils/money';
 
-const RestaurantItem = ({ id, name, address, image, distanceKm, etaMin }) => {
+const RestaurantItem = ({
+  id,
+  name,
+  address,
+  image,
+  distanceKm,
+  etaMin,
+  estimatedDeliveryFee,
+  rating,
+}) => {
   const { url } = useContext(StoreContext);
   const navigate = useNavigate();
 
@@ -46,7 +56,7 @@ const RestaurantItem = ({ id, name, address, image, distanceKm, etaMin }) => {
         />
         <span className="apple-eta-chip">
           <Clock size={12} />
-          {etaMin ? `${etaMin}m drone drop` : '15m drop'}
+          {etaMin ? `${etaMin} min delivery` : "Time at checkout"}
         </span>
       </div>
 
@@ -54,8 +64,16 @@ const RestaurantItem = ({ id, name, address, image, distanceKm, etaMin }) => {
         <div className="apple-card-header">
           <h3 className="apple-card-title">{name}</h3>
           <span className="apple-card-rating">
-            <Star size={12} fill="currentColor" strokeWidth={0} />
-            4.9
+            {typeof rating === "number" ? (
+              <>
+                <Star size={12} fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                <span aria-label={`Rating ${rating.toFixed(1)} out of 5`}>
+                  {rating.toFixed(1)}
+                </span>
+              </>
+            ) : (
+              "Chưa có đánh giá"
+            )}
           </span>
         </div>
 
@@ -64,7 +82,17 @@ const RestaurantItem = ({ id, name, address, image, distanceKm, etaMin }) => {
             <Zap size={13} className="apple-meta-zap" />
             <span>{formatDistance(distanceKm)}</span>
             <span className="apple-meta-dot">·</span>
-            <span>{etaMin || 15} min flight time</span>
+            <span>
+              {typeof etaMin === "number"
+                ? `${etaMin} min flight time`
+                : "Time at checkout"}
+            </span>
+            {typeof estimatedDeliveryFee === "number" && (
+              <>
+                <span className="apple-meta-dot">·</span>
+                <span>{formatVND(estimatedDeliveryFee)} est. fee</span>
+              </>
+            )}
           </div>
         )}
 

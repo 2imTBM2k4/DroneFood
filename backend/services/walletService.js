@@ -25,12 +25,16 @@ const runInTransaction = async (work) => {
 const walletStatus = (deposit, earnings) => {
   const depositBalance = deposit?.balance || 0;
   const earningsBalance = earnings?.balance || 0;
+  const reservedWithdrawalAmount = earnings?.reservedWithdrawalAmount || 0;
+  const earningsAvailable = earningsBalance - reservedWithdrawalAmount;
   const warningThreshold = -EARLY_WARNING_RATIO * depositBalance;
   const lockThreshold = -LOCK_RATIO * depositBalance;
   return {
     depositBalance,
     earningsBalance,
+    earningsAvailable,
     reservedCodLiability: earnings?.reservedCodLiability || 0,
+    reservedWithdrawalAmount,
     warningThreshold,
     lockThreshold,
     isEarlyWarning: earningsBalance <= warningThreshold,
@@ -65,14 +69,16 @@ export const reserveCodLiability = async (orderId, shipperId) => runInTransactio
   const { deposit, earnings } = await walletRepo.getShipperWallets(shipperId, session);
   const liability = order.financialSnapshot?.codLiabilityAmount || 0;
   const depositBalance = deposit.balance;
-  const projectedEarnings = earnings.balance - earnings.reservedCodLiability - liability;
+  const earningsAvailable = earnings.balance - (earnings.reservedWithdrawalAmount || 0);
+  const projectedEarnings = earningsAvailable - earnings.reservedCodLiability - liability;
   const lockThreshold = -LOCK_RATIO * depositBalance;
+  const codCapacity = depositBalance + earningsAvailable;
 
-  if (earnings.balance <= lockThreshold) {
+  if (earningsAvailable <= lockThreshold) {
     throw new AppError("Shipper cannot accept new orders while earnings are at the debt limit", 409);
   }
-  if (liability > depositBalance || projectedEarnings <= lockThreshold) {
-    throw new AppError("Shipper deposit or earnings limit is insufficient for this COD order", 409);
+  if (earnings.reservedCodLiability + liability > codCapacity || projectedEarnings <= lockThreshold) {
+    throw new AppError("Shipper deposit plus available earnings is insufficient for this COD order", 409);
   }
 
   const reservedWallet = await walletRepo.updateReservedCodLiability(shipperId, liability, session);
@@ -202,27 +208,30 @@ export const settleDeliveredOrder = async (orderId, deliveredFields = {}) => run
   return { alreadySettled: false, order, restaurantTransaction, shipperTransaction };
 });
 
-/** Credits a confirmed gateway deposit payment and records its ledger entry. */
+/** Credits a verified PayOS payment to either shipper wallet exactly once. */
 export const settleDepositPayment = async (paymentId, transactionNo = null, provider = "VNPAY") => runInTransaction(async (session) => {
   const payment = await WalletPayment.findById(paymentId).session(session);
-  if (!payment) throw new AppError("Deposit payment not found", 404);
-  const eventKey = `deposit-payment:${payment._id}`;
+  if (!payment) throw new AppError("Shipper wallet payment not found", 404);
+  const isEarningsTopUp = payment.purpose === "earnings_top_up";
+  const eventKey = `${isEarningsTopUp ? "earnings-top-up" : "deposit-payment"}:${payment._id}`;
   const existing = await walletRepo.findTransactionByEventKey(eventKey).session(session);
   if (existing) return { alreadySettled: true, payment };
 
   await walletRepo.ensureShipperWallets(payment.shipper, session);
   const { deposit } = await walletRepo.getShipperWallets(payment.shipper, session);
-  if (deposit.balance === 0 && payment.amount < MIN_INITIAL_DEPOSIT) {
+  if (!isEarningsTopUp && deposit.balance === 0 && payment.amount < MIN_INITIAL_DEPOSIT) {
     throw new AppError(`Initial shipper deposit must be at least ${MIN_INITIAL_DEPOSIT}`, 400);
   }
-  const updated = await walletRepo.updateDepositBalance(payment.shipper, payment.amount, session);
+  const updated = isEarningsTopUp
+    ? await walletRepo.updateEarningsBalance(payment.shipper, payment.amount, session)
+    : await walletRepo.updateDepositBalance(payment.shipper, payment.amount, session);
   const transaction = await addLedgerEntry({
-    walletType: "shipper_deposit",
+    walletType: isEarningsTopUp ? "shipper_earnings" : "shipper_deposit",
     ownerType: "shipper",
     ownerId: payment.shipper,
     amount: payment.amount,
     balanceAfter: updated.balance,
-    transactionType: "shipper_deposit_top_up",
+    transactionType: isEarningsTopUp ? "shipper_earnings_top_up" : "shipper_deposit_top_up",
     eventKey,
     paymentId: payment._id,
     metadata: provider === "PAYOS"
@@ -270,9 +279,10 @@ const payosDepositConfig = () => {
 };
 
 // The final digit identifies the PayOS purpose: 1 = customer order (defined
-// in orderService), 2 = shipper deposit. This keeps both flows disjoint even
+// in orderService), 2 = shipper deposit, 3 = shipper earnings top-up. This keeps all flows disjoint even
 // though they share a single PayOS channel and webhook URL.
 const newPayosDepositOrderCode = () => Number(`${Math.floor(Date.now() / 1000)}${crypto.randomInt(10000, 100000)}2`);
+const newPayosEarningsTopUpOrderCode = () => Number(`${Math.floor(Date.now() / 1000)}${crypto.randomInt(10000, 100000)}3`);
 
 const paymentDate = (date = new Date()) => new Intl.DateTimeFormat("en-GB", {
   timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "2-digit",
@@ -289,6 +299,9 @@ const bankSafeName = (name) => String(name || "Shipper")
 const depositPaymentDescription = (shipperName, date = new Date()) =>
   `Nap ky quy ${bankSafeName(shipperName)} ${paymentDate(date)}`;
 
+const earningsTopUpPaymentDescription = (shipperName, date = new Date()) =>
+  `Nap vi ${bankSafeName(shipperName)} ${paymentDate(date)}`;
+
 /** Creates a PayOS payment link for a shipper's deposit. */
 export const createDepositPayment = async (shipperId, amount) => {
   if (!Number.isSafeInteger(amount) || amount <= 0) throw new AppError("Deposit amount must be a positive VND integer", 400);
@@ -297,7 +310,7 @@ export const createDepositPayment = async (shipperId, amount) => {
   if (!shipper) throw new AppError("Shipper not found", 404);
   const orderCode = newPayosDepositOrderCode();
   const payment = await walletRepo.createPayment({
-    shipper: shipperId, amount, paymentProvider: "PAYOS", payosOrderCode: orderCode,
+    shipper: shipperId, amount, purpose: "deposit", paymentProvider: "PAYOS", payosOrderCode: orderCode,
   });
   try {
     const paymentLink = await payOS.paymentRequests.create({
@@ -317,21 +330,52 @@ export const createDepositPayment = async (shipperId, amount) => {
   }
 };
 
+/** Creates a PayOS link that repays/credits the shipper earnings wallet. */
+export const createEarningsTopUpPayment = async (shipperId, amount) => {
+  if (!Number.isSafeInteger(amount) || amount <= 0) throw new AppError("Earnings top-up amount must be a positive VND integer", 400);
+  const { payOS, returnUrl, cancelUrl } = payosDepositConfig();
+  const shipper = await User.findById(shipperId).select("name").lean();
+  if (!shipper) throw new AppError("Shipper not found", 404);
+  const orderCode = newPayosEarningsTopUpOrderCode();
+  const payment = await walletRepo.createPayment({
+    shipper: shipperId, amount, purpose: "earnings_top_up", paymentProvider: "PAYOS", payosOrderCode: orderCode,
+  });
+  try {
+    const paymentLink = await payOS.paymentRequests.create({
+      orderCode,
+      amount,
+      description: earningsTopUpPaymentDescription(shipper.name),
+      items: [{ name: "Nap vi earnings shipper", quantity: 1, price: amount }],
+      returnUrl,
+      cancelUrl,
+    });
+    payment.payosPaymentLinkId = paymentLink.paymentLinkId;
+    await payment.save();
+    return { success: true, paymentId: payment._id, checkoutUrl: paymentLink.checkoutUrl, paymentUrl: paymentLink.checkoutUrl };
+  } catch (error) {
+    await walletRepo.deletePaymentById(payment._id);
+    throw new AppError(`Unable to create PayOS earnings top-up link: ${error.message}`, 502);
+  }
+};
+
 /** Verifies PayOS webhook data and credits a matching shipper deposit once. */
-export const handleDepositPayosWebhook = async (payload) => {
+export const handleShipperWalletPayosWebhook = async (payload) => {
   const { payOS } = payosDepositConfig();
   const data = await payOS.webhooks.verify(payload);
   const orderCode = Number(data.orderCode);
-  if (!Number.isSafeInteger(orderCode)) throw new AppError("Invalid PayOS deposit order code", 400);
+  if (!Number.isSafeInteger(orderCode)) throw new AppError("Invalid PayOS shipper wallet order code", 400);
   const payment = await walletRepo.findPaymentByPayosOrderCode(orderCode);
   // This also accepts PayOS's signed sample event during webhook setup.
   if (!payment) return { newlyPaid: false, ignored: true };
   if (payment.paymentProvider !== "PAYOS") throw new AppError("Payment provider does not match PayOS", 409);
-  if (Math.round(Number(data.amount)) !== Math.round(payment.amount)) throw new AppError("PayOS deposit amount does not match", 400);
+  if (Math.round(Number(data.amount)) !== Math.round(payment.amount)) throw new AppError("PayOS shipper wallet amount does not match", 400);
   if (String(data.code) !== "00") return { newlyPaid: false, ignored: true };
   const settled = await settleDepositPayment(payment._id, data.reference || data.paymentLinkId, "PAYOS");
-  return { newlyPaid: !settled.alreadySettled, paymentId: payment._id, ignored: false };
+  return { newlyPaid: !settled.alreadySettled, paymentId: payment._id, purpose: payment.purpose, ignored: false };
 };
+
+// Kept for existing callers and legacy webhook tests.
+export const handleDepositPayosWebhook = handleShipperWalletPayosWebhook;
 
 /** Verifies a deposit IPN before crediting the deposit balance. */
 export const handleDepositVnpayIpn = async (query) => {

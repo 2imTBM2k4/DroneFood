@@ -8,6 +8,7 @@ import { getShipperWalletSummary, requireShipperCanAcceptOrders, reserveCodLiabi
 
 const LOCATION_STALE_MS = 90 * 1000;
 const OFFER_RADIUS_METRES = 5000;
+export const SHIPPER_ASSIGNMENT_WINDOW_MS = 10 * 60 * 1000;
 const DISPATCHABLE_ORDER_STATUSES = ["pending", "preparing"];
 
 const getProfile = async (userId) => {
@@ -97,8 +98,8 @@ export const availableOrders = async (userId) => {
     const liability = order.financialSnapshot?.codLiabilityAmount || Math.round(
       (order.itemsPrice || 0) + (order.shippingPrice || 0) * 0.15
     );
-    return liability <= wallet.depositBalance &&
-      wallet.earningsBalance - wallet.reservedCodLiability - liability > wallet.lockThreshold;
+    return wallet.reservedCodLiability + liability <= wallet.depositBalance + wallet.earningsAvailable &&
+      wallet.earningsAvailable - wallet.reservedCodLiability - liability > wallet.lockThreshold;
   });
   return { success: true, data: eligibleOrders, wallet };
 };
@@ -217,6 +218,37 @@ export const declineOrder = async (user, orderId, reason = "") => {
   return { success: true };
 };
 
+/** Reopens a timed-out paid online order when its customer opts to keep waiting. */
+export const extendSearch = async (customer, orderId) => {
+  const now = new Date();
+  const order = await Order.findOneAndUpdate(
+    {
+      _id: orderId,
+      user: customer._id,
+      deliveryMethod: "shipper",
+      paymentMethod: "PAYOS",
+      isPaid: true,
+      orderStatus: { $in: ["pending", "preparing"] },
+      shipperAssignmentStatus: "expired",
+    },
+    {
+      $set: {
+        orderStatus: "pending",
+        shipperAssignmentStatus: "unassigned",
+        shipperAssignmentDeadlineAt: new Date(now.getTime() + SHIPPER_ASSIGNMENT_WINDOW_MS),
+        cancellationCode: "",
+        reason: "",
+      },
+    },
+    { new: true }
+  );
+  if (!order) {
+    throw new AppError("Only a paid online shipper order waiting for your decision can continue searching", 409);
+  }
+  await recordAudit({ actor: customer, action: "shipper_search_extended", targetType: "order", targetId: order._id });
+  return { success: true, data: order };
+};
+
 export const approveProfile = async (actor, userId, approvalStatus) => {
   const profile = await ShipperProfile.findOneAndUpdate(
     { user: userId },
@@ -282,7 +314,48 @@ export const requestVnpayRefund = async (order) => {
   return requestId;
 };
 
+/**
+ * Older shipper orders predate assignment fields. Normalize only records that
+ * are demonstrably part of the no-shipper flow, then let the normal expiry
+ * path expose the customer's current choices.
+ */
+const normalizeLegacyShipperTimeouts = async () => {
+  const overdueAt = new Date(Date.now() - 1);
+  await Order.updateMany(
+    {
+      deliveryMethod: "shipper",
+      paymentMethod: "PAYOS",
+      isPaid: true,
+      orderStatus: { $in: ["pending", "preparing"] },
+      shipperId: null,
+      $or: [
+        { shipperAssignmentStatus: { $in: ["not_applicable", null] } },
+        { shipperAssignmentDeadlineAt: null },
+      ],
+    },
+    {
+      $set: {
+        orderStatus: "pending",
+        shipperAssignmentStatus: "unassigned",
+        shipperAssignmentDeadlineAt: overdueAt,
+      },
+    }
+  );
+  await Order.updateMany(
+    {
+      deliveryMethod: "shipper",
+      paymentMethod: "PAYOS",
+      isPaid: true,
+      orderStatus: "cancelled",
+      cancellationCode: { $in: ["", null] },
+      reason: { $regex: "no shipper accepted", $options: "i" },
+    },
+    { $set: { cancellationCode: "NO_SHIPPER_AVAILABLE", shipperAssignmentStatus: "expired" } }
+  );
+};
+
 export const expireUnacceptedOrders = async () => {
+  await normalizeLegacyShipperTimeouts();
   const now = new Date();
   const overdueOrders = await Order.find({
     deliveryMethod: "shipper", shipperAssignmentStatus: "unassigned",
@@ -300,7 +373,7 @@ export const expireUnacceptedOrders = async () => {
           { $set: {
             shipperAssignmentStatus: "expired",
             cancellationCode: "NO_SHIPPER_AVAILABLE",
-            reason: "No shipper accepted this paid PayOS order. Support action and refund review are required.",
+            reason: "No shipper accepted this paid online order within 10 minutes. The customer can continue searching or request a manual refund.",
           } }
         );
         cancelledCount += result.modifiedCount;

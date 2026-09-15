@@ -110,5 +110,21 @@ export const removeFoodSchema = Joi.object({
 });
 
 export const listFoodQuerySchema = Joi.object({
-  restaurantId: Joi.string().trim().allow("", null),
-});
+  restaurantId: Joi.string().trim().hex().length(24).allow("", null),
+  q: Joi.string().trim().max(100).allow("", null),
+  category: Joi.string().trim().max(50).allow("", null),
+  minPrice: Joi.number().integer().min(0),
+  maxPrice: Joi.number().integer().min(0),
+  sort: Joi.string().valid("price_asc", "price_desc", "name_asc", "name_desc"),
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100).default(20),
+})
+  .custom((query, helpers) => {
+    if (query.minPrice !== undefined && query.maxPrice !== undefined && query.minPrice > query.maxPrice) {
+      return helpers.error("any.invalid");
+    }
+    return query;
+  })
+  .messages({
+    "any.invalid": "minPrice không được lớn hơn maxPrice",
+  });

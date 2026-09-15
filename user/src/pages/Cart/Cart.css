@@ -322,6 +322,77 @@
   transform: scale(0.95);
 }
 
+/* ── Remove line confirmation ────────────────────────────── */
+.confirm-dialog-overlay {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(17, 24, 39, 0.48);
+}
+
+.confirm-dialog {
+  width: min(100%, 420px);
+  padding: 24px;
+  border: 1px solid var(--apple-hairline);
+  border-radius: var(--radius-lg);
+  background: var(--apple-canvas);
+  color: var(--apple-ink);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+}
+
+.confirm-dialog h3,
+.confirm-dialog p {
+  margin: 0;
+}
+
+.confirm-dialog h3 {
+  font-family: var(--font-display);
+  font-size: 20px;
+}
+
+.confirm-dialog p {
+  margin-top: 8px;
+  color: var(--apple-body-muted);
+  line-height: 1.5;
+}
+
+.confirm-dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.confirm-dialog-buttons button {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: var(--radius-pill);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.confirm-btn {
+  border: 1px solid var(--danger, #c62828);
+  background: var(--danger, #c62828);
+  color: #fff;
+}
+
+.cancel-btn {
+  border: 1px solid var(--apple-hairline);
+  background: transparent;
+  color: var(--apple-ink);
+}
+
+.confirm-dialog-buttons button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 /* ── Responsive ───────────────────────────────────────────── */
 @media (max-width: 860px) {
   .cart-layout {
@@ -334,6 +405,9 @@
 }
 
 @media (max-width: 560px) {
+  .confirm-dialog-buttons button {
+    flex: 1;
+  }
   .cart-line {
     grid-template-columns: 64px minmax(0, 1fr) auto;
     grid-template-areas:

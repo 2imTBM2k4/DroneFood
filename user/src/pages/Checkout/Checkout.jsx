@@ -56,7 +56,13 @@ const Checkout = () => {
   const [deliveryMethod, setDeliveryMethod] = useState("shipper");
   const [deliveryQuote, setDeliveryQuote] = useState(null);
   const [quoteError, setQuoteError] = useState("");
+  const [voucherInput, setVoucherInput] = useState("");
+  const [appliedVoucherCode, setAppliedVoucherCode] = useState("");
+  const [voucherError, setVoucherError] = useState("");
   const [placing, setPlacing] = useState(false);
+  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [selectedAddressId, setSelectedAddressId] = useState("");
+  const [loadingAddresses, setLoadingAddresses] = useState(false);
 
 
   // Nothing to check out — send them back to the cart. Wait for hydration
@@ -103,6 +109,41 @@ const Checkout = () => {
     }
   }, [user]);
 
+  const applySavedAddress = (entry) => {
+    const nameParts = (entry.recipient || "").trim().split(/\s+/);
+    setSelectedAddressId(entry.id);
+    setAddress((current) => ({
+      ...current,
+      firstName: nameParts[0] || "",
+      lastName: nameParts.slice(1).join(" "),
+      phone: entry.phone || "",
+      street: entry.address || "",
+      city: entry.city || "",
+      state: entry.state || "",
+      country: entry.country || "",
+      zipcode: entry.zipCode || "",
+      lat: entry.lat,
+      lng: entry.lng,
+    }));
+  };
+
+  useEffect(() => {
+    if (!token) return undefined;
+    let active = true;
+    setLoadingAddresses(true);
+    axios.get(`${url}/api/address-book`, { headers: { token } })
+      .then((response) => {
+        if (!active) return;
+        const entries = response.data.data || [];
+        setSavedAddresses(entries);
+        const defaultEntry = entries.find((entry) => entry.isDefault);
+        if (defaultEntry) applySavedAddress(defaultEntry);
+      })
+      .catch(() => { if (active) setSavedAddresses([]); })
+      .finally(() => { if (active) setLoadingAddresses(false); });
+    return () => { active = false; };
+  }, [token, url]);
+
   const addressComplete = REQUIRED_FIELDS.every((field) =>
     field === "lat" || field === "lng"
       ? Number.isFinite(address[field])
@@ -111,12 +152,14 @@ const Checkout = () => {
 
   const onAddressChange = (event) => {
     const { name, value } = event.target;
+    setSelectedAddressId("");
     setAddress((current) => ({ ...current, [name]: value }));
   };
 
   // Fill the address fields from a point resolved by the map picker. Recipient
   // name/email/phone are kept — only the location parts are overwritten.
   const onLocationResolved = (resolved) => {
+    setSelectedAddressId("");
     setAddress((current) => ({
       ...current,
       street: resolved.street || current.street,
@@ -142,9 +185,12 @@ const Checkout = () => {
     axios
       .post(
         `${url}/api/order/quote`,
-        {
-          deliveryMethod,
-          address: {
+        selectedAddressId
+          ? { deliveryMethod, voucherCode: appliedVoucherCode || undefined, addressEntryId: selectedAddressId }
+          : {
+            deliveryMethod,
+            voucherCode: appliedVoucherCode || undefined,
+            address: {
             fullName: `${address.firstName} ${address.lastName}`.trim() || "Customer",
             address: address.street || "Map location",
             city: address.city || "Unknown",
@@ -154,8 +200,8 @@ const Checkout = () => {
             phone: address.phone || "0000000000",
             lat: address.lat,
             lng: address.lng,
+            },
           },
-        },
         { headers: { token } }
       )
       .then((response) => {
@@ -163,14 +209,28 @@ const Checkout = () => {
       })
       .catch((error) => {
         if (active) {
-          setDeliveryQuote(null);
-          setQuoteError(error.response?.data?.message || "Unable to calculate delivery fee.");
+          const message = error.response?.data?.message || "Unable to calculate delivery fee.";
+          if (appliedVoucherCode) {
+            // The server rejected the code. Keep the already-known delivery
+            // price, but remove every voucher effect and prevent this code
+            // from being submitted with the order.
+            setDeliveryQuote((current) => current && {
+              ...current,
+              discountAmount: 0,
+              voucher: null,
+            });
+            setVoucherError(message);
+            setAppliedVoucherCode("");
+          } else {
+            setDeliveryQuote(null);
+            setQuoteError(message);
+          }
         }
       });
     return () => {
       active = false;
     };
-  }, [address.lat, address.lng, address.firstName, address.lastName, address.street, address.city, address.state, address.country, address.zipcode, address.phone, deliveryMethod, token, url]);
+  }, [address.lat, address.lng, address.firstName, address.lastName, address.street, address.city, address.state, address.country, address.zipcode, address.phone, deliveryMethod, token, url, appliedVoucherCode, selectedAddressId]);
 
   const persistAddress = async () => {
     localStorage.setItem("deliveryInfo", JSON.stringify(address));
@@ -224,7 +284,7 @@ const Checkout = () => {
       const response = await axios.post(
         `${url}/api/order/place`,
         {
-          address: {
+          ...(selectedAddressId ? { addressEntryId: selectedAddressId } : { address: {
             fullName: `${address.firstName} ${address.lastName}`.trim(),
             address: address.street,
             city: address.city,
@@ -234,9 +294,10 @@ const Checkout = () => {
             phone: address.phone,
             lat: address.lat,
             lng: address.lng,
-          },
+          } }),
           paymentMethod,
           deliveryMethod,
+          voucherCode: appliedVoucherCode || undefined,
         },
         { headers: { token } }
       );
@@ -259,7 +320,7 @@ const Checkout = () => {
     } finally {
       setPlacing(false);
     }
-  }, [address, clearCart, deliveryMethod, navigate, paymentMethod, token, url]);
+  }, [address, appliedVoucherCode, clearCart, deliveryMethod, navigate, paymentMethod, selectedAddressId, token, url]);
 
   const goToStep = (target) => {
     // Never jump forward past a step that isn't satisfied yet.
@@ -306,6 +367,16 @@ const Checkout = () => {
           {step === 0 && (
             <form className="checkout-panel" onSubmit={submitAddress}>
               <h2>Delivery information</h2>
+              <section className="checkout-saved-addresses" aria-labelledby="saved-addresses-title">
+                <div><h3 id="saved-addresses-title">Saved addresses</h3><p>Select one for this order, or edit the fields below for a one-time address.</p></div>
+                {loadingAddresses && <p>Loading saved addresses…</p>}
+                {!loadingAddresses && savedAddresses.length > 0 && <div className="checkout-address-options">
+                  {savedAddresses.map((entry) => <label key={entry.id} className={`checkout-address-option ${selectedAddressId === entry.id ? "selected" : ""}`}>
+                    <input type="radio" name="saved-address" checked={selectedAddressId === entry.id} onChange={() => applySavedAddress(entry)} />
+                    <span><strong>{entry.label}{entry.isDefault ? " · Default" : ""}</strong><small>{entry.recipient} · {entry.address}, {entry.city}</small></span>
+                  </label>)}
+                </div>}
+              </section>
               <LocationPicker
                 initial={
                   address.lat && address.lng
@@ -499,6 +570,47 @@ const Checkout = () => {
 
               <section className="checkout-review-block">
                 <p><strong>{deliveryMethod === "shipper" ? "Shipper" : "Drone"}</strong> · {deliveryQuote ? formatVND(deliveryQuote.shippingPrice) : "Calculating…"}</p>
+              </section>
+
+              <section className="checkout-review-block checkout-voucher">
+                <label htmlFor="voucher-code">Voucher</label>
+                <div className="checkout-voucher-control">
+                  <input
+                    id="voucher-code"
+                    value={voucherInput}
+                    onChange={(event) => {
+                      setVoucherInput(event.target.value.toUpperCase());
+                      setVoucherError("");
+                    }}
+                    placeholder="Nhập mã voucher"
+                    autoCapitalize="characters"
+                    aria-invalid={Boolean(voucherError)}
+                    aria-describedby={voucherError ? "voucher-code-error" : undefined}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVoucherError("");
+                      setAppliedVoucherCode(voucherInput.trim());
+                    }}
+                    disabled={!voucherInput.trim() || voucherInput.trim() === appliedVoucherCode}
+                  >
+                    Áp dụng
+                  </button>
+                  {appliedVoucherCode && (
+                    <button type="button" onClick={() => {
+                      setAppliedVoucherCode("");
+                      setVoucherError("");
+                    }}>Bỏ mã</button>
+                  )}
+                </div>
+                {deliveryQuote?.discountAmount > 0 && (
+                  <p className="checkout-voucher-success">
+                    {deliveryQuote.voucher?.code}: -{formatVND(deliveryQuote.discountAmount)}
+                  </p>
+                )}
+                {voucherError && <p id="voucher-code-error" className="checkout-voucher-error" role="alert">{voucherError}</p>}
+                {quoteError && <p className="checkout-payment-message" role="alert">{quoteError}</p>}
               </section>
 
               <div className="checkout-actions">
