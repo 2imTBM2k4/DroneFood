@@ -216,6 +216,11 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
 
   const timeoutRef = useRef(null);
   const countdownIntervalRef = useRef(null);
+  const countdownRef = useRef(countdown);
+
+  useEffect(() => {
+    countdownRef.current = countdown;
+  }, [countdown]);
 
   const getCoordsFromAddress = async (address) => {
     try {
@@ -285,7 +290,8 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
 
   // Khởi chạy bộ đếm thời gian khi drone đã đến mà chưa quét QR
   useEffect(() => {
-    if (initialArrived && !order.qrScanned && !isDeliveredState && countdown > 0) {
+    const remainingCountdown = countdownRef.current;
+    if (initialArrived && !order.qrScanned && !isDeliveredState && remainingCountdown > 0) {
       countdownIntervalRef.current = setInterval(() => {
         setCountdown((prev) => {
           if (prev <= 1) {
@@ -323,14 +329,14 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
 
         toast.error("Hết thời gian nhận hàng. Đơn hàng đã bị hủy.");
         window.location.reload();
-      }, countdown * 1000);
+      }, remainingCountdown * 1000);
     }
 
     return () => {
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [initialArrived, order.qrScanned, isDeliveredState]);
+  }, [initialArrived, order.qrScanned, isDeliveredState, order._id]);
 
   // Xử lý khi trang tải lại mà đơn hàng đã ở trạng thái delivered hoặc cargoChecked
   useEffect(() => {
@@ -369,7 +375,7 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
       }, 5000);
       return () => clearTimeout(timer);
     }
-  }, [isDeliveredState, order.qrScanned, order.cargoChecked, onDeliveryComplete]);
+  }, [isDeliveredState, order.qrScanned, order.cargoChecked, order._id, onDeliveryComplete]);
 
   // Xử lý khi drone vừa bay tới điểm giao lần đầu tiên
   const handleComplete = () => {
