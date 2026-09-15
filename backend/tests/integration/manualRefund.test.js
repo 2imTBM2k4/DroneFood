@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import app from "../../app.js";
 import { Order, RefundRequest } from "../../models/index.cjs";
 import { createAdmin, createRestaurantOwner, createUser, generateToken } from "../helpers.js";
+import { decryptBankAccountNumber } from "../../utils/bankAccountCrypto.js";
 
 const findAudit = async (action, targetId) => {
   const AuditLog = (await import("../../models/auditLogModel.cjs")).default;
@@ -15,7 +16,7 @@ const address = {
   state: "District 1", country: "Vietnam", zipCode: "700000", phone: "0900000000", lat: 10.77, lng: 106.7,
 };
 
-const createPaidPayosOrder = async () => {
+const createPaidPayosOrder = async (overrides = {}) => {
   const customer = await createUser();
   const { restaurant } = await createRestaurantOwner();
   const order = await Order.create({
@@ -23,6 +24,7 @@ const createPaidPayosOrder = async () => {
     orderItems: [{ product: new mongoose.Types.ObjectId(), name: "Test food", quantity: 1, price: 50000 }],
     totalPrice: 60000, itemsPrice: 50000, shippingPrice: 10000,
     paymentMethod: "PAYOS", isPaid: true, paidAt: new Date(), orderStatus: "pending",
+    ...overrides,
   });
   return { customer, order };
 };
@@ -39,6 +41,8 @@ describe("manual PayOS refunds", () => {
     expect(created.status).toBe(201);
     expect(created.body.data.status).toBe("requested");
     expect(created.body.data.amount).toBe(60000);
+    expect(created.body.data.bank.accountNumberLast4).toBe("6789");
+    expect(JSON.stringify(created.body)).not.toContain("123456789");
     expect((await Order.findById(order._id)).orderStatus).toBe("refund_pending");
     const audit = await findAudit("refund_requested", order._id);
     expect(audit).toBeTruthy();
@@ -46,18 +50,80 @@ describe("manual PayOS refunds", () => {
     expect(audit.targetType).toBe("order");
     expect(String(audit.metadata.refundRequestId)).toBe(created.body.data._id);
 
+    const stored = await RefundRequest.findById(created.body.data._id)
+      .select("+bankAccountEncrypted +bank.accountNumber");
+    expect(stored.bank.accountNumber).toBeUndefined();
+    expect(stored.bankAccountEncrypted).toBeTruthy();
+    expect(decryptBankAccountNumber(stored.bankAccountEncrypted)).toBe("123456789");
+
     const duplicate = await request(app).post("/api/refunds/request").set("Authorization", `Bearer ${token}`).send(body);
     expect(duplicate.status).toBe(409);
+  });
+
+  it("lets an admin reveal a requested refund account through an audited no-store endpoint", async () => {
+    const { customer, order } = await createPaidPayosOrder();
+    const admin = await createAdmin();
+    const created = await request(app).post("/api/refunds/request")
+      .set("Authorization", `Bearer ${generateToken(customer._id)}`)
+      .send({
+        orderId: order._id.toString(),
+        reason: "Không còn nhu cầu",
+        bank: { bankName: "ACB", accountNumber: "123456789", accountHolder: "NGUYEN VAN A" },
+      });
+
+    const denied = await request(app).get(`/api/refunds/${created.body.data._id}/payout-details`)
+      .set("Authorization", `Bearer ${generateToken(customer._id)}`);
+    expect(denied.status).toBe(403);
+
+    const listed = await request(app).get("/api/refunds?status=requested")
+      .set("Authorization", `Bearer ${generateToken(admin._id)}`);
+    expect(listed.status).toBe(200);
+    expect(JSON.stringify(listed.body)).not.toContain("123456789");
+    expect(listed.body.data[0].bank.accountNumberLast4).toBe("6789");
+
+    const details = await request(app).get(`/api/refunds/${created.body.data._id}/payout-details`)
+      .set("Authorization", `Bearer ${generateToken(admin._id)}`);
+    expect(details.status).toBe(200);
+    expect(details.headers["cache-control"]).toContain("no-store");
+    expect(details.body.data).toMatchObject({
+      bankName: "ACB",
+      accountHolder: "NGUYEN VAN A",
+      accountNumber: "123456789",
+      accountNumberMasked: "•••• 6789",
+    });
+    expect(await findAudit("refund.payout_details_viewed", created.body.data._id)).toBeTruthy();
+  });
+
+  it("does not let a customer request a refund after a shipper has accepted the order", async () => {
+    const shipper = await createUser({ role: "shipper", email: "refund-assigned-shipper@test.com" });
+    const { customer, order } = await createPaidPayosOrder({
+      deliveryMethod: "shipper",
+      shipperId: shipper._id,
+      shipperAssignmentStatus: "accepted",
+    });
+
+    const response = await request(app).post("/api/refunds/request")
+      .set("Authorization", `Bearer ${generateToken(customer._id)}`)
+      .send({
+        orderId: order._id.toString(),
+        reason: "Đổi ý không mua nữa",
+        bank: { bankName: "ACB", accountNumber: "123456789", accountHolder: "NGUYEN VAN A" },
+      });
+
+    expect(response.status).toBe(409);
+    expect((await Order.findById(order._id)).orderStatus).toBe("pending");
   });
 
   it("requires an admin to record the manual transfer before cancelling", async () => {
     const { customer, order } = await createPaidPayosOrder();
     const admin = await createAdmin();
-    const refund = await RefundRequest.create({
-      order: order._id, customer: customer._id, amount: order.totalPrice, reason: "No longer needed",
-      bank: { bankName: "ACB", accountNumber: "123456789", accountHolder: "NGUYEN VAN A" },
-    });
-    await Order.findByIdAndUpdate(order._id, { orderStatus: "refund_pending", refundStatus: "requested" });
+    const created = await request(app).post("/api/refunds/request")
+      .set("Authorization", `Bearer ${generateToken(customer._id)}`)
+      .send({
+        orderId: order._id.toString(), reason: "No longer needed",
+        bank: { bankName: "ACB", accountNumber: "123456789", accountHolder: "NGUYEN VAN A" },
+      });
+    const refund = await RefundRequest.findById(created.body.data._id);
 
     const denied = await request(app).post(`/api/refunds/${refund._id}/mark-paid`).set("Authorization", `Bearer ${generateToken(customer._id)}`).send({ transferReference: "MB123" });
     expect(denied.status).toBe(403);
@@ -74,6 +140,10 @@ describe("manual PayOS refunds", () => {
     expect(audit.targetType).toBe("order");
     expect(String(audit.metadata.refundRequestId)).toBe(String(refund._id));
     expect(audit.metadata.transferReference).toBe("MB123");
+
+    const unavailableAfterPayment = await request(app).get(`/api/refunds/${refund._id}/payout-details`)
+      .set("Authorization", `Bearer ${generateToken(admin._id)}`);
+    expect(unavailableAfterPayment.status).toBe(409);
   });
 
   it("allows a customer to correct details and resubmit after an admin rejects a request", async () => {
@@ -102,7 +172,11 @@ describe("manual PayOS refunds", () => {
     });
     expect(resubmitted.status).toBe(201);
     expect(resubmitted.body.data.status).toBe("requested");
-    expect((await RefundRequest.findById(created.body.data._id)).bank.accountNumber).toBe("987654321");
+    const stored = await RefundRequest.findById(created.body.data._id)
+      .select("+bankAccountEncrypted +bank.accountNumber");
+    expect(stored.bank.accountNumber).toBeUndefined();
+    expect(stored.bank.accountNumberLast4).toBe("4321");
+    expect(decryptBankAccountNumber(stored.bankAccountEncrypted)).toBe("987654321");
   });
 
   it("accepts refund details for a legacy paid PayOS order cancelled because no shipper was available", async () => {

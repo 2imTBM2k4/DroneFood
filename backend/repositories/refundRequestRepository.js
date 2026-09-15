@@ -6,6 +6,9 @@ export const findByOrderId = (orderId) => RefundRequest.findOne({ order: orderId
 
 export const findById = (id) => RefundRequest.findById(id).populate("order").populate("customer", "name email phone");
 
+export const findByIdForPayoutDetails = (id) =>
+  RefundRequest.findById(id).select("+bankAccountEncrypted +bank.accountNumber");
+
 export const findAll = ({ status } = {}) => RefundRequest.find(status ? { status } : {})
   .populate("order", "totalPrice paymentMethod orderStatus shippingAddress")
   .populate("customer", "name email phone")

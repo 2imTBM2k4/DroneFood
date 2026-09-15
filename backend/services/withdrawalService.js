@@ -4,6 +4,11 @@ import * as withdrawalRepo from "../repositories/restaurantWithdrawalRepository.
 import * as walletRepo from "../repositories/walletRepository.js";
 import { addLedgerEntry, runInTransaction } from "./walletService.js";
 import { recordAudit } from "../utils/auditLog.js";
+import {
+  restaurantWithdrawalBankAccountSnapshot,
+  shipperWithdrawalBankAccountSnapshot,
+} from "./bankAccountService.js";
+import { decryptBankAccountNumber } from "../utils/bankAccountCrypto.js";
 
 export const MIN_WITHDRAWAL = 500000;
 export const MAX_WITHDRAWALS_PER_DAY = 3;
@@ -48,7 +53,7 @@ const countToday = (actorType, actorId, start, end) => actorType === "restaurant
   : withdrawalRepo.countForShipperVietnamDay(actorId, start, end);
 
 /** Reserves an eligible wallet amount; the actual debit happens only at Paid. */
-const createFor = async ({ actorType, actorId, amount }) => runInTransaction(async (session) => {
+const createFor = async ({ actorType, actorId, amount, bankAccountSnapshot }) => runInTransaction(async (session) => {
   const { start, end } = vietnamDayRange();
   if (await countToday(actorType, actorId, start, end) >= MAX_WITHDRAWALS_PER_DAY) {
     throw new AppError(`An account can request at most ${MAX_WITHDRAWALS_PER_DAY} withdrawals per Vietnam day`, 409);
@@ -57,19 +62,29 @@ const createFor = async ({ actorType, actorId, amount }) => runInTransaction(asy
   const draft = actorType === "restaurant"
     ? { actorType, restaurant: actorId, amount, reservedAmount: amount }
     : { actorType, shipper: actorId, amount, reservedAmount: amount };
+  draft.bankAccountSnapshot = {
+    bankName: bankAccountSnapshot.bankName,
+    accountHolder: bankAccountSnapshot.accountHolder,
+    accountNumberLast4: bankAccountSnapshot.accountNumberLast4,
+    profileUpdatedAt: bankAccountSnapshot.profileUpdatedAt,
+  };
+  draft.bankAccountSnapshotEncrypted = bankAccountSnapshot.encryptedAccountNumber;
   if (!await reserve(draft, session)) throw new AppError("Insufficient available balance for this withdrawal", 409);
   return withdrawalRepo.create(draft, session);
 });
 
 export const createRestaurantWithdrawal = async (user, amount) => {
   const restaurant = await restaurantForOwner(user);
-  const request = await createFor({ actorType: "restaurant", actorId: restaurant._id, amount });
+  const bankAccountSnapshot = await restaurantWithdrawalBankAccountSnapshot(user);
+  const request = await createFor({ actorType: "restaurant", actorId: restaurant._id, amount, bankAccountSnapshot });
   await recordAudit({ actor: user, action: "withdrawal.requested", targetType: "withdrawal", targetId: request._id, category: "money", metadata: { amount } });
   return request;
 };
 
-export const createShipperWithdrawal = async (user, amount) =>
-  createFor({ actorType: "shipper", actorId: user._id, amount });
+export const createShipperWithdrawal = async (user, amount) => {
+  const bankAccountSnapshot = await shipperWithdrawalBankAccountSnapshot(user._id);
+  return createFor({ actorType: "shipper", actorId: user._id, amount, bankAccountSnapshot });
+};
 
 export const listRestaurantWithdrawals = async (user) => {
   const restaurant = await restaurantForOwner(user);
@@ -86,6 +101,33 @@ export const listRestaurantWalletTransactions = async (user) => {
 
 export const listShipperWithdrawals = async (user) => withdrawalRepo.findByShipper(user._id);
 export const listAdminWithdrawals = async (status) => withdrawalRepo.findAll(status ? { status } : {});
+
+/** Returns the frozen destination only to an admin actively processing an approved payout. */
+export const payoutDetails = async (admin, withdrawalId) => {
+  const request = await withdrawalRepo.findById(withdrawalId).select("+bankAccountSnapshotEncrypted");
+  if (!request) throw new AppError("Withdrawal request not found", 404);
+  if (request.status !== "approved") throw new AppError("Bank details are available only for an approved withdrawal", 409);
+
+  const snapshot = request.bankAccountSnapshot;
+  if (!snapshot?.bankName || !snapshot?.accountHolder || !request.bankAccountSnapshotEncrypted) {
+    throw new AppError("Withdrawal request has no bank account snapshot", 409);
+  }
+  const accountNumber = decryptBankAccountNumber(request.bankAccountSnapshotEncrypted);
+  await recordAudit({
+    actor: admin,
+    action: "withdrawal.payout_details_viewed",
+    targetType: request.actorType === "restaurant" ? "restaurant" : "user",
+    targetId: ownerId(request),
+    metadata: { withdrawalId: request._id, accountNumberLast4: snapshot.accountNumberLast4 },
+  });
+  return {
+    bankName: snapshot.bankName,
+    accountHolder: snapshot.accountHolder,
+    accountNumber,
+    accountNumberMasked: `•••• ${snapshot.accountNumberLast4}`,
+    profileUpdatedAt: snapshot.profileUpdatedAt || null,
+  };
+};
 
 export const approveWithdrawal = async (admin, withdrawalId) => runInTransaction(async (session) => {
   const approved = await withdrawalRepo.approve(withdrawalId, admin._id, session);

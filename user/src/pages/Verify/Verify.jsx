@@ -70,7 +70,14 @@ const Verify = () => {
   return (
     <div className="verify">
       <div className="spinner"></div>
-      <p>{paymentCancelled ? "Payment was cancelled." : "Verifying payment..."}</p>
+      <p className="verify-title">
+        {paymentCancelled ? "Thanh toán đã bị hủy" : "Đang xác thực thanh toán..."}
+      </p>
+      <span className="verify-hint">
+        {paymentCancelled
+          ? "Đang chuyển hướng về danh sách đơn hàng..."
+          : "Verifying payment... Vui lòng chờ trong giây lát."}
+      </span>
     </div>
   );
 };

@@ -15,6 +15,12 @@ export const listManualRefunds = async (req, res) => {
   try { res.json({ success: true, data: await refundService.listManualRefunds(req.query) }); }
   catch (error) { sendError(res, error); }
 };
+export const payoutDetails = async (req, res) => {
+  try {
+    const data = await refundService.payoutDetails(req.user, req.params.id);
+    res.set("Cache-Control", "no-store").json({ success: true, data });
+  } catch (error) { sendError(res, error); }
+};
 export const markManualRefundPaid = async (req, res) => {
   try {
     const result = await refundService.markManualRefundPaid(req.user, req.params.id, req.body);

@@ -7,6 +7,7 @@ import { markRefundPaidSchema, refundIdParamSchema, refundListQuerySchema, rejec
 const router = express.Router();
 router.post("/request", protect, authorize("user"), validate(requestRefundSchema), controller.requestManualRefund);
 router.get("/", protect, authorize("admin"), validate(refundListQuerySchema, "query"), controller.listManualRefunds);
+router.get("/:id/payout-details", protect, authorize("admin"), validate(refundIdParamSchema, "params"), controller.payoutDetails);
 router.post("/:id/mark-paid", protect, authorize("admin"), validate(refundIdParamSchema, "params"), validate(markRefundPaidSchema), controller.markManualRefundPaid);
 router.post("/:id/reject", protect, authorize("admin"), validate(refundIdParamSchema, "params"), validate(rejectRefundSchema), controller.rejectManualRefund);
 export default router;

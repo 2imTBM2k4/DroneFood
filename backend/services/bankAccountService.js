@@ -16,9 +16,23 @@ const responseFor = (document) => {
   };
 };
 
+const withdrawalSnapshotFor = (document) => {
+  const account = document?.bankAccount || {};
+  if (!account.bankName || !account.accountHolder || !account.accountNumberLast4 || !document?.bankAccountEncrypted) {
+    throw new AppError("Set a bank account before requesting a withdrawal", 409);
+  }
+  return {
+    bankName: account.bankName,
+    accountHolder: account.accountHolder,
+    accountNumberLast4: account.accountNumberLast4,
+    profileUpdatedAt: account.updatedAt || null,
+    encryptedAccountNumber: document.bankAccountEncrypted,
+  };
+};
+
 const restaurantForOwner = async (user) => {
-  const linkedRestaurant = user.restaurantId ? await Restaurant.findById(user.restaurantId) : null;
-  const restaurant = linkedRestaurant || await Restaurant.findOne({ owner: user._id });
+  const linkedRestaurant = user.restaurantId ? await Restaurant.findById(user.restaurantId).select("+bankAccountEncrypted") : null;
+  const restaurant = linkedRestaurant || await Restaurant.findOne({ owner: user._id }).select("+bankAccountEncrypted");
   if (!restaurant) throw new AppError("Restaurant not found", 404);
 
   const ownerId = String(restaurant.owner?._id || restaurant.owner || "");
@@ -65,8 +79,7 @@ export const getShipperBankAccount = async (userId) => {
 };
 
 export const updateShipperBankAccount = async (user, account) => {
-  const profile = await ShipperProfile.findOne({ user: user._id });
-  if (!profile) throw new AppError("Shipper profile not found", 404);
+  const profile = await ShipperProfile.findOne({ user: user._id }) || await ShipperProfile.create({ user: user._id, vehicleType: "motorbike" });
   return save({ actor: user, model: ShipperProfile, id: profile._id, targetType: "user", account });
 };
 
@@ -79,4 +92,15 @@ export const getRestaurantBankAccount = async (user) => {
 export const updateRestaurantBankAccount = async (user, account) => {
   const restaurant = await restaurantForOwner(user);
   return save({ actor: user, model: Restaurant, id: restaurant._id, targetType: "bank_account", account });
+};
+
+export const shipperWithdrawalBankAccountSnapshot = async (userId) => {
+  const profile = await ShipperProfile.findOne({ user: userId }).select("+bankAccountEncrypted");
+  if (!profile) throw new AppError("Set a bank account before requesting a withdrawal", 409);
+  return withdrawalSnapshotFor(profile);
+};
+
+export const restaurantWithdrawalBankAccountSnapshot = async (user) => {
+  const restaurant = await restaurantForOwner(user);
+  return withdrawalSnapshotFor(restaurant);
 };

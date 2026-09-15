@@ -255,6 +255,26 @@
   cursor: not-allowed;
 }
 
+.cancellation-locked-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 320px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 149, 0, 0.25);
+  border-radius: var(--radius-md, 10px);
+  background: rgba(255, 149, 0, 0.08);
+  color: #8c4e00;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.cancellation-locked-notice svg {
+  flex: 0 0 auto;
+}
+
 .btn-refresh-status {
   display: inline-flex;
   align-items: center;
@@ -1124,6 +1144,11 @@
 }
 
 @media (max-width: 480px) {
+  .cancellation-locked-notice {
+    max-width: none;
+    width: 100%;
+  }
+
   .retry-payment-callout {
     align-items: stretch;
     flex-direction: column;

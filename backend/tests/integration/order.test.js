@@ -190,6 +190,50 @@ describe("Order API", () => {
     });
   });
 
+  describe("GET /api/order/:id/customer-detail", () => {
+    it("should return the authenticated customer's order detail", async () => {
+      const { restaurant } = await createRestaurantOwner();
+      const user = await createUser({ email: "customer-detail@test.com" });
+      const token = generateToken(user._id);
+      const order = await createOrder(user._id, restaurant._id);
+
+      const res = await request(app)
+        .get(`/api/order/${order._id}/customer-detail`)
+        .set("Authorization", `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data._id).toBe(order._id.toString());
+      expect(res.body.data.restaurantId.name).toBe(restaurant.name);
+      expect(res.body.data.orderItems[0].product).toBeTruthy();
+    });
+
+    it("should not reveal another customer's order", async () => {
+      const { restaurant } = await createRestaurantOwner();
+      const owner = await createUser({ email: "detail-owner@test.com" });
+      const otherUser = await createUser({ email: "detail-other@test.com" });
+      const order = await createOrder(owner._id, restaurant._id);
+
+      const res = await request(app)
+        .get(`/api/order/${order._id}/customer-detail`)
+        .set("Authorization", `Bearer ${generateToken(otherUser._id)}`);
+
+      expect(res.status).toBe(404);
+      expect(res.body.success).toBe(false);
+    });
+
+    it("should return not found for an invalid order id", async () => {
+      const user = await createUser({ email: "invalid-detail-id@test.com" });
+
+      const res = await request(app)
+        .get("/api/order/not-an-order-id/customer-detail")
+        .set("Authorization", `Bearer ${generateToken(user._id)}`);
+
+      expect(res.status).toBe(404);
+      expect(res.body.success).toBe(false);
+    });
+  });
+
   describe("GET /api/order/list", () => {
     it("should allow admin to list all orders", async () => {
       const admin = await createAdmin();
@@ -308,6 +352,26 @@ describe("Order API", () => {
 
       expect(res.status).toBe(400);
       expect(res.body.message).toMatch(/[Rr]eason/);
+    });
+
+    it("should not let a customer cancel after a shipper has accepted the order", async () => {
+      const { restaurant } = await createRestaurantOwner();
+      const customer = await createUser({ email: "cancel-after-shipper@test.com" });
+      const shipper = await createUser({ role: "shipper", email: "assigned-for-cancel@test.com" });
+      const order = await createOrder(customer._id, restaurant._id, {
+        deliveryMethod: "shipper",
+        shipperId: shipper._id,
+        shipperAssignmentStatus: "accepted",
+      });
+
+      const res = await request(app)
+        .post("/api/order/status")
+        .set("Authorization", `Bearer ${generateToken(customer._id)}`)
+        .send({ orderId: order._id.toString(), status: "cancelled", reason: "Đổi ý" });
+
+      expect(res.status).toBe(409);
+      expect(res.body.success).toBe(false);
+      expect((await Order.findById(order._id)).orderStatus).toBe("pending");
     });
   });
 });

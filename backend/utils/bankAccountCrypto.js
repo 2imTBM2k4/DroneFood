@@ -21,3 +21,16 @@ export const encryptBankAccountNumber = (accountNumber) => {
   const tag = cipher.getAuthTag();
   return `v1:${iv.toString("base64")}:${tag.toString("base64")}:${ciphertext.toString("base64")}`;
 };
+
+export const decryptBankAccountNumber = (encrypted) => {
+  try {
+    const [version, ivValue, tagValue, ciphertextValue] = String(encrypted).split(":");
+    if (version !== "v1" || !ivValue || !tagValue || !ciphertextValue) throw new Error("Invalid bank account ciphertext");
+    const decipher = crypto.createDecipheriv(ALGORITHM, encryptionKey(), Buffer.from(ivValue, "base64"));
+    decipher.setAuthTag(Buffer.from(tagValue, "base64"));
+    return Buffer.concat([decipher.update(Buffer.from(ciphertextValue, "base64")), decipher.final()]).toString("utf8");
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError("Withdrawal bank account snapshot cannot be decrypted", 409);
+  }
+};

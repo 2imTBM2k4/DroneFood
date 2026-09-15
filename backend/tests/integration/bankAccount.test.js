@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import request from "supertest";
 import app from "../../app.js";
-import { Restaurant, ShipperProfile } from "../../models/index.cjs";
-import { createRestaurantOwner, createUser, generateToken } from "../helpers.js";
+import { Restaurant, RestaurantWithdrawal, ShipperProfile } from "../../models/index.cjs";
+import { createAdmin, createRestaurantOwner, createUser, generateToken } from "../helpers.js";
 
 const accountPayload = {
   bankName: "Ngân hàng TMCP Ngoại thương Việt Nam",
@@ -61,5 +61,60 @@ describe("Bank account profile", () => {
 
     const stored = await ShipperProfile.findOne({ user: shipper._id }).select("+bankAccountEncrypted");
     expect(stored.bankAccountEncrypted).toBeTruthy();
+  });
+
+  it("freezes the restaurant payout account when the withdrawal is requested", async () => {
+    const { owner, restaurant } = await createRestaurantOwner();
+    restaurant.balance = 500000;
+    await restaurant.save();
+    const token = generateToken(owner._id);
+
+    await request(app).put("/api/restaurant/me/bank-account")
+      .set("Authorization", `Bearer ${token}`)
+      .send(accountPayload)
+      .expect(200);
+
+    const created = await request(app).post("/api/restaurant-withdrawals")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ amount: 500000 });
+    expect(created.status).toBe(200);
+    expect(created.body.data.bankAccountSnapshot).toMatchObject({
+      bankName: accountPayload.bankName,
+      accountHolder: accountPayload.accountHolder,
+      accountNumberLast4: "9012",
+    });
+    expect(JSON.stringify(created.body)).not.toContain("bankAccountSnapshotEncrypted");
+    expect(JSON.stringify(created.body)).not.toContain("123456789012");
+
+    await request(app).put("/api/restaurant/me/bank-account")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ ...accountPayload, bankName: "MB Bank", accountNumber: "987654321234" })
+      .expect(200);
+
+    const stored = await RestaurantWithdrawal.findById(created.body.data._id)
+      .select("+bankAccountSnapshotEncrypted");
+    expect(stored.bankAccountSnapshot).toMatchObject({
+      bankName: accountPayload.bankName,
+      accountHolder: accountPayload.accountHolder,
+      accountNumberLast4: "9012",
+    });
+    expect(stored.bankAccountSnapshotEncrypted).toBeTruthy();
+    expect(stored.bankAccountSnapshotEncrypted).not.toContain("123456789012");
+
+    const admin = await createAdmin();
+    await request(app).post(`/api/withdrawals/${created.body.data._id}/approve`)
+      .set("Authorization", `Bearer ${generateToken(admin._id)}`)
+      .send({})
+      .expect(200);
+    const payoutDetails = await request(app).get(`/api/withdrawals/${created.body.data._id}/payout-details`)
+      .set("Authorization", `Bearer ${generateToken(admin._id)}`);
+    expect(payoutDetails.status).toBe(200);
+    expect(payoutDetails.headers["cache-control"]).toContain("no-store");
+    expect(payoutDetails.body.data).toMatchObject({
+      bankName: accountPayload.bankName,
+      accountHolder: accountPayload.accountHolder,
+      accountNumber: "123456789012",
+      accountNumberMasked: "•••• 9012",
+    });
   });
 });

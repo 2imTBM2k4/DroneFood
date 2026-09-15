@@ -32,6 +32,17 @@ export const findByUser = async (userId) => {
     .sort({ createdAt: -1 }); // Recent first
 };
 
+// Customer-facing detail lookup keeps the ownership condition in the query so
+// a valid order id belonging to somebody else is indistinguishable from a
+// missing order.  Populate only the contact/location fields shown on the
+// tracking screen; do not expose account or wallet data through this route.
+export const findCustomerDetail = async (userId, orderId) => {
+  return await Order.findOne({ _id: orderId, user: userId })
+    .populate("orderItems.product")
+    .populate("restaurantId", "name address lat lng")
+    .populate("shipperId", "name phone");
+};
+
 export const findAll = async (filter = {}, { page, limit } = {}) => {
   let query = Order.find(filter)
     .populate("user", "name email")

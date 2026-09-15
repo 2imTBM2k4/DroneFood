@@ -77,6 +77,10 @@ const STATUS_CLASSES = {
   refund_pending: "status-refund-pending",
 };
 
+const hasShipperAcceptedOrder = (order) =>
+  order.deliveryMethod === "shipper" &&
+  (Boolean(order.shipperId) || ["accepted", "picked_up", "completed"].includes(order.shipperAssignmentStatus));
+
 const OrderDetail = () => {
   const { id } = useParams();
   const { url, token } = useContext(StoreContext);
@@ -128,6 +132,7 @@ const OrderDetail = () => {
       }
       toast.success("Đã xác nhận nhận hàng thành công.");
       setDroneReadyForConfirmation(false);
+      window.dispatchEvent(new Event("order-updated"));
       await load();
     } catch (err) {
       try {
@@ -143,6 +148,7 @@ const OrderDetail = () => {
         );
         toast.success("Đã xác nhận nhận hàng thành công.");
         setDroneReadyForConfirmation(false);
+        window.dispatchEvent(new Event("order-updated"));
         await load();
       } catch (fallbackErr) {
         toast.error(err.response?.data?.message || err.message || "Không thể xác nhận giao hàng.");
@@ -195,6 +201,7 @@ const OrderDetail = () => {
       );
       if (response.data.success) {
         toast.success("Đã hủy đơn hàng thành công.");
+        window.dispatchEvent(new Event("order-updated"));
         await load();
       } else {
         toast.error(response.data.message || "Hủy đơn thất bại");
@@ -292,6 +299,8 @@ const OrderDetail = () => {
     order.paymentMethod === "PAYOS" &&
     !order.isPaid &&
     order.orderStatus === "pending_payment";
+  const isCancellationLockedByShipper =
+    hasShipperAcceptedOrder(order) && ["pending", "preparing", "delivering"].includes(order.orderStatus);
 
   return (
     <main className="order-detail-page">
@@ -351,7 +360,8 @@ const OrderDetail = () => {
                 <span>{retryingPayment ? "Đang tạo link…" : "Thanh toán lại"}</span>
               </button>
             )}
-            {(order.orderStatus === "pending" || order.orderStatus === "pending_payment") && (
+            {(order.orderStatus === "pending" || order.orderStatus === "pending_payment") &&
+              !isCancellationLockedByShipper && (
               <button
                 type="button"
                 className="btn-cancel-detail"
@@ -360,6 +370,12 @@ const OrderDetail = () => {
               >
                 {cancellingOrder ? "Đang hủy…" : "Hủy đơn hàng"}
               </button>
+            )}
+            {isCancellationLockedByShipper && (
+              <p className="cancellation-locked-notice" role="status">
+                <Bike size={15} aria-hidden="true" />
+                <span>Tài xế đã nhận đơn — không thể hủy hoặc hoàn tiền.</span>
+              </p>
             )}
             <button
               type="button"

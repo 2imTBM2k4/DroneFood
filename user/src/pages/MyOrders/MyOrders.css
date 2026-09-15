@@ -551,6 +551,22 @@
   color: var(--apple-ink-muted-80, #333333);
 }
 
+.cancellation-lock-banner {
+  background: rgba(255, 149, 0, 0.08);
+  border-color: rgba(255, 149, 0, 0.25);
+  color: #8c4e00;
+}
+
+.cancellation-lock-banner strong {
+  display: block;
+  color: #663800;
+  font-size: 13px;
+}
+
+.cancellation-lock-banner p {
+  margin: 2px 0 0;
+}
+
 .cancel-reason-label {
   font-weight: 600;
   margin-right: 4px;

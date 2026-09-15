@@ -371,6 +371,7 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
           console.error("Auto confirm delivery error:", e);
         }
         toast.success("Đã hoàn tất nhận hàng từ Drone!");
+        window.dispatchEvent(new Event("order-updated"));
         if (onDeliveryComplete) onDeliveryComplete();
       }, 5000);
       return () => clearTimeout(timer);
@@ -480,6 +481,7 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
           localStorage.removeItem(storageKeyArrived);
           localStorage.removeItem(storageKeyArrivedTime);
 
+          window.dispatchEvent(new Event("order-updated"));
           if (onDeliveryComplete) {
             onDeliveryComplete();
           }

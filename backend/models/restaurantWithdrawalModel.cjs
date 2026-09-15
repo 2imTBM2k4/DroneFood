@@ -21,6 +21,15 @@ const restaurantWithdrawalSchema = new mongoose.Schema(
     },
     amount: { type: Number, required: true, min: 500000 },
     reservedAmount: { type: Number, required: true, min: 0 },
+    // Payment destination is frozen at request time. A later Profile edit
+    // must never redirect an already pending or approved withdrawal.
+    bankAccountSnapshot: {
+      bankName: { type: String, required: true },
+      accountHolder: { type: String, required: true },
+      accountNumberLast4: { type: String, required: true },
+      profileUpdatedAt: { type: Date, default: null },
+    },
+    bankAccountSnapshotEncrypted: { type: String, required: true, select: false, immutable: true },
     status: { type: String, enum: ["pending", "approved", "paid", "rejected"], default: "pending", index: true },
     approvedAt: { type: Date, default: null },
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
@@ -33,6 +42,13 @@ const restaurantWithdrawalSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+restaurantWithdrawalSchema.set("toJSON", {
+  transform: (_document, result) => {
+    delete result.bankAccountSnapshotEncrypted;
+    return result;
+  },
+});
 
 restaurantWithdrawalSchema.index({ restaurant: 1, createdAt: -1 });
 restaurantWithdrawalSchema.index({ shipper: 1, createdAt: -1 });

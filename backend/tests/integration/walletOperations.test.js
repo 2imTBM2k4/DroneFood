@@ -25,6 +25,10 @@ describe("Wallet operations", () => {
     await restaurant.save();
     const token = generateToken(owner._id);
     const admin = await createAdmin();
+    await request(app).put("/api/restaurant/me/bank-account")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ bankName: "MB Bank", accountHolder: "TEST RESTAURANT", accountNumber: "123456789012" })
+      .expect(200);
 
     const requests = await Promise.all([1, 2, 3].map(() => request(app)
       .post("/api/restaurant-withdrawals")
@@ -74,6 +78,10 @@ describe("Wallet operations", () => {
     expect(await WalletTransaction.countDocuments({ transactionType: "shipper_earnings_top_up" })).toBe(1);
 
     const token = generateToken(shipper._id);
+    await request(app).put("/api/shippers/me/bank-account")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ bankName: "MB Bank", accountHolder: "TEST SHIPPER", accountNumber: "123456789012" })
+      .expect(200);
     const created = await request(app).post("/api/withdrawals/shipper")
       .set("Authorization", `Bearer ${token}`).send({ amount: 500000 });
     expect(created.status).toBe(200);

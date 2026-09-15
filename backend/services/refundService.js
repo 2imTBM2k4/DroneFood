@@ -5,14 +5,32 @@ import * as refundRepo from "../repositories/refundRequestRepository.js";
 import * as voucherRepo from "../repositories/voucherRepository.js";
 import { RefundRequest } from "../models/index.cjs";
 import { recordAudit } from "../utils/auditLog.js";
+import { decryptBankAccountNumber, encryptBankAccountNumber } from "../utils/bankAccountCrypto.js";
 
-const canRequestManualRefund = (order) => order.orderStatus === "pending" || (
-  order.orderStatus === "cancelled" && order.cancellationCode === "NO_SHIPPER_AVAILABLE"
-) || (
+const hasShipperAcceptedOrder = (order) =>
   order.deliveryMethod === "shipper" &&
-  order.orderStatus === "preparing" &&
-  order.shipperAssignmentStatus === "expired"
-);
+  (Boolean(order.shipperId) || ["accepted", "picked_up", "completed"].includes(order.shipperAssignmentStatus));
+
+const canRequestManualRefund = (order) =>
+  !hasShipperAcceptedOrder(order) &&
+  (order.orderStatus === "pending" ||
+    (order.orderStatus === "cancelled" && order.cancellationCode === "NO_SHIPPER_AVAILABLE") ||
+    (order.deliveryMethod === "shipper" &&
+      order.orderStatus === "preparing" &&
+      order.shipperAssignmentStatus === "expired"));
+
+const refundBankSnapshot = (bank) => {
+  const accountNumber = String(bank.accountNumber || "").replace(/\s/g, "");
+  if (!accountNumber) throw new AppError("Bank account number is required", 400);
+  return {
+    bank: {
+      bankName: bank.bankName.trim(),
+      accountHolder: bank.accountHolder.trim(),
+      accountNumberLast4: accountNumber.slice(-4),
+    },
+    bankAccountEncrypted: encryptBankAccountNumber(accountNumber),
+  };
+};
 
 export const requestManualPayosRefund = async (customer, { orderId, reason, bank }) => {
   const order = await orderRepo.findById(orderId);
@@ -37,7 +55,7 @@ export const requestManualPayosRefund = async (customer, { orderId, reason, bank
         ? await refundRepo.updateById(existing._id, {
           amount: order.totalPrice,
           reason,
-          bank,
+          ...refundBankSnapshot(bank),
           status: "requested",
           processedBy: null,
           processedAt: null,
@@ -49,7 +67,7 @@ export const requestManualPayosRefund = async (customer, { orderId, reason, bank
           customer: customer._id,
           amount: order.totalPrice,
           reason,
-          bank,
+          ...refundBankSnapshot(bank),
         }, { session });
       await orderRepo.updateById(order._id, {
         orderStatus: "refund_pending",
@@ -73,6 +91,56 @@ export const requestManualPayosRefund = async (customer, { orderId, reason, bank
 };
 
 export const listManualRefunds = (query) => refundRepo.findAll(query);
+
+/**
+ * A manual refund has no approval phase. Per the confirmed policy, an admin
+ * may reveal its frozen payment destination while it remains requested.
+ */
+export const payoutDetails = async (admin, refundId) => {
+  const refund = await refundRepo.findByIdForPayoutDetails(refundId);
+  if (!refund) throw new AppError("Refund request not found", 404);
+  if (refund.status !== "requested") {
+    throw new AppError("Bank details are available only for a requested refund", 409);
+  }
+
+  const snapshot = refund.bank || {};
+  let accountNumber;
+  if (refund.bankAccountEncrypted) {
+    accountNumber = decryptBankAccountNumber(refund.bankAccountEncrypted);
+  } else if (snapshot.accountNumber) {
+    // Old records predate encrypted storage. Migrate a record only when an
+    // authorized admin intentionally opens it, then remove its plaintext.
+    accountNumber = String(snapshot.accountNumber).replace(/\s/g, "");
+    await RefundRequest.updateOne(
+      { _id: refund._id, bankAccountEncrypted: { $in: [null, ""] } },
+      {
+        $set: {
+          "bank.accountNumberLast4": accountNumber.slice(-4),
+          bankAccountEncrypted: encryptBankAccountNumber(accountNumber),
+        },
+        $unset: { "bank.accountNumber": "" },
+      }
+    );
+  } else {
+    throw new AppError("Refund request has no bank account details", 409);
+  }
+
+  const accountNumberLast4 = snapshot.accountNumberLast4 || accountNumber.slice(-4);
+  await recordAudit({
+    actor: admin,
+    action: "refund.payout_details_viewed",
+    targetType: "refund",
+    targetId: refund._id,
+    category: "banking",
+    metadata: { accountNumberLast4 },
+  });
+  return {
+    bankName: snapshot.bankName,
+    accountHolder: snapshot.accountHolder,
+    accountNumber,
+    accountNumberMasked: `•••• ${accountNumberLast4}`,
+  };
+};
 
 export const markManualRefundPaid = async (admin, refundId, { transferReference, adminNote = "" }) => {
   const refund = await refundRepo.findById(refundId);

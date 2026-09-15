@@ -42,6 +42,23 @@ const TAB_OPTIONS = [
   { id: "cancelled", label: "Đã hủy" },
 ];
 
+const hasShipperAcceptedOrder = (order) =>
+  order.deliveryMethod === "shipper" &&
+  (Boolean(order.shipperId) || ["accepted", "picked_up", "completed"].includes(order.shipperAssignmentStatus));
+
+const isCancellationLockedByShipper = (order) =>
+  hasShipperAcceptedOrder(order) && ["pending", "preparing", "delivering"].includes(order.orderStatus);
+
+const canShowCancellationAction = (order) =>
+  !isCancellationLockedByShipper(order) &&
+  (order.orderStatus === "pending" ||
+    order.orderStatus === "pending_payment" ||
+    (order.orderStatus === "preparing" &&
+      order.deliveryMethod === "shipper" &&
+      order.shipperAssignmentStatus === "expired" &&
+      order.paymentMethod === "PAYOS" &&
+      order.isPaid));
+
 const MyOrders = () => {
   const { url, token, setShowLogin } = useContext(StoreContext);
   const navigate = useNavigate();
@@ -506,6 +523,16 @@ const MyOrders = () => {
                         </div>
                       )}
 
+                      {isCancellationLockedByShipper(order) && (
+                        <div className="order-alert-banner alert-neutral cancellation-lock-banner" role="status">
+                          <Bike size={16} aria-hidden="true" />
+                          <div>
+                            <strong>Đơn đã có tài xế nhận</strong>
+                            <p>Bạn không thể hủy đơn hoặc gửi yêu cầu hoàn tiền ở thời điểm này.</p>
+                          </div>
+                        </div>
+                      )}
+
                       {order.orderStatus === "cancelled" &&
                         order.reason &&
                         order.cancellationCode !== "NO_SHIPPER_AVAILABLE" && (
@@ -566,13 +593,7 @@ const MyOrders = () => {
                                 </button>
                               )}
                             {/* Actions for Shipper timeout / Cancel */}
-                            {(order.orderStatus === "pending" ||
-                              order.orderStatus === "pending_payment" ||
-                              (order.orderStatus === "preparing" &&
-                                order.deliveryMethod === "shipper" &&
-                                order.shipperAssignmentStatus === "expired" &&
-                                order.paymentMethod === "PAYOS" &&
-                                order.isPaid)) && (
+                            {canShowCancellationAction(order) && (
                               <>
                                 {order.deliveryMethod === "shipper" &&
                                   order.shipperAssignmentStatus === "expired" &&

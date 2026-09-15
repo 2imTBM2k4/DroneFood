@@ -488,6 +488,23 @@ export const userOrders = async (userId) => {
   };
 };
 
+export const customerOrderDetail = async (userId, orderId) => {
+  if (!mongoose.isValidObjectId(orderId)) {
+    throw new AppError("Order not found", 404);
+  }
+
+  const order = await orderRepo.findCustomerDetail(userId, orderId);
+  if (!order) {
+    throw new AppError("Order not found", 404);
+  }
+
+  return { success: true, data: order };
+};
+
+const hasShipperAcceptedOrder = (order) =>
+  order.deliveryMethod === "shipper" &&
+  (Boolean(order.shipperId) || ["accepted", "picked_up", "completed"].includes(order.shipperAssignmentStatus));
+
 export const listOrders = async (user, { page, limit } = {}) => {
   let filter = {};
   if (user.role === "restaurant_owner") {
@@ -635,6 +652,9 @@ export const updateStatus = async (user, updateData) => {
     } else if (status === "cancelled") {
       if (!["pending", "pending_payment"].includes(order.orderStatus)) {
         throw new AppError("Chỉ có thể hủy đơn hàng khi đang chờ xác nhận hoặc chưa thanh toán", 400);
+      }
+      if (hasShipperAcceptedOrder(order)) {
+        throw new AppError("Không thể hủy đơn hàng sau khi tài xế đã nhận đơn", 409);
       }
       if (!reason || reason.trim() === "") {
         throw new AppError("Reason required for cancellation", 400);

@@ -1,6 +1,1237 @@
-.refund-page { max-width: 1120px; margin: 0 auto; padding: 24px; color: var(--text-primary); }
-.refund-page__header { margin-bottom: 24px; }.refund-page h1 { margin: 8px 0; }.refund-page__header > div > p:last-child { color: var(--text-secondary); }
-.refund-kicker { display: inline-flex; align-items: center; gap: 6px; color: var(--accent-color); font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.refund-list { display: grid; gap: 12px; }.refund-card, .refund-empty { border: 1px solid var(--border-color); border-radius: 12px; background: var(--card-bg); }.refund-card { display: grid; grid-template-columns: 1.4fr 1fr auto; gap: 20px; align-items: center; padding: 18px; }.refund-card div { display: grid; gap: 5px; }.refund-card span { color: var(--text-secondary); font-size: 13px; }.refund-card button, .refund-dialog button { min-height: 44px; display: inline-flex; justify-content: center; align-items: center; gap: 8px; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 14px; background: transparent; color: var(--text-primary); font: inherit; font-weight: 700; cursor: pointer; }.refund-card button:hover { color: var(--accent-color); border-color: var(--accent-color); }.refund-empty { display: grid; justify-items: center; gap: 10px; padding: 64px 20px; color: var(--text-secondary); text-align: center; }.refund-empty h2 { color: var(--text-primary); font-size: 20px; }
-.refund-dialog-backdrop { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; padding: 20px; background: rgba(0,0,0,.52); backdrop-filter: blur(3px); }.refund-dialog { width: min(560px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto; border: 1px solid var(--border-color); border-radius: 14px; background: var(--card-bg); box-shadow: var(--shadow-lg); }.refund-dialog header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 22px; border-bottom: 1px solid var(--border-color); }.refund-dialog h2 { margin-top: 5px; font-size: 20px; }.refund-dialog header button { width: 44px; padding: 0; }.refund-dialog__details { display: grid; gap: 10px; padding: 20px 22px; background: var(--body-color); }.refund-dialog__details p { display: flex; justify-content: space-between; gap: 16px; margin: 0; color: var(--text-secondary); font-size: 14px; }.refund-dialog__details strong { max-width: 65%; color: var(--text-primary); text-align: right; overflow-wrap: anywhere; }.refund-dialog form { display: grid; gap: 14px; padding: 22px; }.refund-choice { color: var(--text-primary); font-weight: 700; }.refund-field { display: grid; gap: 7px; color: var(--text-primary); font-size: 13px; font-weight: 700; }.refund-field input, .refund-field textarea { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--body-color); color: var(--text-primary); font: inherit; }.refund-dialog footer { display: flex; justify-content: flex-end; gap: 10px; padding-top: 16px; border-top: 1px solid var(--border-color); }.refund-dialog footer button:last-child { border-color: var(--accent-color); background: var(--accent-color); color: white; }.refund-dialog button:disabled { cursor: not-allowed; opacity: .55; }.refund-dialog button:focus-visible, .refund-card button:focus-visible, .refund-field input:focus-visible, .refund-field textarea:focus-visible { outline: 3px solid var(--accent-color); outline-offset: 2px; }
-@media (max-width: 700px) { .refund-page { padding: 16px; }.refund-card { grid-template-columns: 1fr; gap: 12px; }.refund-card button { width: 100%; }.refund-dialog footer { flex-direction: column-reverse; }.refund-dialog footer button { width: 100%; } }
+/* ============================================================
+   DroneFood Admin — Refunds Page (Apple Design System)
+   ============================================================ */
+
+.refund-page {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 28px 24px 60px;
+  color: var(--text-primary, #1d1d1f);
+  font-family: var(--font-text, -apple-system, BlinkMacSystemFont, "Inter", sans-serif);
+}
+
+/* ---------- Header Card ---------- */
+.refund-header-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 24px 28px;
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.08));
+  border-radius: 18px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  flex-wrap: wrap;
+}
+
+.header-text-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 760px;
+}
+
+.header-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  width: fit-content;
+  border-radius: var(--radius-pill, 9999px);
+  background: rgba(0, 102, 204, 0.08);
+  color: var(--apple-primary, #0066cc);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.refund-header-card h1 {
+  font-family: var(--font-display, -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif);
+  font-size: clamp(22px, 3vw, 28px);
+  font-weight: 700;
+  color: var(--apple-ink, #1d1d1f);
+  letter-spacing: -0.02em;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.refund-header-card p {
+  color: var(--apple-body-muted, #86868b);
+  font-size: 14px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.btn-refresh-refunds {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  border-radius: var(--radius-pill, 9999px);
+  border: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.12));
+  background: var(--card-bg, #ffffff);
+  color: var(--apple-ink, #1d1d1f);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.btn-refresh-refunds:hover:not(:disabled) {
+  border-color: var(--apple-primary, #0066cc);
+  color: var(--apple-primary, #0066cc);
+  background: rgba(0, 102, 204, 0.04);
+}
+
+.btn-refresh-refunds:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spin-icon {
+  animation: spin-loop 0.8s linear infinite;
+}
+
+@keyframes spin-loop {
+  to { transform: rotate(360deg); }
+}
+
+/* ---------- KPI Stats Grid ---------- */
+.refund-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 22px;
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.08));
+  border-radius: 16px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.015);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.04);
+}
+
+.stat-card-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.stat-card-icon.pending {
+  background: rgba(255, 149, 0, 0.12);
+  color: #b26a00;
+}
+
+.stat-card-icon.paid {
+  background: rgba(52, 199, 89, 0.12);
+  color: #248a3d;
+}
+
+.stat-card-icon.rejected {
+  background: rgba(255, 59, 48, 0.12);
+  color: #d70015;
+}
+
+.stat-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.stat-card-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--apple-body-muted, #86868b);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.stat-card-number {
+  font-family: var(--font-display, -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--apple-ink, #1d1d1f);
+  line-height: 1.2;
+}
+
+.stat-card-sub {
+  font-size: 13px;
+  color: var(--apple-body-muted, #86868b);
+  margin-top: 2px;
+}
+
+.stat-card-sub strong {
+  color: var(--apple-ink, #1d1d1f);
+  font-weight: 600;
+}
+
+/* ---------- Toolbar (Tabs & Search) ---------- */
+.refund-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.refund-tabs-list {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: var(--radius-pill, 9999px);
+  border: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.06));
+}
+
+.tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius-pill, 9999px);
+  border: none;
+  background: transparent;
+  color: var(--apple-body-muted, #6e6e73);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.tab-btn:hover:not(.active) {
+  color: var(--apple-ink, #1d1d1f);
+}
+
+.tab-btn.active {
+  background: var(--card-bg, #ffffff);
+  color: var(--apple-ink, #1d1d1f);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.tab-count-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.08);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tab-count-badge.warning {
+  background: rgba(255, 149, 0, 0.15);
+  color: #b26a00;
+}
+
+.tab-btn.active .tab-count-badge {
+  background: rgba(0, 102, 204, 0.12);
+  color: var(--apple-primary, #0066cc);
+}
+
+.refund-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  min-height: 40px;
+  width: min(340px, 100%);
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.12));
+  border-radius: var(--radius-pill, 9999px);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.refund-search-box:focus-within {
+  border-color: var(--apple-primary, #0066cc);
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.12);
+}
+
+.search-icon {
+  color: var(--apple-body-muted, #86868b);
+  flex: none;
+}
+
+.search-input {
+  border: none;
+  background: transparent;
+  width: 100%;
+  font-size: 13px;
+  color: var(--apple-ink, #1d1d1f);
+  outline: none;
+}
+
+.search-clear-btn {
+  border: none;
+  background: transparent;
+  color: var(--apple-body-muted, #86868b);
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+.search-clear-btn:hover {
+  color: var(--apple-ink, #1d1d1f);
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* ---------- State Blocks (Loading / Empty) ---------- */
+.refund-loading-state,
+.refund-empty-state {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 64px 24px;
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.08));
+  border-radius: 18px;
+}
+
+.apple-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(0, 102, 204, 0.15);
+  border-top-color: var(--apple-primary, #0066cc);
+  border-radius: 50%;
+  animation: spin-loop 0.8s linear infinite;
+}
+
+.empty-icon-box {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: rgba(0, 102, 204, 0.06);
+  color: var(--apple-primary, #0066cc);
+  display: grid;
+  place-items: center;
+}
+
+.refund-empty-state h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--apple-ink, #1d1d1f);
+  margin: 0;
+}
+
+.refund-empty-state p {
+  font-size: 14px;
+  color: var(--apple-body-muted, #86868b);
+  max-width: 400px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.btn-clear-search {
+  padding: 8px 16px;
+  border-radius: var(--radius-pill, 9999px);
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.15));
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--apple-primary, #0066cc);
+  cursor: pointer;
+  margin-top: 6px;
+}
+
+/* ---------- Refund Card Feed ---------- */
+.refund-card-feed {
+  display: grid;
+  gap: 14px;
+}
+
+.refund-item-card {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.8fr) minmax(180px, 1.2fr) minmax(160px, 1fr) auto;
+  gap: 20px;
+  align-items: center;
+  padding: 20px 24px;
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.08));
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.015);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.refund-item-card:hover {
+  border-color: rgba(0, 102, 204, 0.2);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+}
+
+.card-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Col: Order & Customer */
+.order-tag-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.order-mono-code {
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--apple-primary, #0066cc);
+  background: rgba(0, 102, 204, 0.08);
+  padding: 2px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.03em;
+}
+
+.order-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--apple-body-muted, #86868b);
+}
+
+.customer-info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.customer-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.05);
+  display: grid;
+  place-items: center;
+  color: var(--apple-body-muted, #86868b);
+  flex: none;
+}
+
+.customer-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.customer-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--apple-ink, #1d1d1f);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.customer-sub {
+  font-size: 12px;
+  color: var(--apple-body-muted, #86868b);
+}
+
+.order-reason-preview {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.02);
+  padding: 4px 8px;
+  border-radius: 6px;
+  border-left: 2px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.15));
+}
+
+.reason-label {
+  font-weight: 600;
+  color: var(--apple-body-muted, #86868b);
+  flex: none;
+}
+
+.reason-snippet {
+  color: var(--apple-ink, #1d1d1f);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Col: Bank */
+.bank-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1e293b;
+  background: #f1f5f9;
+  padding: 3px 9px;
+  border-radius: 6px;
+}
+
+.bank-account-text code {
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  color: var(--apple-ink, #1d1d1f);
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.bank-holder-text {
+  font-size: 12px;
+  color: var(--apple-body-muted, #86868b);
+  font-weight: 500;
+}
+
+/* Col: Amount & Status */
+.amount-display {
+  font-family: var(--font-display, -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--apple-ink, #1d1d1f);
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill, 9999px);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-pill.status-requested {
+  background: rgba(255, 149, 0, 0.1);
+  color: #b26a00;
+  border: 1px solid rgba(255, 149, 0, 0.2);
+}
+
+.status-pill.status-paid {
+  background: rgba(52, 199, 89, 0.1);
+  color: #248a3d;
+  border: 1px solid rgba(52, 199, 89, 0.2);
+}
+
+.status-pill.status-rejected {
+  background: rgba(255, 59, 48, 0.1);
+  color: #d70015;
+  border: 1px solid rgba(255, 59, 48, 0.2);
+}
+
+.ref-badge {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--apple-body-muted, #86868b);
+  background: rgba(0, 0, 0, 0.03);
+  padding: 2px 6px;
+  border-radius: 4px;
+  width: fit-content;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+/* Col: Actions */
+.btn-process-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 8px 16px;
+  border-radius: var(--radius-pill, 9999px);
+  background: var(--apple-primary, #0066cc);
+  color: #ffffff;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.24);
+}
+
+.btn-process-action:hover:not(:disabled) {
+  background: #0055b3;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.32);
+}
+
+.btn-process-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-view-detail {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill, 9999px);
+  background: rgba(0, 0, 0, 0.03);
+  color: var(--apple-ink, #1d1d1f);
+  border: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.12));
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.btn-view-detail:hover {
+  border-color: var(--apple-primary, #0066cc);
+  color: var(--apple-primary, #0066cc);
+  background: rgba(0, 102, 204, 0.04);
+}
+
+/* ============================================================
+   Dialogs (Modals)
+   ============================================================ */
+.refund-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: backdrop-fade 0.2s ease-out;
+}
+
+@keyframes backdrop-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.refund-dialog {
+  width: min(580px, 100%);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  border: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.1));
+  border-radius: 20px;
+  background: var(--card-bg, #ffffff);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  animation: dialog-pop 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dialog-pop {
+  from { transform: scale(0.96) translateY(8px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.08));
+}
+
+.dialog-title-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dialog-badge-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: rgba(0, 102, 204, 0.1);
+  color: var(--apple-primary, #0066cc);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.dialog-badge-icon.paid {
+  background: rgba(52, 199, 89, 0.1);
+  color: #248a3d;
+}
+
+.dialog-badge-icon.rejected {
+  background: rgba(255, 59, 48, 0.1);
+  color: #d70015;
+}
+
+.dialog-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--apple-body-muted, #86868b);
+  letter-spacing: 0.04em;
+}
+
+.dialog-header h2 {
+  font-family: var(--font-display, -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--apple-ink, #1d1d1f);
+  margin: 2px 0 0;
+}
+
+.dialog-close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--apple-body-muted, #86868b);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.dialog-close-btn:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: var(--apple-ink, #1d1d1f);
+}
+
+/* ---------- Visual Bank Card Preview ---------- */
+.dialog-bank-card {
+  margin: 20px 24px 10px;
+  padding: 20px 22px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  color: #ffffff;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.bank-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bank-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bank-icon {
+  color: #38bdf8;
+}
+
+.bank-name {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.bank-card-tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.bank-card-acc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+}
+
+.bank-acc-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bank-acc-label {
+  font-size: 11px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bank-acc-number {
+  font-family: var(--font-mono, monospace);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #ffffff;
+}
+
+.btn-copy-acc {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.btn-copy-acc:hover,
+.btn-copy-acc.copied {
+  background: #38bdf8;
+  color: #0f172a;
+}
+
+.bank-card-holder-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.bank-holder-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #f1f5f9;
+  margin-top: 2px;
+}
+
+.bank-amount-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.bank-amount-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bank-amount-val {
+  font-family: var(--font-display, -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif);
+  font-size: 18px;
+  font-weight: 700;
+  color: #34d399;
+}
+
+.btn-copy-amount {
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.btn-copy-amount:hover,
+.btn-copy-amount.copied {
+  background: #34d399;
+  color: #064e3b;
+}
+
+.bank-card-reason {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 10px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: #cbd5e1;
+}
+
+.bank-card-reason .reason-label {
+  color: #94a3b8;
+  margin-right: 5px;
+}
+
+/* Metadata strip */
+.dialog-meta-strip {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 24px;
+  background: rgba(0, 0, 0, 0.02);
+  font-size: 12.5px;
+  color: var(--apple-body-muted, #86868b);
+  border-top: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.06));
+  border-bottom: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.06));
+  flex-wrap: wrap;
+}
+
+.meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.meta-item strong {
+  color: var(--apple-ink, #1d1d1f);
+}
+
+/* Dialog Form */
+.dialog-form {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.form-action-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-action-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--apple-ink, #1d1d1f);
+}
+
+.segmented-action-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.action-pill-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1.5px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.12));
+  background: var(--card-bg, #ffffff);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.18s ease;
+}
+
+.action-pill-btn strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--apple-ink, #1d1d1f);
+}
+
+.action-pill-btn small {
+  display: block;
+  font-size: 11.5px;
+  color: var(--apple-body-muted, #86868b);
+  margin-top: 2px;
+}
+
+.action-pill-btn.approve.active {
+  border-color: var(--apple-primary, #0066cc);
+  background: rgba(0, 102, 204, 0.04);
+  color: var(--apple-primary, #0066cc);
+}
+
+.action-pill-btn.approve.active strong {
+  color: var(--apple-primary, #0066cc);
+}
+
+.action-pill-btn.reject.active {
+  border-color: var(--apple-danger, #ff3b30);
+  background: rgba(255, 59, 48, 0.04);
+  color: var(--apple-danger, #ff3b30);
+}
+
+.action-pill-btn.reject.active strong {
+  color: var(--apple-danger, #ff3b30);
+}
+
+.form-fields-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--apple-ink, #1d1d1f);
+}
+
+.dialog-input,
+.dialog-textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.15));
+  background: var(--card-bg, #ffffff);
+  color: var(--apple-ink, #1d1d1f);
+  font: inherit;
+  font-size: 13.5px;
+  transition: all 0.18s ease;
+}
+
+.dialog-input:focus,
+.dialog-textarea:focus {
+  outline: none;
+  border-color: var(--apple-primary, #0066cc);
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.12);
+}
+
+.field-hint {
+  font-size: 12px;
+  color: var(--apple-body-muted, #86868b);
+  line-height: 1.4;
+}
+
+/* Dialog Footer */
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.08));
+}
+
+.btn-dialog-cancel {
+  padding: 9px 18px;
+  border-radius: var(--radius-pill, 9999px);
+  border: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.15));
+  background: var(--card-bg, #ffffff);
+  color: var(--apple-ink, #1d1d1f);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.btn-dialog-cancel:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.btn-dialog-submit {
+  padding: 9px 20px;
+  border-radius: var(--radius-pill, 9999px);
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.btn-dialog-submit.primary {
+  background: var(--apple-primary, #0066cc);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.25);
+}
+
+.btn-dialog-submit.primary:hover:not(:disabled) {
+  background: #0055b3;
+}
+
+.btn-dialog-submit.danger {
+  background: var(--apple-danger, #ff3b30);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(255, 59, 48, 0.25);
+}
+
+.btn-dialog-submit.danger:hover:not(:disabled) {
+  background: #d70015;
+}
+
+.btn-dialog-submit:disabled,
+.btn-dialog-cancel:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ---------- Detail Dialog Content ---------- */
+.detail-dialog-content {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.detail-status-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.08));
+}
+
+.banner-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--apple-body-muted, #86868b);
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 3px;
+}
+
+.banner-status-tag {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.banner-status-tag.paid {
+  color: #248a3d;
+}
+
+.banner-status-tag.rejected {
+  color: #d70015;
+}
+
+.banner-amount-value {
+  font-family: var(--font-display, -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--apple-ink, #1d1d1f);
+}
+
+.detail-info-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.info-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.06));
+}
+
+.info-group.highlight {
+  background: rgba(0, 102, 204, 0.04);
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 102, 204, 0.15);
+}
+
+.info-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--apple-body-muted, #86868b);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.info-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--apple-ink, #1d1d1f);
+}
+
+.info-value.mono {
+  font-family: var(--font-mono, monospace);
+  color: var(--apple-primary, #0066cc);
+  font-size: 15px;
+}
+
+.info-sub {
+  font-size: 12.5px;
+  color: var(--apple-body-muted, #86868b);
+}
+
+.reason-quote {
+  font-style: italic;
+  color: #475569;
+}
+
+.note-box {
+  background: rgba(0, 0, 0, 0.02);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+/* ============================================================
+   Responsive Design
+   ============================================================ */
+@media (max-width: 900px) {
+  .refund-item-card {
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .col-action {
+    grid-column: span 2;
+  }
+
+  .btn-process-action,
+  .btn-view-detail {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .refund-page {
+    padding: 16px 12px 40px;
+  }
+
+  .refund-header-card {
+    padding: 18px 16px;
+  }
+
+  .refund-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .refund-search-box {
+    width: 100%;
+  }
+
+  .refund-item-card {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+
+  .col-action {
+    grid-column: 1;
+  }
+
+  .segmented-action-picker {
+    grid-template-columns: 1fr;
+  }
+}
