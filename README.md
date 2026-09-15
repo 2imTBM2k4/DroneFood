@@ -182,6 +182,9 @@ Create `backend/.env` (see `.env.example`):
 PORT=4000
 MONGODB_URI=mongodb://localhost:27017/drone_delivery
 JWT_SECRET=your-secret-key
+# Required for encrypted restaurant and shipper bank-account profiles. Generate
+# a dedicated 32-byte key, for example: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+BANK_ACCOUNT_ENCRYPTION_KEY=replace_with_a_32_byte_base64_key
 
 CLOUDINARY_CLOUD_NAME=your-cloud-name
 CLOUDINARY_API_KEY=your-api-key

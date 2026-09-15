@@ -99,8 +99,8 @@ export const payosWebhook = async (req, res) => {
   try {
     const result = await orderService.handlePayosWebhook(req.body);
     if (result.ignored) {
-      const depositResult = await walletService.handleDepositPayosWebhook(req.body);
-      return res.status(200).json({ success: true, type: depositResult.ignored ? "sample" : "shipper_deposit" });
+      const walletResult = await walletService.handleShipperWalletPayosWebhook(req.body);
+      return res.status(200).json({ success: true, type: walletResult.ignored ? "sample" : `shipper_${walletResult.purpose}` });
     }
     await notifyPaidOrder(req, result);
     res.status(200).json({ success: true });

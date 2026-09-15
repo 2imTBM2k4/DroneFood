@@ -33,6 +33,14 @@ const shipperProfileSchema = new mongoose.Schema(
     locationUpdatedAt: { type: Date, default: null },
     pushToken: { type: String, default: "" },
     currentOrder: { type: mongoose.Schema.Types.ObjectId, ref: "Order", default: null },
+    // Keep only non-sensitive account metadata in the regular profile payload.
+    bankAccount: {
+      bankName: { type: String, default: "" },
+      accountHolder: { type: String, default: "" },
+      accountNumberLast4: { type: String, default: "" },
+      updatedAt: { type: Date, default: null },
+    },
+    bankAccountEncrypted: { type: String, default: undefined, select: false },
   },
   { timestamps: true }
 );

@@ -7,6 +7,8 @@ import {
   getRestaurantById,
   lockRestaurant,
   setOpenState,
+  bankAccount,
+  updateBankAccount,
 } from "../controllers/restaurantController.js";
 import { protect, optionalAuth, authorize } from "../middleware/auth.js";
 import { uploadMiddleware } from "../config/multer.js";
@@ -18,10 +20,14 @@ import {
   lockRestaurantSchema,
   setOpenStateSchema,
 } from "../validations/restaurantValidation.js";
+import { bankAccountSchema } from "../validations/bankAccountValidation.js";
 
 const restaurantRouter = express.Router();
 
 restaurantRouter.get("/list", optionalAuth, listRestaurants);
+
+restaurantRouter.get("/me/bank-account", protect, authorize("restaurant_owner"), bankAccount);
+restaurantRouter.put("/me/bank-account", protect, authorize("restaurant_owner"), validate(bankAccountSchema), updateBankAccount);
 
 restaurantRouter.put(
   "/:id",

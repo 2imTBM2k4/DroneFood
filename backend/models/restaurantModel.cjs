@@ -18,6 +18,18 @@ const restaurantSchema = new mongoose.Schema(
       required: true,
     },
     balance: { type: Number, default: 0 },
+    // The existing restaurant balance remains the wallet source of truth.
+    // Pending/approved withdrawals reserve part of it without debiting it.
+    reservedWithdrawalAmount: { type: Number, default: 0, min: 0 },
+    // The display-safe portion of the payout account. The actual account
+    // number is encrypted separately and is never included in normal reads.
+    bankAccount: {
+      bankName: { type: String, default: "" },
+      accountHolder: { type: String, default: "" },
+      accountNumberLast4: { type: String, default: "" },
+      updatedAt: { type: Date, default: null },
+    },
+    bankAccountEncrypted: { type: String, default: undefined, select: false },
     // Admin approval gate — a locked restaurant cannot trade at all and its
     // owner cannot even sign in.
     isLocked: { type: Boolean, default: true },

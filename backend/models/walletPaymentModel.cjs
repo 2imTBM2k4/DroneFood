@@ -4,6 +4,7 @@ const walletPaymentSchema = new mongoose.Schema(
   {
     shipper: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     amount: { type: Number, required: true, min: 1 },
+    purpose: { type: String, enum: ["deposit", "earnings_top_up"], default: "deposit", required: true, index: true },
     // VNPay fields are retained only to reconcile historic top-ups.
     vnpTxnRef: { type: String, default: undefined, unique: true, sparse: true },
     vnpTransactionNo: { type: String, default: null },

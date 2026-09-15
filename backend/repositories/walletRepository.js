@@ -13,7 +13,7 @@ export const ensureShipperWallets = async (shipperId, session) => {
     ShipperDeposit.findOneAndUpdate({ shipper: shipperId }, { $setOnInsert: { shipper: shipperId, balance: 0 } }, options),
     ShipperEarningsWallet.findOneAndUpdate(
       { shipper: shipperId },
-      { $setOnInsert: { shipper: shipperId, balance: 0, reservedCodLiability: 0 } },
+      { $setOnInsert: { shipper: shipperId, balance: 0, reservedCodLiability: 0, reservedWithdrawalAmount: 0 } },
       options
     ),
   ]);
@@ -55,6 +55,64 @@ export const updateReservedCodLiability = async (shipperId, amount, session) =>
       ? { shipper: shipperId, reservedCodLiability: { $gte: -amount } }
       : { shipper: shipperId },
     { $inc: { reservedCodLiability: amount } },
+    { new: true, session, runValidators: true }
+  );
+
+export const reserveRestaurantWithdrawal = async (restaurantId, amount, session) =>
+  Restaurant.findOneAndUpdate(
+    {
+      _id: restaurantId,
+      $expr: {
+        $gte: [
+          { $subtract: ["$balance", { $ifNull: ["$reservedWithdrawalAmount", 0] }] },
+          amount,
+        ],
+      },
+    },
+    { $inc: { reservedWithdrawalAmount: amount } },
+    { new: true, session, runValidators: true }
+  );
+
+export const reserveEarningsWithdrawal = async (shipperId, amount, session) =>
+  ShipperEarningsWallet.findOneAndUpdate(
+    {
+      shipper: shipperId,
+      $expr: {
+        $gte: [
+          { $subtract: ["$balance", { $ifNull: ["$reservedWithdrawalAmount", 0] }] },
+          amount,
+        ],
+      },
+    },
+    { $inc: { reservedWithdrawalAmount: amount } },
+    { new: true, session, runValidators: true }
+  );
+
+export const releaseRestaurantWithdrawal = async (restaurantId, amount, session) =>
+  Restaurant.findOneAndUpdate(
+    { _id: restaurantId, reservedWithdrawalAmount: { $gte: amount } },
+    { $inc: { reservedWithdrawalAmount: -amount } },
+    { new: true, session, runValidators: true }
+  );
+
+export const releaseEarningsWithdrawal = async (shipperId, amount, session) =>
+  ShipperEarningsWallet.findOneAndUpdate(
+    { shipper: shipperId, reservedWithdrawalAmount: { $gte: amount } },
+    { $inc: { reservedWithdrawalAmount: -amount } },
+    { new: true, session, runValidators: true }
+  );
+
+export const debitReservedRestaurantWithdrawal = async (restaurantId, amount, session) =>
+  Restaurant.findOneAndUpdate(
+    { _id: restaurantId, balance: { $gte: amount }, reservedWithdrawalAmount: { $gte: amount } },
+    { $inc: { balance: -amount, reservedWithdrawalAmount: -amount } },
+    { new: true, session, runValidators: true }
+  );
+
+export const debitReservedEarningsWithdrawal = async (shipperId, amount, session) =>
+  ShipperEarningsWallet.findOneAndUpdate(
+    { shipper: shipperId, balance: { $gte: amount }, reservedWithdrawalAmount: { $gte: amount } },
+    { $inc: { balance: -amount, reservedWithdrawalAmount: -amount } },
     { new: true, session, runValidators: true }
   );
 

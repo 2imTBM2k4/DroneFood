@@ -124,3 +124,50 @@ label img[src*="assets/upload_area"] {
   line-height: 1.5;
   color: var(--text-muted);
 }
+
+.bank-account-section {
+  margin-top: 36px;
+  padding-top: 28px;
+  border-top: 1px solid var(--border-color);
+}
+
+.bank-account-section h2 {
+  margin: 0 0 4px;
+}
+
+.bank-account-current {
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  font-weight: 600;
+}
+
+.bank-account-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.bank-account-form label {
+  display: grid;
+  gap: 8px;
+  width: min(100%, 420px);
+  font-weight: 600;
+}
+
+.bank-account-form input {
+  padding: 12px 14px;
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius);
+  font: inherit;
+  color: var(--text-color);
+  background: var(--card-bg);
+}
+
+.bank-account-form input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px rgba(229, 57, 53, 0.08);
+}

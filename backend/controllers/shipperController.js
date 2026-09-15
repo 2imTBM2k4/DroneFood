@@ -1,4 +1,5 @@
 import * as shipperService from "../services/shipperService.js";
+import * as bankAccountService from "../services/bankAccountService.js";
 import { emitCustomerOrderUpdate } from "../utils/orderRealtime.js";
 
 const respond = (handler) => async (req, res) => {
@@ -7,6 +8,8 @@ const respond = (handler) => async (req, res) => {
 };
 
 export const me = respond((req) => shipperService.me(req.user._id));
+export const bankAccount = respond((req) => bankAccountService.getShipperBankAccount(req.user._id));
+export const updateBankAccount = respond((req) => bankAccountService.updateShipperBankAccount(req.user, req.body));
 export const location = respond((req) => shipperService.updateLocation(req.user._id, req.body));
 export const status = respond((req) => shipperService.updateStatus(req.user._id, req.body.status));
 export const available = respond((req) => shipperService.availableOrders(req.user._id));

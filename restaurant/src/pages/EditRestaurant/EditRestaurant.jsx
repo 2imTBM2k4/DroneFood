@@ -17,6 +17,13 @@ const EditRestaurant = ({ url }) => {
     description: "",
   });
   const [loading, setLoading] = useState(true);
+  const [bankAccount, setBankAccount] = useState({
+    bankName: "",
+    accountHolder: "",
+    accountNumber: "",
+  });
+  const [bankAccountMasked, setBankAccountMasked] = useState("");
+  const [bankSaving, setBankSaving] = useState(false);
 
   const getRestaurantId = () => {
     let id = user?.restaurantId;
@@ -31,6 +38,7 @@ const EditRestaurant = ({ url }) => {
     const restaurantId = getRestaurantId();
     if (restaurantId) {
       fetchRestaurant(restaurantId);
+      fetchBankAccount();
     } else {
       toast.error("No restaurant ID found. Please contact admin.");
       setLoading(false);
@@ -73,6 +81,25 @@ const EditRestaurant = ({ url }) => {
     }
   };
 
+  const fetchBankAccount = async () => {
+    try {
+      const response = await axios.get(`${url}/api/restaurant/me/bank-account`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (response.data.success) {
+        setBankAccount((current) => ({
+          ...current,
+          bankName: response.data.data.bankName || "",
+          accountHolder: response.data.data.accountHolder || "",
+        }));
+        setBankAccountMasked(response.data.data.accountNumberMasked || "");
+      }
+    } catch (error) {
+      console.error("Error fetching bank account:", error);
+      toast.error("Không thể tải hồ sơ tài khoản ngân hàng.");
+    }
+  };
+
   const onChangeHandler = (event) => {
     const name = event.target.name;
     const value = event.target.value;
@@ -83,6 +110,33 @@ const EditRestaurant = ({ url }) => {
     const file = e.target.files[0];
     if (file) {
       setImage(file);
+    }
+  };
+
+  const onBankAccountChange = (event) => {
+    const { name, value } = event.target;
+    setBankAccount((current) => ({ ...current, [name]: value }));
+  };
+
+  const onBankAccountSubmit = async (event) => {
+    event.preventDefault();
+    if (!bankAccount.bankName.trim() || !bankAccount.accountHolder.trim() || !bankAccount.accountNumber.trim()) {
+      toast.error("Vui lòng nhập đầy đủ thông tin tài khoản ngân hàng.");
+      return;
+    }
+    try {
+      setBankSaving(true);
+      const response = await axios.put(`${url}/api/restaurant/me/bank-account`, bankAccount, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (!response.data.success) throw new Error(response.data.message);
+      setBankAccount((current) => ({ ...current, accountNumber: "" }));
+      setBankAccountMasked(response.data.data.accountNumberMasked || "");
+      toast.success("Đã lưu tài khoản ngân hàng.");
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message || "Không thể lưu tài khoản ngân hàng.");
+    } finally {
+      setBankSaving(false);
     }
   };
 
@@ -237,6 +291,33 @@ const EditRestaurant = ({ url }) => {
           UPDATE
         </button>
       </form>
+
+      <section className="bank-account-section" aria-labelledby="bank-account-heading">
+        <div>
+          <h2 id="bank-account-heading">Tài khoản ngân hàng nhận tiền</h2>
+          <p className="field-hint">
+            Thông tin này dùng cho các yêu cầu rút tiền. Số tài khoản được mã hoá và chỉ hiển thị 4 số cuối sau khi lưu.
+          </p>
+        </div>
+        {bankAccountMasked && <p className="bank-account-current">Tài khoản đang dùng: {bankAccountMasked}</p>}
+        <form className="bank-account-form" onSubmit={onBankAccountSubmit}>
+          <label>
+            Ngân hàng
+            <input name="bankName" value={bankAccount.bankName} onChange={onBankAccountChange} placeholder="Ví dụ: Vietcombank" maxLength="100" required />
+          </label>
+          <label>
+            Chủ tài khoản
+            <input name="accountHolder" value={bankAccount.accountHolder} onChange={onBankAccountChange} placeholder="NGUYEN VAN A" maxLength="120" required />
+          </label>
+          <label>
+            Số tài khoản {bankAccountMasked ? "mới" : ""}
+            <input name="accountNumber" value={bankAccount.accountNumber} onChange={onBankAccountChange} inputMode="numeric" placeholder={bankAccountMasked ? "Nhập lại đầy đủ số tài khoản để thay đổi" : "Chỉ gồm chữ số"} maxLength="30" required />
+          </label>
+          <button type="submit" className="add-btn" disabled={bankSaving}>
+            {bankSaving ? "ĐANG LƯU..." : "LƯU TÀI KHOẢN"}
+          </button>
+        </form>
+      </section>
     </div>
   );
 };

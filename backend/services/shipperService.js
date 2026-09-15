@@ -98,8 +98,8 @@ export const availableOrders = async (userId) => {
     const liability = order.financialSnapshot?.codLiabilityAmount || Math.round(
       (order.itemsPrice || 0) + (order.shippingPrice || 0) * 0.15
     );
-    return liability <= wallet.depositBalance &&
-      wallet.earningsBalance - wallet.reservedCodLiability - liability > wallet.lockThreshold;
+    return wallet.reservedCodLiability + liability <= wallet.depositBalance + wallet.earningsAvailable &&
+      wallet.earningsAvailable - wallet.reservedCodLiability - liability > wallet.lockThreshold;
   });
   return { success: true, data: eligibleOrders, wallet };
 };

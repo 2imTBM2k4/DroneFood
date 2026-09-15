@@ -1,7 +1,7 @@
 import React from 'react';
 import './Sidebar.css';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, PlusCircle, UtensilsCrossed, ClipboardList, Store } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, UtensilsCrossed, ClipboardList, Store, HandCoins } from 'lucide-react';
 
 const Sidebar = () => {
   return (
@@ -26,6 +26,10 @@ const Sidebar = () => {
         <NavLink to='/edit-restaurant' className="sidebar-item">
           <Store size={20} />
           <span>Restaurant</span>
+        </NavLink>
+        <NavLink to='/withdrawals' className="sidebar-item">
+          <HandCoins size={20} />
+          <span>Withdrawals</span>
         </NavLink>
       </nav>
     </aside>

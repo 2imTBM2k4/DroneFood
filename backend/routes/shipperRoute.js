@@ -2,11 +2,14 @@ import express from "express";
 import { protect, authorize } from "../middleware/auth.js";
 import validate from "../middleware/validate.js";
 import * as controller from "../controllers/shipperController.js";
+import { bankAccountSchema } from "../validations/bankAccountValidation.js";
 import { approvalSchema, declineSchema, locationSchema, statusSchema } from "../validations/shipperValidation.js";
 
 const router = express.Router();
 router.get("/", protect, authorize("admin"), controller.list);
 router.get("/me", protect, authorize("shipper"), controller.me);
+router.get("/me/bank-account", protect, authorize("shipper"), controller.bankAccount);
+router.put("/me/bank-account", protect, authorize("shipper"), validate(bankAccountSchema), controller.updateBankAccount);
 router.put("/me/location", protect, authorize("shipper"), validate(locationSchema), controller.location);
 router.put("/me/status", protect, authorize("shipper"), validate(statusSchema), controller.status);
 router.get("/me/orders/available", protect, authorize("shipper"), controller.available);
