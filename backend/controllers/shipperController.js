@@ -1,6 +1,7 @@
 import * as shipperService from "../services/shipperService.js";
 import * as bankAccountService from "../services/bankAccountService.js";
 import { emitCustomerOrderUpdate } from "../utils/orderRealtime.js";
+import { notifyCustomerShipperAccepted, notifyCustomerOrderStatus } from "../utils/notificationEvents.js";
 
 const respond = (handler) => async (req, res) => {
   try { res.json(await handler(req, res)); }
@@ -17,16 +18,19 @@ export const current = respond((req) => shipperService.currentOrder(req.user._id
 export const accept = respond(async (req) => {
   const result = await shipperService.acceptOrder(req.user, req.params.id);
   await emitCustomerOrderUpdate(req.app.get("io"), req.params.id);
+  await notifyCustomerShipperAccepted(req.app.get("io"), req.params.id);
   return result;
 });
 export const pickup = respond(async (req) => {
   const result = await shipperService.pickupOrder(req.user, req.params.id);
   await emitCustomerOrderUpdate(req.app.get("io"), req.params.id);
+  await notifyCustomerOrderStatus(req.app.get("io"), req.params.id);
   return result;
 });
 export const complete = respond(async (req) => {
   const result = await shipperService.completeOrder(req.user, req.params.id);
   await emitCustomerOrderUpdate(req.app.get("io"), req.params.id);
+  await notifyCustomerOrderStatus(req.app.get("io"), req.params.id);
   return result;
 });
 export const decline = respond((req) => shipperService.declineOrder(req.user, req.params.id, req.body.reason));

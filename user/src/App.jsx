@@ -2,6 +2,7 @@ import { useContext, useEffect, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import "../../shared/toast.css";
 import Navbar from "./components/Navbar/Navbar";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Home from "./pages/Home/Home";
@@ -94,7 +95,7 @@ const App = () => {
       <Footer />
       <FloatingCartBar />
       <ActiveOrderBar />
-      <ToastContainer />
+      <ToastContainer position="bottom-center" pauseOnHover={false} />
     </>
   );
 };

@@ -61,6 +61,12 @@ io.on("connection", (socket) => {
     if (socket.user.role === "shipper") socket.join(`shipper_${socket.user._id}`);
   });
   socket.on("joinCustomer", () => socket.join(`customer_${socket.user._id}`));
+  socket.on("joinNotifications", () => {
+    const room = socket.user.role === "restaurant_owner"
+      ? `restaurant_owner_${socket.user._id}`
+      : `${socket.user.role}_${socket.user._id}`;
+    socket.join(room);
+  });
 });
 
 const PORT = process.env.PORT || 4000;

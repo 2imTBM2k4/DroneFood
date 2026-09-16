@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useContext, useRef } from "react";
+import React, { useState, useEffect, useContext, useRef, useCallback } from "react";
 import "./Navbar.css";
 import { assets } from "../../assets/assets";
 import { AuthContext } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { Wallet, ChevronDown, LogOut, Settings, Sun, Moon } from "lucide-react";
+import { io } from "socket.io-client";
 import { formatVND } from "../../../../shared/utils/money";
+import NotificationBell from "../../../../shared/components/NotificationBell";
 
 const Navbar = () => {
   const { user, logout } = useContext(AuthContext);
@@ -12,6 +14,9 @@ const Navbar = () => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isDark, setIsDark] = useState(() => localStorage.getItem("mode") === "dark");
   const dropdownRef = useRef(null);
+  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
+  const token = localStorage.getItem("token") || "";
+  const connectRealtime = useCallback(() => io(apiUrl, { auth: { token } }), [apiUrl, token]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -49,6 +54,8 @@ const Navbar = () => {
         >
           {isDark ? <Sun size={18} /> : <Moon size={18} />}
         </button>
+
+        <NotificationBell apiUrl={apiUrl} token={token} connectRealtime={connectRealtime} navigate={navigate} soundForNewOrder />
 
         {user ? (
           <>

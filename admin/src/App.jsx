@@ -16,6 +16,7 @@ import Withdrawals from "./pages/Withdrawals/Withdrawals";
 import Finance from "./pages/Finance/Finance";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import "../../shared/toast.css";
 import { AuthContext } from "./context/AuthContext";
 
 const PageTransition = ({ children }) => {
@@ -55,7 +56,7 @@ const App = () => {
   if (!user || user.role !== "admin") {
     return (
       <div className="app">
-        <ToastContainer />
+        <ToastContainer position="bottom-center" pauseOnHover={false} />
         <Login url={url} />
       </div>
     );
@@ -63,7 +64,7 @@ const App = () => {
 
   return (
     <div className="app">
-      <ToastContainer />
+      <ToastContainer position="bottom-center" pauseOnHover={false} />
       <Sidebar />
       <div className="main-content-area">
         <Navbar />

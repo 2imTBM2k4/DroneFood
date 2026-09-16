@@ -12,6 +12,7 @@ import Withdrawals from './pages/Withdrawals/Withdrawals';
 import ProtectedRoute from './components/ProtectedRoute';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import '../../shared/toast.css';
 
 const PageTransition = ({ children }) => {
   const location = useLocation();
@@ -60,7 +61,7 @@ const App = () => {
 
   return (
     <div>
-      <ToastContainer />
+      <ToastContainer position="bottom-center" pauseOnHover={false} />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />

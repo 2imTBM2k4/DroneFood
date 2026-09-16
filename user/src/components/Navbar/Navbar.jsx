@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useContext } from "react";
+import { useState, useEffect, useRef, useContext, useCallback } from "react";
 import "./Navbar.css";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
@@ -10,8 +10,10 @@ import {
   UserRound,
   Plane,
 } from "lucide-react";
+import { io } from "socket.io-client";
 import { StoreContext } from "../../context/StoreContext";
 import Avatar from "../Avatar/Avatar";
+import NotificationBell from "../../../../shared/components/NotificationBell";
 
 const Navbar = ({ setShowLogin }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -25,6 +27,8 @@ const Navbar = ({ setShowLogin }) => {
   const profileRef = useRef(null);
 
   const cartCount = getCartItemCount();
+  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
+  const connectRealtime = useCallback(() => io(apiUrl, { auth: { token } }), [apiUrl, token]);
 
   const logout = () => {
     localStorage.removeItem("token");
@@ -133,6 +137,8 @@ const Navbar = ({ setShowLogin }) => {
               <ShoppingBag size={17} />
               {cartCount > 0 && <span className="apple-bag-count">{cartCount}</span>}
             </Link>
+
+            <NotificationBell apiUrl={apiUrl} token={token} connectRealtime={connectRealtime} navigate={navigate} />
 
             {!token ? (
               <button

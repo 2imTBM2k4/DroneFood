@@ -91,6 +91,7 @@ export const requestManualPayosRefund = async (customer, { orderId, reason, bank
 };
 
 export const listManualRefunds = (query) => refundRepo.findAll(query);
+export const getRefundForNotification = (refundId) => refundRepo.findById(refundId);
 
 /**
  * A manual refund has no approval phase. Per the confirmed policy, an admin

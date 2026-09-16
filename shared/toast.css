@@ -1,0 +1,369 @@
+/* ============================================================
+   DroneFood — Modern Toast Notification Stylesheet
+   Designed based on rounded card with squircle icon badge,
+   matching border accents, clean typography, and action button.
+   ============================================================ */
+
+:root {
+  --df-toast-info-color: #2563eb;
+  --df-toast-info-shadow: rgba(37, 99, 235, 0.16);
+  --df-toast-success-color: #16a34a;
+  --df-toast-success-shadow: rgba(22, 163, 74, 0.16);
+  --df-toast-warning-color: #f59e0b;
+  --df-toast-warning-shadow: rgba(245, 158, 11, 0.16);
+  --df-toast-error-color: #ef4444;
+  --df-toast-error-shadow: rgba(239, 68, 68, 0.16);
+}
+
+/* Toast Container positioning and responsive sizing */
+.Toastify__toast-container {
+  width: 100% !important;
+  max-width: 440px !important;
+  padding: 16px !important;
+  box-sizing: border-box !important;
+  z-index: 999999 !important;
+}
+
+.Toastify__toast-container--bottom-center {
+  bottom: 28px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+}
+
+@media (max-width: 480px) {
+  .Toastify__toast-container {
+    max-width: 100% !important;
+    padding: 12px !important;
+  }
+
+  .Toastify__toast-container--bottom-center {
+    bottom: 16px !important;
+    width: calc(100% - 24px) !important;
+    left: 12px !important;
+    transform: none !important;
+  }
+}
+
+/* Base Toast Card */
+.Toastify__toast {
+  position: relative !important;
+  min-height: 64px !important;
+  box-sizing: border-box !important;
+  margin-bottom: 14px !important;
+  padding: 18px 20px 20px 20px !important;
+  border-radius: 20px !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif !important;
+  cursor: default !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  overflow: hidden !important;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.2s ease !important;
+}
+
+.Toastify__toast:hover {
+  transform: translateY(-2px);
+}
+
+/* Status variants: 2px colored border + matching soft glow shadow */
+.Toastify__toast--info,
+.Toastify__toast--default {
+  border: 2px solid var(--df-toast-info-color) !important;
+  box-shadow: 0 16px 36px -4px var(--df-toast-info-shadow),
+              0 4px 12px -2px rgba(15, 23, 42, 0.04) !important;
+}
+
+.Toastify__toast--success {
+  border: 2px solid var(--df-toast-success-color) !important;
+  box-shadow: 0 16px 36px -4px var(--df-toast-success-shadow),
+              0 4px 12px -2px rgba(15, 23, 42, 0.04) !important;
+}
+
+.Toastify__toast--warning {
+  border: 2px solid var(--df-toast-warning-color) !important;
+  box-shadow: 0 16px 36px -4px var(--df-toast-warning-shadow),
+              0 4px 12px -2px rgba(15, 23, 42, 0.04) !important;
+}
+
+.Toastify__toast--error {
+  border: 2px solid var(--df-toast-error-color) !important;
+  box-shadow: 0 16px 36px -4px var(--df-toast-error-shadow),
+              0 4px 12px -2px rgba(15, 23, 42, 0.04) !important;
+}
+
+/* Toast Body */
+.Toastify__toast-body {
+  margin: 0 !important;
+  padding: 0 !important;
+  flex: 1 1 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  font-size: 14.5px !important;
+  line-height: 1.5 !important;
+  color: #334155 !important;
+  font-weight: 400 !important;
+  overflow: visible !important;
+}
+
+/* Default built-in icons styled as squircle badge */
+.Toastify__toast-icon {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  border-radius: 9px !important;
+  margin-right: 12px !important;
+  margin-top: 1px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  transition: transform 0.2s ease !important;
+}
+
+.Toastify__toast--info .Toastify__toast-icon,
+.Toastify__toast--default .Toastify__toast-icon {
+  background: var(--df-toast-info-color) !important;
+}
+
+.Toastify__toast--success .Toastify__toast-icon {
+  background: var(--df-toast-success-color) !important;
+}
+
+.Toastify__toast--warning .Toastify__toast-icon {
+  background: var(--df-toast-warning-color) !important;
+}
+
+.Toastify__toast--error .Toastify__toast-icon {
+  background: var(--df-toast-error-color) !important;
+}
+
+.Toastify__toast-icon svg {
+  fill: #ffffff !important;
+  width: 18px !important;
+  height: 18px !important;
+}
+
+/* Close Button: sleek, colored '✕' icon at top right */
+.Toastify__close-button {
+  position: absolute !important;
+  top: 16px !important;
+  right: 16px !important;
+  width: 28px !important;
+  height: 28px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  cursor: pointer !important;
+  border-radius: 8px !important;
+  padding: 0 !important;
+  opacity: 0.75 !important;
+  transition: all 0.18s ease !important;
+}
+
+.Toastify__toast--info .Toastify__close-button,
+.Toastify__toast--default .Toastify__close-button {
+  color: var(--df-toast-info-color) !important;
+}
+
+.Toastify__toast--success .Toastify__close-button {
+  color: var(--df-toast-success-color) !important;
+}
+
+.Toastify__toast--warning .Toastify__close-button {
+  color: var(--df-toast-warning-color) !important;
+}
+
+.Toastify__toast--error .Toastify__close-button {
+  color: var(--df-toast-error-color) !important;
+}
+
+.Toastify__close-button:hover {
+  opacity: 1 !important;
+  background: rgba(15, 23, 42, 0.05) !important;
+  transform: scale(1.1) !important;
+}
+
+.Toastify__close-button > svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* Progress bar styled smoothly along the bottom curve */
+.Toastify__progress-bar {
+  height: 3.5px !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  opacity: 0.8 !important;
+  border-bottom-left-radius: 18px !important;
+  border-bottom-right-radius: 18px !important;
+}
+
+.Toastify__progress-bar--info,
+.Toastify__progress-bar--default {
+  background: var(--df-toast-info-color) !important;
+}
+
+.Toastify__progress-bar--success {
+  background: var(--df-toast-success-color) !important;
+}
+
+.Toastify__progress-bar--warning {
+  background: var(--df-toast-warning-color) !important;
+}
+
+.Toastify__progress-bar--error {
+  background: var(--df-toast-error-color) !important;
+}
+
+/* ============================================================
+   Custom Rich Toast Card Component (.df-toast)
+   ============================================================ */
+.df-toast {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Header line: Squircle Icon + Title */
+.df-toast-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding-right: 24px; /* Space for close button */
+}
+
+/* The squircle icon badge */
+.df-toast-badge {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.df-toast--info .df-toast-badge {
+  background: var(--df-toast-info-color);
+}
+
+.df-toast--success .df-toast-badge {
+  background: var(--df-toast-success-color);
+}
+
+.df-toast--warning .df-toast-badge {
+  background: var(--df-toast-warning-color);
+}
+
+.df-toast--error .df-toast-badge {
+  background: var(--df-toast-error-color);
+}
+
+.df-toast-badge svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Bold Title */
+.df-toast-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  margin: 0;
+}
+
+/* Description text */
+.df-toast-message {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #475569;
+  margin: 8px 0 0 0;
+  word-break: break-word;
+}
+
+/* Action Button Container */
+.df-toast-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+/* Primary Action Button (like "Learn More" in photo) */
+.df-toast-btn-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 22px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  background: var(--df-toast-info-color);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 12px -2px rgba(37, 99, 235, 0.3);
+  user-select: none;
+}
+
+.df-toast--success .df-toast-btn-action {
+  background: var(--df-toast-success-color);
+  box-shadow: 0 4px 12px -2px rgba(22, 163, 74, 0.3);
+}
+
+.df-toast--warning .df-toast-btn-action {
+  background: var(--df-toast-warning-color);
+  box-shadow: 0 4px 12px -2px rgba(245, 158, 11, 0.3);
+}
+
+.df-toast--error .df-toast-btn-action {
+  background: var(--df-toast-error-color);
+  box-shadow: 0 4px 12px -2px rgba(239, 68, 68, 0.3);
+}
+
+.df-toast-btn-action:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.df-toast-btn-action:active {
+  transform: translateY(0);
+  filter: brightness(0.95);
+}
+
+/* Secondary / Dismiss button if desired */
+.df-toast-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #64748b;
+  background: #f1f5f9;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.df-toast-btn-secondary:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}

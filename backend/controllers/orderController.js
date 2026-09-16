@@ -1,14 +1,19 @@
 import * as orderService from "../services/orderService.js";
 import * as walletService from "../services/walletService.js";
 import { emitCustomerOrderUpdate } from "../utils/orderRealtime.js";
+import { notifyCustomerOrderStatus, notifyCustomerPaymentConfirmed, notifyRestaurantNewOrder } from "../utils/notificationEvents.js";
 
 const notifyPaidOrder = async (req, result) => {
-  if (!result.newlyPaid || !req.app.get("io")) return;
+  if (!result.newlyPaid) return;
   const { Order } = await import("../models/index.cjs");
   const { nearbyAvailableShipperIds } = await import("../services/shipperService.js");
   const order = await Order.findById(result.orderId).select("restaurantId deliveryMethod pickupLocation shipperAssignmentDeadlineAt");
   if (!order) return;
-  req.app.get("io").to(`restaurant_${order.restaurantId}`).emit("newOrder", result.orderId);
+  req.app.get("io")?.to(`restaurant_${order.restaurantId}`).emit("newOrder", result.orderId);
+  await Promise.all([
+    notifyRestaurantNewOrder(req.app.get("io"), result.orderId),
+    notifyCustomerPaymentConfirmed(req.app.get("io"), result.orderId),
+  ]);
   if (order.deliveryMethod === "shipper") {
     const shipperIds = await nearbyAvailableShipperIds(order.pickupLocation);
     shipperIds.forEach((shipperId) => req.app.get("io").to(`shipper_${shipperId}`).emit("shipperOrderOffer", {
@@ -22,11 +27,9 @@ export const placeOrder = async (req, res) => {
     const result = await orderService.placeOrder(req.user, req.body, req.ip);
 
     const restaurantId = result.restaurantId;
-    if (result.paymentMethod === "COD" && req.app.get("io") && restaurantId) {
-      req.app
-        .get("io")
-        .to(`restaurant_${restaurantId}`)
-        .emit("newOrder", result.orderId);
+    if (result.paymentMethod === "COD" && restaurantId) {
+      req.app.get("io")?.to(`restaurant_${restaurantId}`).emit("newOrder", result.orderId);
+      await notifyRestaurantNewOrder(req.app.get("io"), result.orderId);
     }
     if (result.paymentMethod === "COD" && result.deliveryMethod === "shipper" && req.app.get("io")) {
       const { Order } = await import("../models/index.cjs");
@@ -159,6 +162,7 @@ export const updateStatus = async (req, res) => {
   try {
     const result = await orderService.updateStatus(req.user, req.body);
     await emitCustomerOrderUpdate(req.app.get("io"), req.body.orderId);
+    await notifyCustomerOrderStatus(req.app.get("io"), req.body.orderId);
     res.json(result);
   } catch (error) {
     res
