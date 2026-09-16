@@ -162,3 +162,49 @@ export const reassignDrone = async (req, res) => {
       .json({ success: false, message: error.message });
   }
 };
+
+export const resetDrone = async (req, res) => {
+  try {
+    const result = await droneService.resetDrone(req.params.id);
+    res.json(result);
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ success: false, message: error.message });
+  }
+};
+
+export const chargeDrone = async (req, res) => {
+  try {
+    const batteryLevel = req.body.batteryLevel !== undefined ? Number(req.body.batteryLevel) : 100;
+    const result = await droneService.chargeDrone(req.params.id, batteryLevel);
+    res.json(result);
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ success: false, message: error.message });
+  }
+};
+
+export const resetAllStuckDrones = async (req, res) => {
+  try {
+    const result = await droneService.resetAllStuckDrones();
+    res.json(result);
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ success: false, message: error.message });
+  }
+};
+
+export const getFleetStats = async (req, res) => {
+  try {
+    const result = await droneService.getFleetOverview();
+    res.json(result);
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ success: false, message: error.message });
+  }
+};
+

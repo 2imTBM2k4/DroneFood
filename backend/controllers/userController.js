@@ -210,3 +210,12 @@ export const getStats = async (req, res) => {
       .json({ success: false, message: error.message });
   }
 };
+
+export const getUserTransactions = async (req, res) => {
+  try {
+    const result = await userService.getUserTransactions(req.user._id);
+    res.json(result);
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};

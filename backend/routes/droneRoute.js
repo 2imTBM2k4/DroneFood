@@ -13,6 +13,10 @@ import {
   getDroneDeliveryHistory,
   getAllDeliveryHistory,
   reassignDrone,
+  resetDrone,
+  chargeDrone,
+  resetAllStuckDrones,
+  getFleetStats,
 } from "../controllers/droneController.js";
 import { protect, authorize } from "../middleware/auth.js";
 import validate from "../middleware/validate.js";
@@ -44,6 +48,11 @@ router.post("/cargo-weight", protect, authorize("admin"), validate(cargoWeightSc
 
 router.get("/history/all", protect, authorize("admin"), validate(historyQuerySchema, "query"), getAllDeliveryHistory);
 router.get("/history/:id", protect, authorize("admin"), getDroneDeliveryHistory);
+
+router.get("/stats/overview", protect, authorize("admin"), getFleetStats);
+router.post("/reset-all-stuck", protect, authorize("admin"), resetAllStuckDrones);
+router.post("/:id/reset", protect, authorize("admin"), resetDrone);
+router.post("/:id/charge", protect, authorize("admin"), chargeDrone);
 
 router.get("/", protect, authorize("admin"), getAllDrones);
 router.get("/:id", protect, authorize("admin"), getDroneById);

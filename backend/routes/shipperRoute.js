@@ -14,6 +14,7 @@ router.put("/me/location", protect, authorize("shipper"), validate(locationSchem
 router.put("/me/status", protect, authorize("shipper"), validate(statusSchema), controller.status);
 router.get("/me/orders/available", protect, authorize("shipper"), controller.available);
 router.get("/me/orders/current", protect, authorize("shipper"), controller.current);
+router.get("/me/orders/history", protect, authorize("shipper"), controller.history);
 router.post("/me/orders/:id/accept", protect, authorize("shipper"), controller.accept);
 router.post("/me/orders/:id/pick-up", protect, authorize("shipper"), controller.pickup);
 router.post("/me/orders/:id/complete", protect, authorize("shipper"), controller.complete);

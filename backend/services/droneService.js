@@ -275,7 +275,10 @@ export const closeCargoLid = async (droneId, orderId) => {
 
   drone.status = "available";
   drone.currentOrder = null;
+  drone.cargoWeight = 0;
+  drone.cargoLidStatus = "closed";
   drone.totalDeliveries = (drone.totalDeliveries || 0) + 1;
+  drone.batteryLevel = Math.max(0, (drone.batteryLevel || 100) - Math.floor(Math.random() * 5 + 5));
   
   await drone.save();
   await order.save();
@@ -337,6 +340,7 @@ export const confirmDelivery = async (user, orderId) => {
       drone.cargoWeight = 0;
       drone.cargoLidStatus = "closed";
       drone.totalDeliveries = (drone.totalDeliveries || 0) + 1;
+      drone.batteryLevel = Math.max(0, (drone.batteryLevel || 100) - Math.floor(Math.random() * 5 + 5));
       await drone.save();
 
       // Cập nhật lịch sử giao hàng
@@ -400,6 +404,12 @@ export const updateDrone = async (droneId, updateData) => {
     if (existingDrone) {
       throw new AppError("Drone code already exists", 409);
     }
+  }
+
+  if (updateData.status === "available") {
+    if (updateData.currentOrder === undefined) updateData.currentOrder = null;
+    if (updateData.cargoWeight === undefined) updateData.cargoWeight = 0;
+    if (updateData.cargoLidStatus === undefined) updateData.cargoLidStatus = "closed";
   }
 
   const updatedDrone = await droneRepo.update(droneId, updateData);
@@ -497,11 +507,39 @@ export const getDroneDeliveryHistory = async (droneId) => {
     throw new AppError("Drone not found", 404);
   }
 
-  const history = await DroneDeliveryHistory.find({ droneId })
+  let history = await DroneDeliveryHistory.find({ droneId })
     .populate("orderId", "orderStatus totalPrice createdAt")
     .populate("restaurantId", "name")
     .populate("customerId", "name email")
     .sort({ createdAt: -1 });
+
+  if (!history || history.length === 0) {
+    const Order = (await import("../models/orderModel.cjs")).default;
+    const orders = await Order.find({ droneId })
+      .populate("restaurantId", "name address")
+      .populate("user", "name email")
+      .sort({ createdAt: -1 });
+
+    history = orders.map((o) => ({
+      _id: o._id,
+      orderId: {
+        _id: o._id,
+        orderStatus: o.orderStatus,
+        totalPrice: o.totalPrice,
+        createdAt: o.createdAt,
+      },
+      restaurantId: o.restaurantId ? { name: o.restaurantId.name } : { name: "N/A" },
+      customerId: o.user ? { name: o.user.name, email: o.user.email } : null,
+      customerName: o.shippingAddress?.fullName || o.user?.name || "Khách hàng",
+      customerAddress: typeof o.shippingAddress === "object"
+        ? `${o.shippingAddress.address || ""}, ${o.shippingAddress.city || ""}`.trim()
+        : String(o.shippingAddress || "Hồ Chí Minh"),
+      totalPrice: o.totalPrice,
+      startTime: o.createdAt,
+      endTime: o.deliveredAt,
+      status: o.orderStatus,
+    }));
+  }
 
   return {
     success: true,
@@ -670,5 +708,60 @@ export const reassignDrone = async (actor, orderId, newDroneId, reason) => {
       droneId: newDrone._id,
       droneCode: newDrone.droneCode,
     },
+  };
+};
+
+/**
+ * Thu hồi / Đặt lại drone về trạng thái sẵn sàng (Admin)
+ */
+export const resetDrone = async (droneId) => {
+  const drone = await droneRepo.findById(droneId);
+  if (!drone) {
+    throw new AppError("Drone not found", 404);
+  }
+  const updated = await droneRepo.resetDrone(droneId);
+  return {
+    success: true,
+    message: `Drone ${drone.droneCode} đã được đặt lại về trạng thái sẵn sàng.`,
+    data: updated,
+  };
+};
+
+/**
+ * Sạc pin cho drone (Admin)
+ */
+export const chargeDrone = async (droneId, batteryLevel = 100) => {
+  const drone = await droneRepo.findById(droneId);
+  if (!drone) {
+    throw new AppError("Drone not found", 404);
+  }
+  const updated = await droneRepo.chargeDrone(droneId, batteryLevel);
+  return {
+    success: true,
+    message: `Drone ${drone.droneCode} đã được sạc pin lên ${batteryLevel}%.`,
+    data: updated,
+  };
+};
+
+/**
+ * Đặt lại tất cả drone đang bị kẹt về sẵn sàng (Admin)
+ */
+export const resetAllStuckDrones = async () => {
+  const result = await droneRepo.resetAllStuckDrones();
+  return {
+    success: true,
+    message: `Đã giải phóng và đặt lại ${result.modifiedCount || 0} drone về trạng thái sẵn sàng.`,
+    data: result,
+  };
+};
+
+/**
+ * Lấy thống kê tổng quan hạm đội drone (Admin)
+ */
+export const getFleetOverview = async () => {
+  const stats = await droneRepo.getFleetStats();
+  return {
+    success: true,
+    data: stats,
   };
 };

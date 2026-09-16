@@ -446,3 +446,73 @@ export const getStats = async (period = "day") => {
     },
   };
 };
+
+export const getUserTransactions = async (userId) => {
+  const user = await userRepo.findById(userId);
+  if (!user) throw new AppError("User not found", 404);
+
+  const Order = (await import("../models/orderModel.cjs")).default;
+  const orders = await Order.find({ user: userId, paymentMethod: "PAYOS" })
+    .sort({ createdAt: 1 })
+    .populate("restaurantId", "name")
+    .lean();
+
+  const payosOrderIds = new Set(orders.map((o) => String(o._id)));
+  const RefundRequest = (await import("../models/refundRequestModel.cjs")).default;
+  const refunds = await RefundRequest.find({ customer: userId, status: "paid" })
+    .sort({ createdAt: 1 })
+    .lean();
+
+  const events = [];
+
+  for (const o of orders) {
+    if (o.isPaid || o.paidAt || ["preparing", "delivering", "delivered"].includes(o.orderStatus)) {
+      events.push({
+        _id: `order_${o._id}`,
+        transactionType: "payos_payment",
+        title: `Thanh toán PayOS - Đơn #${o._id.toString().slice(-6).toUpperCase()}`,
+        amount: -o.totalPrice,
+        status: o.isPaid ? "paid" : o.orderStatus,
+        paymentMethod: "PAYOS",
+        payosOrderCode: o.payosOrderCode,
+        createdAt: o.paidAt || o.createdAt,
+      });
+    }
+  }
+
+  for (const r of refunds) {
+    if (!r.order || payosOrderIds.has(String(r.order))) {
+      events.push({
+        _id: `refund_${r._id}`,
+        transactionType: "payos_refund",
+        title: `Hoàn tiền PayOS - Đơn #${r.order ? r.order.toString().slice(-6).toUpperCase() : ""}`,
+        amount: r.amount,
+        status: r.status,
+        paymentMethod: "PAYOS",
+        createdAt: r.updatedAt || r.createdAt,
+      });
+    }
+  }
+
+  events.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+  let cumulative = user.balance || 0;
+  const withBalance = events.map((ev) => {
+    cumulative += ev.amount;
+    return {
+      ...ev,
+      balanceAfter: cumulative,
+    };
+  });
+
+  withBalance.reverse();
+
+  return {
+    success: true,
+    data: {
+      currentBalance: user.balance || 0,
+      transactions: withBalance,
+    },
+  };
+};
+

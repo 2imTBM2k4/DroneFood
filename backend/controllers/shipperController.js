@@ -46,3 +46,5 @@ export const extendSearch = respond(async (req) => {
 });
 export const approve = respond((req) => shipperService.approveProfile(req.user, req.params.userId, req.body.approvalStatus));
 export const list = respond(() => shipperService.listProfiles());
+export const history = respond((req) => shipperService.orderHistory(req.user._id));
+

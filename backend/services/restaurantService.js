@@ -153,7 +153,15 @@ export const getRestaurantById = async (id) => {
   if (!restaurant) {
     throw new AppError("Restaurant not found", 404);
   }
-  return { success: true, data: restaurant };
+  const ratingSummaries = await getRestaurantRatingSummaries([restaurant._id]);
+  const ratingData = ratingSummaries.get(String(restaurant._id)) || { averageRating: null, ratingCount: 0 };
+  return {
+    success: true,
+    data: {
+      ...(typeof restaurant.toObject === "function" ? restaurant.toObject() : restaurant),
+      ...ratingData,
+    },
+  };
 };
 
 export const lockRestaurant = async (actor, id, isLocked) => {

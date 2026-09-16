@@ -403,4 +403,22 @@ export const startShipperExpiryScheduler = () => {
   return setInterval(run, 60 * 1000);
 };
 
+export const orderHistory = async (userId) => {
+  const profile = await ShipperProfile.findOne({ user: userId });
+  const shipperIds = [userId];
+  if (profile?._id) shipperIds.push(profile._id);
+
+  const orders = await Order.find({
+    shipperId: { $in: shipperIds },
+    orderStatus: "delivered",
+  })
+    .sort({ deliveredAt: -1, updatedAt: -1, createdAt: -1 })
+    .populate("restaurantId", "name address phone lat lng")
+    .populate("user", "name phone")
+    .lean();
+
+  return { success: true, data: orders || [] };
+};
+
 export { LOCATION_STALE_MS, OFFER_RADIUS_METRES };
+

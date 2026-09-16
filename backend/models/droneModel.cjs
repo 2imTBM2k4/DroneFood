@@ -16,9 +16,9 @@ const droneSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["available", "delivering", "delivered"],
+      enum: ["available", "delivering", "delivered", "maintenance", "offline"],
       default: "available",
-      comment: "Trạng thái drone: sẵn sàng, đang giao, đã giao",
+      comment: "Trạng thái drone: sẵn sàng, đang giao, đã giao, bảo trì, ngoại tuyến",
     },
     cargoLidStatus: {
       type: String,

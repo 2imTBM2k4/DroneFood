@@ -498,7 +498,14 @@ export const customerOrderDetail = async (userId, orderId) => {
     throw new AppError("Order not found", 404);
   }
 
-  return { success: true, data: order };
+  const [reviewFlow] = await attachReviewFlows([order]);
+  return {
+    success: true,
+    data: {
+      ...(typeof order.toObject === "function" ? order.toObject() : order),
+      reviewFlow,
+    },
+  };
 };
 
 const hasShipperAcceptedOrder = (order) =>
@@ -532,31 +539,6 @@ export const updateStatus = async (user, updateData) => {
   const order = await orderRepo.findById(orderId);
   if (!order) {
     throw new AppError("Order not found", 404);
-  }
-
-  if (status === "delivering" && order.deliveryMethod === "drone" && !order.droneId) {
-    const droneRepo = await import("../repositories/droneRepository.js");
-    const crypto = await import("crypto");
-    const cargoWeight = Math.floor(Math.random() * 1500) + 500;
-    const drone = await droneRepo.claimAvailable(orderId, cargoWeight);
-
-    // No fit drone means the food cannot actually leave. Letting the order slip
-    // into "delivering" anyway would strand it: no drone, no QR code, and the
-    // customer could never confirm receipt. It stays in "preparing" instead.
-    if (!drone) {
-      throw new AppError(
-        `No drone is available with at least ${droneRepo.MIN_BATTERY_PERCENT}% battery. Please try again once one is free.`,
-        409
-      );
-    }
-
-    const hash = crypto.default.createHash("sha256");
-    hash.update(`${orderId}-${Date.now()}-${process.env.JWT_SECRET || "secret"}`);
-    const qrCode = hash.digest("hex").substring(0, 16).toUpperCase();
-
-    order.droneId = drone._id;
-    order.qrCode = qrCode;
-    await order.save();
   }
 
   // THAY THẾ TOÀN BỘ PHẦN CHECK CHO ROLE "restaurant_owner" (fallback + auto-fix, FIX: dùng order.restaurantId thay vì order.restaurant)
@@ -686,6 +668,77 @@ export const updateStatus = async (user, updateData) => {
     throw new AppError("Unauthorized: Invalid role", 403);
   }
 
+  // Gán drone sau khi đã xác thực quyền và trạng thái chuyển đổi đơn hàng hợp lệ
+  if (status === "delivering" && order.deliveryMethod === "drone" && !order.droneId) {
+    const droneRepo = await import("../repositories/droneRepository.js");
+    const crypto = await import("crypto");
+    const cargoWeight = Math.floor(Math.random() * 1500) + 500;
+    const drone = await droneRepo.claimAvailable(orderId, cargoWeight);
+
+    if (!drone) {
+      const stats = await droneRepo.getFleetStats();
+      if (stats.total === 0) {
+        throw new AppError("Hệ thống chưa có drone nào được cấu hình.", 409);
+      }
+      if (stats.available === 0) {
+        throw new AppError(
+          `Hiện tại tất cả ${stats.total} drone đều đang bận giao các đơn hàng khác. Vui lòng đợi drone hoàn tất đơn hoặc quản trị viên điều phối.`,
+          409
+        );
+      }
+      if (stats.availableWithBattery === 0) {
+        throw new AppError(
+          `Các drone sẵn sàng hiện đều có mức pin dưới ${droneRepo.MIN_BATTERY_PERCENT}% và đang sạc. Vui lòng thử lại sau ít phút.`,
+          409
+        );
+      }
+      throw new AppError(
+        `Không có drone khả dụng với mức pin tối thiểu ${droneRepo.MIN_BATTERY_PERCENT}%. Vui lòng thử lại sau.`,
+        409
+      );
+    }
+
+    const hash = crypto.default.createHash("sha256");
+    hash.update(`${orderId}-${Date.now()}-${process.env.JWT_SECRET || "secret"}`);
+    const qrCode = hash.digest("hex").substring(0, 16).toUpperCase();
+
+    order.droneId = drone._id;
+    order.qrCode = qrCode;
+    await order.save();
+
+    try {
+      const DroneDeliveryHistory = (await import("../models/droneDeliveryHistoryModel.cjs")).default;
+      const restaurant = await restaurantRepo.findById(order.restaurantId);
+      const custAddress = typeof order.shippingAddress === "object"
+        ? `${order.shippingAddress.address || ""}, ${order.shippingAddress.city || ""}`.trim()
+        : String(order.shippingAddress || "Hồ Chí Minh");
+      const custName = typeof order.shippingAddress === "object" && order.shippingAddress.fullName
+        ? order.shippingAddress.fullName
+        : order.user?.name || "Khách hàng";
+      const custPhone = typeof order.shippingAddress === "object" && order.shippingAddress.phone
+        ? order.shippingAddress.phone
+        : order.user?.phone || "";
+
+      await DroneDeliveryHistory.create({
+        droneId: drone._id,
+        orderId: order._id,
+        restaurantId: order.restaurantId?._id || order.restaurantId,
+        customerId: order.user?._id || order.user,
+        restaurantAddress: restaurant?.address?.fullAddress || restaurant?.address || "Hồ Chí Minh",
+        customerAddress: custAddress || "Hồ Chí Minh",
+        customerName: custName,
+        customerPhone: custPhone,
+        startTime: new Date(),
+        status: "delivering",
+        qrCode,
+        cargoWeight,
+        totalPrice: order.totalPrice || 0,
+      });
+    } catch (histErr) {
+      console.error("Lỗi khi ghi lịch sử drone delivery:", histErr);
+    }
+  }
+
   const previousStatus = order.orderStatus;
   const updateDataObj = { orderStatus: status };
   if (status === "cancelled" && reason) {
@@ -729,6 +782,13 @@ export const updateStatus = async (user, updateData) => {
         drone.cargoLidStatus = "closed";
         await drone.save();
       }
+      try {
+        const DroneDeliveryHistory = (await import("../models/droneDeliveryHistoryModel.cjs")).default;
+        await DroneDeliveryHistory.findOneAndUpdate(
+          { orderId: order._id, droneId: order.droneId },
+          { status: "cancelled", endTime: new Date() }
+        );
+      } catch (err) {}
     }
   }
 
@@ -758,8 +818,16 @@ export const updateStatus = async (user, updateData) => {
         drone.cargoWeight = 0;
         drone.cargoLidStatus = "closed";
         drone.totalDeliveries += 1;
+        drone.batteryLevel = Math.max(0, (drone.batteryLevel || 100) - Math.floor(Math.random() * 5 + 5));
         await drone.save();
       }
+      try {
+        const DroneDeliveryHistory = (await import("../models/droneDeliveryHistoryModel.cjs")).default;
+        await DroneDeliveryHistory.findOneAndUpdate(
+          { orderId: order._id, droneId: order.droneId },
+          { status: "delivered", endTime: new Date() }
+        );
+      } catch (err) {}
     }
 
   }
