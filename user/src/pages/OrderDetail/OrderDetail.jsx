@@ -92,13 +92,13 @@ const formatTrackingTime = (value) => value
   ? new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" }).format(new Date(value))
   : "đang chờ tín hiệu";
 
-export const routePositions = (route) => Array.isArray(route?.geometry)
+const routePositions = (route) => Array.isArray(route?.geometry)
   ? route.geometry
     .filter(([lng, lat]) => Number.isFinite(lat) && Number.isFinite(lng))
     .map(([lng, lat]) => [lat, lng])
   : [];
 
-export const etaMinutes = (route) => Number.isFinite(route?.durationSeconds) && route.durationSeconds >= 0
+const etaMinutes = (route) => Number.isFinite(route?.durationSeconds) && route.durationSeconds >= 0
   ? Math.max(1, Math.ceil(route.durationSeconds / 60))
   : null;
 
@@ -200,7 +200,7 @@ const OrderDetail = () => {
         setDroneReadyForConfirmation(false);
         window.dispatchEvent(new Event("order-updated"));
         await load();
-      } catch (fallbackErr) {
+      } catch {
         toast.error(err.response?.data?.message || err.message || "Không thể xác nhận giao hàng.");
       }
     } finally {

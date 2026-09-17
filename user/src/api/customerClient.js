@@ -5,11 +5,19 @@ const safeGet = (key) => {
 };
 
 const safeSet = (key, value) => {
-  try { localStorage.setItem(key, value); } catch {}
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // ignore storage write errors
+  }
 };
 
 const safeRemove = (key) => {
-  try { localStorage.removeItem(key); } catch {}
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // ignore storage remove errors
+  }
 };
 
 export const getCustomerAccessToken = () => safeGet("token");

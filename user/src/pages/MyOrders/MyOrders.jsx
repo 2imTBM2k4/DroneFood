@@ -102,7 +102,7 @@ const MyOrders = () => {
     } finally {
       if (!background) setIsLoading(false);
     }
-  }, [token, url]);
+  }, [customerApi, token]);
 
   const handleCancelOrder = async () => {
     if (!cancelReason.trim()) {
