@@ -101,8 +101,8 @@ export const generateQRCode = (orderId) => {
 };
 
 /**
- * Gán drone cho đơn hàng và tạo QR code
- * Sau khi gán, bắt đầu đếm ngược 20s timeout
+ * Gán drone cho đơn hàng (Admin thủ công hoặc test)
+ * Drone được gán ở phase 'assigned', chưa sinh QR code cho tới khi nhà hàng bàn giao món.
  */
 export const assignDroneToOrder = async (orderId, droneId) => {
   const order = await orderRepo.findById(orderId);
@@ -137,32 +137,11 @@ export const assignDroneToOrder = async (orderId, droneId) => {
     );
   }
 
-  const restaurant = await restaurantRepo.findById(order.restaurantId);
-  const qrCode = generateQRCode(orderId);
-
   order.droneId = droneId;
-  order.qrCode = qrCode;
-  order.orderStatus = "delivering";
-  order.droneArrivedAt = new Date();
+  order.dronePhase = "assigned";
+  order.droneAssignedAt = new Date();
+  order.droneArrivedAt = null;
   await order.save();
-
-  // Lưu lịch sử giao hàng
-  const customerAddress = order.shippingAddress;
-  await DroneDeliveryHistory.create({
-    droneId: drone._id,
-    orderId: order._id,
-    restaurantId: order.restaurantId,
-    customerId: order.user,
-    restaurantAddress: restaurant?.address || "N/A",
-    customerAddress: `${customerAddress.address}, ${customerAddress.city}, ${customerAddress.state}`,
-    customerName: customerAddress.fullName,
-    customerPhone: customerAddress.phone,
-    startTime: new Date(),
-    status: "delivering",
-    qrCode,
-    cargoWeight,
-    totalPrice: order.totalPrice,
-  });
 
   return {
     success: true,
@@ -171,9 +150,393 @@ export const assignDroneToOrder = async (orderId, droneId) => {
       orderId: order._id,
       droneId: drone._id,
       droneCode: drone.droneCode,
-      qrCode,
+      dronePhase: order.dronePhase,
       cargoWeight,
-      timeoutSeconds: 300,
+    },
+  };
+};
+
+/**
+ * Tự động tìm và điều phối drone khả dụng ngay khi đơn Drone thanh toán thành công
+ * Nếu không còn drone đủ điều kiện, kích hoạt fallback_pending_customer_consent trong 10 phút.
+ */
+export const dispatchPaidDroneOrder = async (orderId) => {
+  const order = await orderRepo.findById(orderId);
+  if (!order) {
+    throw new AppError("Order not found", 404);
+  }
+
+  if (order.deliveryMethod !== "drone") {
+    return { success: false, message: "Order is not drone delivery", ignored: true };
+  }
+
+  // Idempotent: nếu đã gán drone và không phải ở trạng thái lỗi cần re-dispatch
+  if (order.droneId && !["preflight_failed", "recovery_required"].includes(order.dronePhase)) {
+    return { success: true, message: "Drone already assigned", alreadyDispatched: true, droneId: order.droneId };
+  }
+
+  // Atomic claim một drone khả dụng có pin >= MIN_BATTERY_PERCENT, ít lượt bay nhất
+  const drone = await Drone.findOneAndUpdate(
+    {
+      status: "available",
+      batteryLevel: { $gte: droneRepo.MIN_BATTERY_PERCENT },
+    },
+    {
+      $set: {
+        status: "delivering",
+        currentOrder: order._id,
+        cargoWeight: 0,
+        cargoLidStatus: "closed",
+      },
+    },
+    { new: true, sort: { totalDeliveries: 1 } }
+  );
+
+  if (drone) {
+    order.droneId = drone._id;
+    order.dronePhase = "assigned";
+    order.droneAssignedAt = new Date();
+    order.qrCode = null; // QR chỉ được tạo khi nhà hàng bàn giao món
+    order.dronePreflightStatus = "none";
+    order.dronePreflightChecklist = null;
+    await order.save();
+
+    await recordAudit({
+      actor: { role: "system", name: "DroneDispatcher" },
+      action: "order.drone_dispatched",
+      targetType: "order",
+      targetId: order._id,
+      metadata: {
+        droneId: drone._id,
+        droneCode: drone.droneCode,
+        batteryLevel: drone.batteryLevel,
+      },
+    });
+
+    return {
+      success: true,
+      droneDispatched: true,
+      droneId: drone._id,
+      droneCode: drone.droneCode,
+      phase: "assigned",
+    };
+  }
+
+  // Không có drone khả dụng: Chuyển sang fallback_pending_customer_consent trong 10 phút
+  order.dronePhase = "fallback_pending_customer_consent";
+  order.droneFallbackDeadlineAt = new Date(Date.now() + 10 * 60 * 1000);
+  await order.save();
+
+  await recordAudit({
+    actor: { role: "system", name: "DroneDispatcher" },
+    action: "order.drone_fallback_pending_consent",
+    targetType: "order",
+    targetId: order._id,
+    metadata: {
+      deadline: order.droneFallbackDeadlineAt,
+    },
+  });
+
+  return {
+    success: true,
+    droneDispatched: false,
+    fallbackPrompt: true,
+    deadline: order.droneFallbackDeadlineAt,
+  };
+};
+
+/**
+ * Kiểm tra kỹ thuật trước cất cánh (Preflight check)
+ */
+export const performPreflightCheck = async (actor, { orderId, passed, checklist, notes }) => {
+  const order = await orderRepo.findById(orderId);
+  if (!order) {
+    throw new AppError("Order not found", 404);
+  }
+  if (!order.droneId) {
+    throw new AppError("Đơn hàng chưa được gán drone", 400);
+  }
+
+  if (!["assigned", "preflight_check"].includes(order.dronePhase)) {
+    throw new AppError(`Không thể preflight check ở pha [${order.dronePhase}]`, 400);
+  }
+
+  if (passed) {
+    order.dronePreflightStatus = "passed";
+    order.dronePreflightChecklist = checklist || {};
+    order.dronePhase = "en_route_to_restaurant";
+    await order.save();
+
+    await recordAudit({
+      actor,
+      action: "order.drone_preflight_passed",
+      targetType: "order",
+      targetId: order._id,
+      metadata: { droneId: order.droneId, checklist },
+    });
+
+    return {
+      success: true,
+      message: "Preflight check passed. Drone cất cánh tới nhà hàng.",
+      phase: order.dronePhase,
+    };
+  }
+
+  // Preflight failed: Đưa drone về maintenance, không cho phép bay
+  order.dronePreflightStatus = "failed";
+  order.dronePreflightChecklist = checklist || {};
+  order.dronePhase = "preflight_failed";
+  order.reason = notes || "Preflight check failed. Drone gặp lỗi kỹ thuật trước cất cánh.";
+  await order.save();
+
+  await Drone.findByIdAndUpdate(order.droneId, {
+    status: "maintenance",
+    currentOrder: null,
+  });
+
+  await recordAudit({
+    actor,
+    action: "order.drone_preflight_failed",
+    targetType: "order",
+    targetId: order._id,
+    reason: order.reason,
+    metadata: { droneId: order.droneId, checklist },
+  });
+
+  return {
+    success: false,
+    message: "Preflight check failed. Drone đã được đưa vào bảo trì.",
+    phase: order.dronePhase,
+  };
+};
+
+/**
+ * Ghi nhận drone đã đến nhà hàng, sẵn sàng nhận bàn giao món
+ */
+export const recordDroneArrivedRestaurant = async (orderId) => {
+  const order = await orderRepo.findById(orderId);
+  if (!order) {
+    throw new AppError("Order not found", 404);
+  }
+  if (order.dronePhase !== "en_route_to_restaurant") {
+    throw new AppError(`Drone chưa cất cánh tới nhà hàng hoặc không ở pha hợp lệ (Pha: ${order.dronePhase})`, 400);
+  }
+
+  order.dronePhase = "awaiting_restaurant_handover";
+  await order.save();
+
+  await recordAudit({
+    actor: { role: "system", name: "DroneTelemetry" },
+    action: "order.drone_arrived_restaurant",
+    targetType: "order",
+    targetId: order._id,
+    metadata: { droneId: order.droneId },
+  });
+
+  return {
+    success: true,
+    message: "Drone đã tới điểm đáp nhà hàng, đang chờ bàn giao món.",
+    phase: order.dronePhase,
+  };
+};
+
+/**
+ * Nhà hàng xác nhận đã xếp món vào thùng drone và đóng nắp an toàn
+ * Trigger chuyển dronePhase -> en_route_to_customer, sinh mã QR bảo mật cho khách
+ */
+export const confirmRestaurantHandover = async (user, orderId) => {
+  const order = await orderRepo.findById(orderId);
+  if (!order) {
+    throw new AppError("Order not found", 404);
+  }
+
+  // Quyền: Restaurant Owner của chính quán đó hoặc Admin
+  if (user.role !== "admin") {
+    const orderRestId = String(order.restaurantId?._id || order.restaurantId || "");
+    const userRestId = String(user.restaurantId || "");
+    if (user.role !== "restaurant_owner" || userRestId !== orderRestId) {
+      throw new AppError("Unauthorized: Not your restaurant", 403);
+    }
+  }
+
+  if (order.dronePhase !== "awaiting_restaurant_handover") {
+    throw new AppError(
+      `Drone chưa sẵn sàng nhận bàn giao món tại nhà hàng (Pha hiện tại: ${order.dronePhase}). Vui lòng đợi drone hạ cánh.`,
+      409
+    );
+  }
+
+  const qrCode = generateQRCode(orderId);
+  const cargoWeight = Math.floor(Math.random() * 1500) + 500;
+
+  order.qrCode = qrCode;
+  order.dronePhase = "en_route_to_customer";
+  order.droneHandoverAt = new Date();
+  order.orderStatus = "delivering";
+  await order.save();
+
+  const drone = await Drone.findByIdAndUpdate(
+    order.droneId,
+    { cargoWeight, cargoLidStatus: "closed" },
+    { new: true }
+  );
+
+  const restaurant = await restaurantRepo.findById(order.restaurantId);
+  const customerAddress = order.shippingAddress;
+
+  await DroneDeliveryHistory.create({
+    droneId: order.droneId,
+    orderId: order._id,
+    restaurantId: order.restaurantId,
+    customerId: order.user,
+    restaurantAddress: restaurant?.address || "N/A",
+    customerAddress: `${customerAddress?.address || ""}, ${customerAddress?.city || ""}, ${customerAddress?.state || ""}`,
+    customerName: customerAddress?.fullName || "N/A",
+    customerPhone: customerAddress?.phone || "N/A",
+    startTime: new Date(),
+    status: "delivering",
+    qrCode,
+    cargoWeight,
+    totalPrice: order.totalPrice,
+  });
+
+  await recordAudit({
+    actor: user,
+    action: "order.drone_handover_confirmed",
+    targetType: "order",
+    targetId: order._id,
+    metadata: {
+      droneId: order.droneId,
+      droneCode: drone?.droneCode,
+      cargoWeight,
+      qrCode,
+    },
+  });
+
+  return {
+    success: true,
+    message: "Nhà hàng bàn giao món thành công. Drone cất cánh bay tới khách hàng.",
+    data: {
+      orderId: order._id,
+      dronePhase: order.dronePhase,
+      orderStatus: order.orderStatus,
+      qrCode,
+    },
+  };
+};
+
+/**
+ * Ghi nhận drone đã đến vị trí khách hàng
+ */
+export const recordDroneArrivedCustomer = async (orderId) => {
+  const order = await orderRepo.findById(orderId);
+  if (!order) {
+    throw new AppError("Order not found", 404);
+  }
+  if (order.dronePhase !== "en_route_to_customer") {
+    throw new AppError(`Drone chưa trên đường tới khách hàng (Pha hiện tại: ${order.dronePhase})`, 400);
+  }
+
+  order.dronePhase = "arrived_at_customer";
+  order.orderStatus = "arrived_at_delivery";
+  order.droneArrivedAt = new Date();
+  await order.save();
+
+  await recordAudit({
+    actor: { role: "system", name: "DroneTelemetry" },
+    action: "order.drone_arrived_customer",
+    targetType: "order",
+    targetId: order._id,
+    metadata: { droneId: order.droneId },
+  });
+
+  return {
+    success: true,
+    message: "Drone đã tới điểm giao khách hàng an toàn.",
+    phase: order.dronePhase,
+  };
+};
+
+/**
+ * Xử lý phản hồi của khách hàng khi không có Drone (Fallback sang Shipper hoặc Hủy đơn)
+ * Khách đồng ý hay từ chối đều HỦY đơn Drone hiện tại và hoàn tiền tự động idempotent.
+ */
+export const handleCustomerFallbackConsent = async (user, { orderId, consent }) => {
+  const order = await orderRepo.findById(orderId);
+  if (!order) {
+    throw new AppError("Order not found", 404);
+  }
+
+  if (user.role !== "admin") {
+    const isOwner = String(order.user?._id || order.user) === String(user._id);
+    if (!isOwner) {
+      throw new AppError("Unauthorized: Not your order", 403);
+    }
+  }
+
+  if (order.dronePhase !== "fallback_pending_customer_consent") {
+    throw new AppError("Đơn hàng không ở trạng thái chờ phản hồi chuyển đổi", 400);
+  }
+
+  const isExpired = order.droneFallbackDeadlineAt && new Date() > new Date(order.droneFallbackDeadlineAt);
+  const accepted = consent === "accept_shipper" && !isExpired;
+
+  order.orderStatus = "cancelled";
+  order.dronePhase = "cancelled";
+  order.reason = accepted
+    ? "Khách hàng đồng ý chuyển sang giao bằng Shipper; đơn Drone cũ đã được hủy tự động để hoàn tiền và khách đặt lại đơn mới."
+    : isExpired
+    ? "Hết thời gian 10 phút chờ khách hàng xác nhận; đơn hàng đã tự động hủy."
+    : "Khách hàng từ chối phương án chuyển sang giao bằng Shipper; đơn hàng đã bị hủy.";
+
+  // Tự động hoàn tiền idempotent
+  if (order.isPaid && !["requested", "paid"].includes(order.refundStatus)) {
+    if (order.paymentMethod === "VNPAY") {
+      try {
+        const { requestVnpayRefund } = await import("./shipperService.js");
+        const refundRequestId = await requestVnpayRefund(order);
+        order.refundStatus = "requested";
+        order.refundRequestId = refundRequestId;
+        order.refundRequestedAt = new Date();
+      } catch (refundErr) {
+        order.refundStatus = "requested";
+        order.refundRequestedAt = new Date();
+      }
+    } else if (order.paymentMethod === "PAYOS") {
+      order.refundStatus = "requested";
+      order.refundRequestedAt = new Date();
+    }
+  }
+
+  try {
+    const voucherRepo = await import("../repositories/voucherRepository.js");
+    await voucherRepo.releaseForOrder(order._id, "drone_fallback_cancelled");
+  } catch (vErr) {}
+
+  await order.save();
+
+  await recordAudit({
+    actor: user,
+    action: "order.drone_fallback_resolved",
+    targetType: "order",
+    targetId: order._id,
+    reason: order.reason,
+    metadata: {
+      consent,
+      isExpired,
+      refundStatus: order.refundStatus,
+    },
+  });
+
+  return {
+    success: true,
+    message: order.reason,
+    data: {
+      orderId: order._id,
+      orderStatus: order.orderStatus,
+      dronePhase: order.dronePhase,
+      refundStatus: order.refundStatus,
+      canOrderShipperNew: accepted,
     },
   };
 };
@@ -266,6 +629,7 @@ export const closeCargoLid = async (droneId, orderId) => {
 
   // Sau khi đóng nắp khoang hàng, chuyển trạng thái đơn sang đã giao thành công
   order.orderStatus = "delivered";
+  order.dronePhase = "delivered";
   order.isDelivered = true;
   order.deliveredAt = new Date();
   order.isPaid = true;
@@ -324,6 +688,7 @@ export const confirmDelivery = async (user, orderId) => {
 
   order.cargoChecked = true;
   order.orderStatus = "delivered";
+  order.dronePhase = "delivered";
   order.isDelivered = true;
   order.deliveredAt = new Date();
   order.isPaid = true;
@@ -640,6 +1005,11 @@ export const reassignDrone = async (actor, orderId, newDroneId, reason) => {
     throw new AppError("This order is already finished", 400);
   }
 
+  // Chặn đổi drone khi đang bay giữa hành trình
+  if (["en_route_to_restaurant", "en_route_to_customer"].includes(order.dronePhase)) {
+    throw new AppError("Không thể đổi drone khi đang bay giữa hành trình", 409);
+  }
+
   const previousDroneId = String(order.droneId._id || order.droneId);
   if (previousDroneId === String(newDroneId)) {
     throw new AppError("That drone is already on this order", 400);
@@ -675,17 +1045,23 @@ export const reassignDrone = async (actor, orderId, newDroneId, reason) => {
     );
   }
 
+  // Drone cũ gặp lỗi hoặc cần thay thế: Chuyển sang MAINTENANCE, KHÔNG đưa về AVAILABLE
   const previousDrone = await Drone.findById(previousDroneId);
   await Drone.findByIdAndUpdate(previousDroneId, {
     $set: {
-      status: "available",
+      status: "maintenance",
       currentOrder: null,
       cargoWeight: 0,
       cargoLidStatus: "closed",
     },
   });
 
+  // Vô hiệu hóa mã QR cũ và reset về phase 'assigned' để thực hiện preflight check lại cho drone mới
   order.droneId = newDrone._id;
+  order.qrCode = null;
+  order.dronePhase = "assigned";
+  order.dronePreflightStatus = "none";
+  order.dronePreflightChecklist = null;
   await order.save();
 
   await recordAudit({
@@ -697,6 +1073,7 @@ export const reassignDrone = async (actor, orderId, newDroneId, reason) => {
     metadata: {
       fromDrone: previousDrone?.droneCode || previousDroneId,
       toDrone: newDrone.droneCode,
+      fromPhase: order.dronePhase,
     },
   });
 
@@ -707,6 +1084,7 @@ export const reassignDrone = async (actor, orderId, newDroneId, reason) => {
       orderId: order._id,
       droneId: newDrone._id,
       droneCode: newDrone.droneCode,
+      dronePhase: order.dronePhase,
     },
   };
 };

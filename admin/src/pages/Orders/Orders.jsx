@@ -88,8 +88,75 @@ const Orders = ({ url }) => {
     } catch (error) {
       toast.error(error.response?.data?.message || "Error assigning drone");
     } finally {
-      // Always clear the flag, or the button stays disabled after any failure.
       setSubmitting(false);
+    }
+  };
+
+  const [acting, setActing] = useState(false);
+
+  const handlePreflight = async (orderId, passed) => {
+    const token = localStorage.getItem("token");
+    if (!token) return toast.error("Vui lòng đăng nhập lại!");
+    setActing(true);
+    try {
+      const res = await axios.post(
+        url + "/api/drone/preflight",
+        {
+          orderId,
+          passed,
+          checklist: { rotors: "ok", battery: "ok", gps: "ok" },
+          notes: passed ? "Preflight check passed" : "Preflight check failed",
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.data.success) {
+        toast.success(res.data.message || "Preflight check thành công! Drone cất cánh.");
+      } else {
+        toast.warn(res.data.message || "Preflight check không đạt.");
+      }
+      fetchAllOrders();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Lỗi kiểm tra preflight");
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const handleArrivedRestaurant = async (orderId) => {
+    const token = localStorage.getItem("token");
+    if (!token) return toast.error("Vui lòng đăng nhập lại!");
+    setActing(true);
+    try {
+      const res = await axios.post(
+        url + "/api/drone/arrived-restaurant",
+        { orderId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success(res.data.message || "Drone đã đáp tại bãi đáp nhà hàng!");
+      fetchAllOrders();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Lỗi cập nhật trạng thái");
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const handleArrivedCustomer = async (orderId) => {
+    const token = localStorage.getItem("token");
+    if (!token) return toast.error("Vui lòng đăng nhập lại!");
+    setActing(true);
+    try {
+      const res = await axios.post(
+        url + "/api/drone/arrived-customer",
+        { orderId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success(res.data.message || "Drone đã tới vị trí khách hàng!");
+      fetchAllOrders();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Lỗi cập nhật trạng thái");
+    } finally {
+      setActing(false);
     }
   };
 
@@ -145,6 +212,71 @@ const Orders = ({ url }) => {
             <p>Items: {order.orderItems.length}</p>
             <p>{formatVND(order.totalPrice)}</p>
             <p>Status: {order.orderStatus}</p>
+            {order.deliveryMethod === "drone" && (
+              <div className="drone-telemetry-box">
+                <p className="order-drone-phase">
+                  Drone Phase: <span className={`drone-phase-badge phase-${order.dronePhase}`}>{order.dronePhase || "chưa xác định"}</span>
+                </p>
+
+                {/* Bộ nút điều khiển trạng thái Drone Telemetry */}
+                <div className="drone-controls-group">
+                  {order.dronePhase === "assigned" && (
+                    <div className="drone-ctrl-btn-group">
+                      <button
+                        className="btn-telemetry btn-preflight-pass"
+                        disabled={acting}
+                        onClick={() => handlePreflight(order._id, true)}
+                        title="Kiểm tra kỹ thuật đạt chuẩn và cho Drone cất cánh tới quán"
+                      >
+                        🛫 Cất cánh tới quán
+                      </button>
+                      <button
+                        className="btn-telemetry btn-preflight-fail"
+                        disabled={acting}
+                        onClick={() => handlePreflight(order._id, false)}
+                        title="Báo lỗi kỹ thuật - Đưa Drone về bảo trì"
+                      >
+                        ❌ Hỏng trước bay
+                      </button>
+                    </div>
+                  )}
+
+                  {order.dronePhase === "en_route_to_restaurant" && (
+                    <button
+                      className="btn-telemetry btn-arrive-restaurant"
+                      disabled={acting}
+                      onClick={() => handleArrivedRestaurant(order._id)}
+                      title="Ghi nhận Drone đã tới bãi đáp của nhà hàng"
+                    >
+                      🛬 Báo đã đến quán
+                    </button>
+                  )}
+
+                  {order.dronePhase === "awaiting_restaurant_handover" && (
+                    <span className="telemetry-info-tag tag-handover">
+                      ⏳ Chờ Nhà hàng bàn giao món...
+                    </span>
+                  )}
+
+                  {order.dronePhase === "en_route_to_customer" && (
+                    <button
+                      className="btn-telemetry btn-arrive-customer"
+                      disabled={acting}
+                      onClick={() => handleArrivedCustomer(order._id)}
+                      title="Ghi nhận Drone đã tới vị trí khách hàng"
+                    >
+                      🎯 Báo đã đến khách
+                    </button>
+                  )}
+
+                  {order.dronePhase === "arrived_at_customer" && (
+                    <span className="telemetry-info-tag tag-customer">
+                      📱 Chờ khách quét QR lấy món
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
             
             {order.orderStatus === "preparing" && !order.droneId && (
               <button
@@ -159,21 +291,33 @@ const Orders = ({ url }) => {
               </button>
             )}
 
-            {/* An order already in the air can still need a different drone:
-                the assigned one fails, runs low or gets grounded. */}
+            {/* Drone đang bay giữa hành trình bị cấm reassign theo quy định an toàn */}
             {order.droneId &&
               !["delivered", "cancelled"].includes(order.orderStatus) && (
-                <button
-                  className="assign-drone-btn assign-drone-btn--swap"
-                  onClick={() => {
-                    setSelectedOrder(order);
-                    setModalMode("reassign");
-                    setReassignReason("");
-                    setShowAssignModal(true);
-                  }}
-                >
-                  🔄 Change Drone
-                </button>
+                <div style={{ display: "inline-block" }}>
+                  <button
+                    className="assign-drone-btn assign-drone-btn--swap"
+                    disabled={["en_route_to_restaurant", "en_route_to_customer"].includes(order.dronePhase)}
+                    title={
+                      ["en_route_to_restaurant", "en_route_to_customer"].includes(order.dronePhase)
+                        ? "Không thể đổi drone khi đang bay giữa hành trình"
+                        : "Đổi drone cho đơn hàng"
+                    }
+                    onClick={() => {
+                      setSelectedOrder(order);
+                      setModalMode("reassign");
+                      setReassignReason("");
+                      setShowAssignModal(true);
+                    }}
+                  >
+                    🔄 Change Drone
+                  </button>
+                  {["en_route_to_restaurant", "en_route_to_customer"].includes(order.dronePhase) && (
+                    <span style={{ fontSize: "11px", color: "#e65100", display: "block" }}>
+                      (Đang bay: cấm đổi)
+                    </span>
+                  )}
+                </div>
               )}
           </div>
         ))}
@@ -198,9 +342,7 @@ const Orders = ({ url }) => {
               <p>Customer: {selectedOrder?.shippingAddress?.fullName}</p>
               {modalMode === "reassign" && (
                 <p className="modal-note">
-                  The current drone is released back to the fleet. The order
-                  keeps its QR code, so a customer already holding it can still
-                  collect.
+                  Drone cũ sẽ được chuyển sang chế độ bảo trì để kiểm tra kỹ thuật. Mã QR cũ sẽ bị vô hiệu hóa cho tới khi hoàn tất bàn giao món với drone mới.
                 </p>
               )}
               

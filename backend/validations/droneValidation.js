@@ -79,3 +79,31 @@ export const reassignDroneSchema = Joi.object({
     "string.min": "Lý do quá ngắn",
   }),
 });
+
+export const preflightCheckSchema = Joi.object({
+  orderId: Joi.string().trim().required().messages({
+    "any.required": "orderId là bắt buộc",
+  }),
+  passed: Joi.boolean().required().messages({
+    "any.required": "passed là bắt buộc (true/false)",
+  }),
+  checklist: Joi.object().optional(),
+  notes: Joi.string().trim().max(500).allow("").optional(),
+});
+
+export const orderTargetSchema = Joi.object({
+  orderId: Joi.string().trim().required().messages({
+    "any.required": "orderId là bắt buộc",
+  }),
+});
+
+export const fallbackConsentSchema = Joi.object({
+  orderId: Joi.string().trim().required().messages({
+    "any.required": "orderId là bắt buộc",
+  }),
+  consent: Joi.string().valid("accept_shipper", "reject").required().messages({
+    "any.required": "consent là bắt buộc (accept_shipper hoặc reject)",
+    "any.only": "consent phải là 'accept_shipper' hoặc 'reject'",
+  }),
+});
+

@@ -208,3 +208,72 @@ export const getFleetStats = async (req, res) => {
   }
 };
 
+export const performPreflightCheck = async (req, res) => {
+  try {
+    const { orderId, passed, checklist, notes } = req.body;
+    const result = await droneService.performPreflightCheck(req.user, {
+      orderId,
+      passed,
+      checklist,
+      notes,
+    });
+    res.json(result);
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ success: false, message: error.message });
+  }
+};
+
+export const recordDroneArrivedRestaurant = async (req, res) => {
+  try {
+    const { orderId } = req.body;
+    const result = await droneService.recordDroneArrivedRestaurant(orderId);
+    res.json(result);
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ success: false, message: error.message });
+  }
+};
+
+export const confirmRestaurantHandover = async (req, res) => {
+  try {
+    const { orderId } = req.body;
+    const result = await droneService.confirmRestaurantHandover(req.user, orderId);
+    res.json(result);
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ success: false, message: error.message });
+  }
+};
+
+export const recordDroneArrivedCustomer = async (req, res) => {
+  try {
+    const { orderId } = req.body;
+    const result = await droneService.recordDroneArrivedCustomer(orderId);
+    res.json(result);
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ success: false, message: error.message });
+  }
+};
+
+export const handleCustomerFallbackConsent = async (req, res) => {
+  try {
+    const { orderId, consent } = req.body;
+    const result = await droneService.handleCustomerFallbackConsent(req.user, {
+      orderId,
+      consent,
+    });
+    res.json(result);
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ success: false, message: error.message });
+  }
+};
+
+

@@ -413,6 +413,14 @@ const recordVnpayResult = async (query) => {
       vnpTransactionNo: query.vnp_TransactionNo || null,
       paymentResult: { id: query.vnp_TransactionNo, status: query.vnp_ResponseCode, update_time: query.vnp_PayDate },
     });
+    if (order.deliveryMethod === "drone") {
+      try {
+        const { dispatchPaidDroneOrder } = await import("./droneService.js");
+        await dispatchPaidDroneOrder(orderId);
+      } catch (dispatchErr) {
+        logger.error({ err: dispatchErr, orderId }, "Lỗi khi tự động điều phối drone cho đơn đã thanh toán VNPay");
+      }
+    }
     logger.info({
       event: "order.payment_confirmed",
       orderId,
@@ -484,6 +492,14 @@ export const handlePayosWebhook = async (payload) => {
       update_time: payment.transactionDateTime,
     },
   });
+  if (order.deliveryMethod === "drone") {
+    try {
+      const { dispatchPaidDroneOrder } = await import("./droneService.js");
+      await dispatchPaidDroneOrder(order._id);
+    } catch (dispatchErr) {
+      logger.error({ err: dispatchErr, orderId: order._id }, "Lỗi khi tự động điều phối drone cho đơn đã thanh toán PayOS");
+    }
+  }
   logger.info({
     event: "order.payment_confirmed",
     orderId: order._id,
@@ -722,81 +738,31 @@ export const updateStatus = async (user, updateData) => {
     throw new AppError("Unauthorized: Invalid role", 403);
   }
 
-  // Gán drone sau khi đã xác thực quyền và trạng thái chuyển đổi đơn hàng hợp lệ
-  if (status === "delivering" && order.deliveryMethod === "drone" && !order.droneId) {
-    const droneRepo = await import("../repositories/droneRepository.js");
-    const crypto = await import("crypto");
-    const cargoWeight = Math.floor(Math.random() * 1500) + 500;
-    const drone = await droneRepo.claimAvailable(orderId, cargoWeight);
-
-    if (!drone) {
-      const stats = await droneRepo.getFleetStats();
-      if (stats.total === 0) {
-        throw new AppError("Hệ thống chưa có drone nào được cấu hình.", 409);
-      }
-      if (stats.available === 0) {
-        throw new AppError(
-          `Hiện tại tất cả ${stats.total} drone đều đang bận giao các đơn hàng khác. Vui lòng đợi drone hoàn tất đơn hoặc quản trị viên điều phối.`,
-          409
-        );
-      }
-      if (stats.availableWithBattery === 0) {
-        throw new AppError(
-          `Các drone sẵn sàng hiện đều có mức pin dưới ${droneRepo.MIN_BATTERY_PERCENT}% và đang sạc. Vui lòng thử lại sau ít phút.`,
-          409
-        );
-      }
+  // Xử lý chuyển trạng thái delivering đối với đơn drone: Phải qua xác nhận bàn giao khi drone đã tới quán
+  if (status === "delivering" && order.deliveryMethod === "drone") {
+    if (!order.droneId || order.dronePhase !== "awaiting_restaurant_handover") {
       throw new AppError(
-        `Không có drone khả dụng với mức pin tối thiểu ${droneRepo.MIN_BATTERY_PERCENT}%. Vui lòng thử lại sau.`,
+        `Drone chưa sẵn sàng nhận bàn giao món tại nhà hàng (Pha hiện tại: ${order.dronePhase || "chưa gán drone"}). Vui lòng đợi drone hạ cánh.`,
         409
       );
     }
-
-    const hash = crypto.default.createHash("sha256");
-    hash.update(`${orderId}-${Date.now()}-${process.env.JWT_SECRET || "secret"}`);
-    const qrCode = hash.digest("hex").substring(0, 16).toUpperCase();
-
-    order.droneId = drone._id;
-    order.qrCode = qrCode;
-    await order.save();
-
-    try {
-      const DroneDeliveryHistory = (await import("../models/droneDeliveryHistoryModel.cjs")).default;
-      const restaurant = await restaurantRepo.findById(order.restaurantId);
-      const custAddress = typeof order.shippingAddress === "object"
-        ? `${order.shippingAddress.address || ""}, ${order.shippingAddress.city || ""}`.trim()
-        : String(order.shippingAddress || "Hồ Chí Minh");
-      const custName = typeof order.shippingAddress === "object" && order.shippingAddress.fullName
-        ? order.shippingAddress.fullName
-        : order.user?.name || "Khách hàng";
-      const custPhone = typeof order.shippingAddress === "object" && order.shippingAddress.phone
-        ? order.shippingAddress.phone
-        : order.user?.phone || "";
-
-      await DroneDeliveryHistory.create({
-        droneId: drone._id,
-        orderId: order._id,
-        restaurantId: order.restaurantId?._id || order.restaurantId,
-        customerId: order.user?._id || order.user,
-        restaurantAddress: restaurant?.address?.fullAddress || restaurant?.address || "Hồ Chí Minh",
-        customerAddress: custAddress || "Hồ Chí Minh",
-        customerName: custName,
-        customerPhone: custPhone,
-        startTime: new Date(),
-        status: "delivering",
-        qrCode,
-        cargoWeight,
-        totalPrice: order.totalPrice || 0,
-      });
-    } catch (histErr) {
-      console.error("Lỗi khi ghi lịch sử drone delivery:", histErr);
-    }
+    const { confirmRestaurantHandover } = await import("./droneService.js");
+    const handoverResult = await confirmRestaurantHandover(user, orderId);
+    const updatedOrder = await orderRepo.findById(orderId);
+    return {
+      success: true,
+      message: handoverResult.message,
+      data: updatedOrder,
+    };
   }
 
   const previousStatus = order.orderStatus;
   const updateDataObj = { orderStatus: status };
   if (status === "cancelled" && reason) {
     updateDataObj.reason = reason.trim();
+    if (order.deliveryMethod === "drone") {
+      updateDataObj.dronePhase = "cancelled";
+    }
 
     if (order.paymentMethod === "PAYOS" && order.isPaid) {
       throw new AppError("Automatic PayOS refunds are not configured. Refund the customer before cancelling this paid order.", 409);
@@ -830,7 +796,10 @@ export const updateStatus = async (user, updateData) => {
       const droneRepo = await import("../repositories/droneRepository.js");
       const drone = await droneRepo.findById(order.droneId);
       if (drone) {
-        drone.status = "available";
+        // Không giải phóng drone lỗi/maintenance về available
+        if (drone.status !== "maintenance") {
+          drone.status = "available";
+        }
         drone.currentOrder = null;
         drone.cargoWeight = 0;
         drone.cargoLidStatus = "closed";
@@ -849,6 +818,9 @@ export const updateStatus = async (user, updateData) => {
   if (status === "delivered") {
     updateDataObj.isDelivered = true;
     updateDataObj.deliveredAt = Date.now();
+    if (order.deliveryMethod === "drone") {
+      updateDataObj.dronePhase = "delivered";
+    }
     if (order.deliveryMethod === "shipper") {
       updateDataObj.shipperAssignmentStatus = "completed";
       updateDataObj.shipperCompletedAt = Date.now();
@@ -883,7 +855,6 @@ export const updateStatus = async (user, updateData) => {
         );
       } catch (err) {}
     }
-
   }
 
   let settlement = null;

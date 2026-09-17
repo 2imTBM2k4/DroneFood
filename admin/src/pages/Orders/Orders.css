@@ -277,3 +277,151 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Drone Telemetry Controls */
+.drone-telemetry-box {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--body-color);
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.drone-phase-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.phase-assigned {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.phase-en_route_to_restaurant {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.phase-awaiting_restaurant_handover {
+  background: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.phase-en_route_to_customer {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.phase-arrived_at_customer {
+  background: #e0f2f1;
+  color: #00796b;
+}
+
+.phase-delivered {
+  background: #e8f8f5;
+  color: #00897b;
+}
+
+.phase-preflight_failed,
+.phase-cancelled {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.phase-fallback_pending_customer_consent {
+  background: #fff8e1;
+  color: #f57f17;
+}
+
+.drone-controls-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.drone-ctrl-btn-group {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-telemetry {
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  color: white;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-telemetry:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-preflight-pass {
+  background: #2e7d32;
+}
+
+.btn-preflight-pass:hover:not(:disabled) {
+  background: #1b5e20;
+  transform: translateY(-1px);
+}
+
+.btn-preflight-fail {
+  background: #c62828;
+}
+
+.btn-preflight-fail:hover:not(:disabled) {
+  background: #b71c1c;
+}
+
+.btn-arrive-restaurant {
+  background: #1565c0;
+}
+
+.btn-arrive-restaurant:hover:not(:disabled) {
+  background: #0d47a1;
+  transform: translateY(-1px);
+}
+
+.btn-arrive-customer {
+  background: #6a1b9a;
+}
+
+.btn-arrive-customer:hover:not(:disabled) {
+  background: #4a148c;
+  transform: translateY(-1px);
+}
+
+.telemetry-info-tag {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.tag-handover {
+  background: #f3e5f5;
+  color: #6a1b9a;
+}
+
+.tag-customer {
+  background: #e0f2f1;
+  color: #00695c;
+}
+

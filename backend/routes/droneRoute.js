@@ -17,6 +17,11 @@ import {
   chargeDrone,
   resetAllStuckDrones,
   getFleetStats,
+  performPreflightCheck,
+  recordDroneArrivedRestaurant,
+  confirmRestaurantHandover,
+  recordDroneArrivedCustomer,
+  handleCustomerFallbackConsent,
 } from "../controllers/droneController.js";
 import { protect, authorize } from "../middleware/auth.js";
 import validate from "../middleware/validate.js";
@@ -29,6 +34,9 @@ import {
   cargoWeightSchema,
   historyQuerySchema,
   reassignDroneSchema,
+  preflightCheckSchema,
+  orderTargetSchema,
+  fallbackConsentSchema,
 } from "../validations/droneValidation.js";
 
 const router = express.Router();
@@ -42,6 +50,14 @@ router.post(
   validate(reassignDroneSchema),
   reassignDrone
 );
+
+// State Machine Endpoints
+router.post("/preflight", protect, authorize("admin"), validate(preflightCheckSchema), performPreflightCheck);
+router.post("/arrived-restaurant", protect, authorize("admin"), validate(orderTargetSchema), recordDroneArrivedRestaurant);
+router.post("/handover", protect, authorize("admin", "restaurant_owner"), validate(orderTargetSchema), confirmRestaurantHandover);
+router.post("/arrived-customer", protect, authorize("admin"), validate(orderTargetSchema), recordDroneArrivedCustomer);
+router.post("/fallback-consent", protect, validate(fallbackConsentSchema), handleCustomerFallbackConsent);
+
 router.post("/scan-qr", protect, validate(scanQRSchema), scanQR);
 router.post("/confirm-delivery", protect, validate(confirmDeliverySchema), confirmDelivery);
 router.post("/cargo-weight", protect, authorize("admin"), validate(cargoWeightSchema), updateCargoWeight);
@@ -61,3 +77,4 @@ router.put("/:id", protect, authorize("admin"), validate(updateDroneSchema), upd
 router.delete("/:id", protect, authorize("admin"), deleteDrone);
 
 export default router;
+

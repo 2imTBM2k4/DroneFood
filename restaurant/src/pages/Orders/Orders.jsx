@@ -377,9 +377,19 @@ const Orders = ({ url }) => {
                     <button
                       className="btn-deliver"
                       onClick={() => updateStatus(order._id, "delivering")}
+                      disabled={order.deliveryMethod === "drone" && order.dronePhase !== "awaiting_restaurant_handover"}
                     >
-                      Hand over to drone
+                      {order.deliveryMethod === "drone"
+                        ? order.dronePhase === "awaiting_restaurant_handover"
+                          ? "Bàn giao cho Drone"
+                          : "Đang chờ Drone tới..."
+                        : "Hand over to drone"}
                     </button>
+                    {order.deliveryMethod === "drone" && order.dronePhase !== "awaiting_restaurant_handover" && (
+                      <p className="drone-handover-wait" style={{ fontSize: "12px", color: "#666", marginTop: "4px" }}>
+                        Trạng thái Drone: <strong>{order.dronePhase || "chờ gán"}</strong>. Nút sẽ bật khi Drone hạ cánh tại nhà hàng.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
