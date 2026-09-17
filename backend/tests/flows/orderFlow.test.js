@@ -54,6 +54,7 @@ describe("Phase 1 payment and shipper settlement flow", () => {
     await request(app).post("/api/order/status").set("Authorization", `Bearer ${generateToken(owner._id)}`)
       .send({ orderId, status: "preparing" }).expect(200);
     await shipperService.pickupOrder(shipper, orderId);
+    await shipperService.arriveAtDelivery(shipper, orderId);
     await shipperService.completeOrder(shipper, orderId);
 
     const [order, updatedRestaurant, earnings, transactions] = await Promise.all([
@@ -91,6 +92,7 @@ describe("Phase 1 payment and shipper settlement flow", () => {
     await shipperService.acceptOrder(shipper, order._id);
     await Order.updateOne({ _id: order._id }, { $set: { orderStatus: "preparing" } });
     await shipperService.pickupOrder(shipper, order._id);
+    await shipperService.arriveAtDelivery(shipper, order._id);
     await shipperService.completeOrder(shipper, order._id);
 
     const earnings = await ShipperEarningsWallet.findOne({ shipper: shipper._id });

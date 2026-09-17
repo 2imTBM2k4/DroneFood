@@ -4,6 +4,7 @@ import { PayOS } from "@payos/node";
 import AppError from "../utils/AppError.js";
 import { Order, User, WalletPayment } from "../models/index.cjs";
 import * as walletRepo from "../repositories/walletRepository.js";
+import { logger } from "../utils/logger.js";
 
 export const MIN_INITIAL_DEPOSIT = 350000;
 export const EARLY_WARNING_RATIO = 0.5;
@@ -85,6 +86,16 @@ export const reserveCodLiability = async (orderId, shipperId) => runInTransactio
   if (!reservedWallet) throw new AppError("Unable to reserve COD liability", 409);
   const reservedOrder = await walletRepo.reserveOrderCodLiability(orderId, shipperId, liability, session);
   if (!reservedOrder) throw new AppError("COD order reservation changed concurrently", 409);
+
+  logger.info({
+    event: "wallet.cod_reserved",
+    orderId,
+    shipperId,
+    liability,
+    depositBalance,
+    earningsAvailable,
+  }, `Khóa hạn mức COD [${liability} VND] cho đơn [${orderId}] của Shipper [${shipperId}]`);
+
   return reservedOrder;
 });
 
@@ -94,7 +105,16 @@ export const releaseCodLiability = async (orderId) => runInTransaction(async (se
   if (!order || order.codReservationStatus !== "reserved") return null;
   const wallet = await walletRepo.updateReservedCodLiability(order.shipperId, -order.codReservedLiability, session);
   if (!wallet) throw new AppError("COD reservation is inconsistent", 409);
-  return walletRepo.releaseOrderCodLiability(orderId, session);
+  const released = await walletRepo.releaseOrderCodLiability(orderId, session);
+
+  logger.info({
+    event: "wallet.cod_released",
+    orderId,
+    shipperId: order.shipperId,
+    releasedLiability: order.codReservedLiability,
+  }, `Giải phóng hạn mức COD [${order.codReservedLiability} VND] cho đơn [${orderId}]`);
+
+  return released;
 });
 
 const addLedgerEntry = async ({ walletType, ownerType, ownerId, amount, balanceAfter, transactionType, eventKey, orderId, paymentId, withdrawalId, closureId, metadata }, session) =>
@@ -206,6 +226,18 @@ export const settleDeliveredOrder = async (orderId, deliveredFields = {}) => run
   order.shipperSettlementTransaction = shipperTransaction?._id || null;
   if (order.deliveryMethod === "shipper") order.liveShipperRoute = undefined;
   await order.save({ session });
+
+  logger.info({
+    event: "wallet.order_settled",
+    orderId: order._id,
+    paymentMethod: order.paymentMethod,
+    restaurantId: order.restaurantId,
+    restaurantPayoutAmount: restaurantAmount,
+    shipperId: order.shipperId,
+    onlineEarningsAmount: order.deliveryMethod === "shipper" && ["VNPAY", "PAYOS"].includes(order.paymentMethod) ? onlineEarningsAmount : undefined,
+    codLiabilityAmount: order.deliveryMethod === "shipper" && order.paymentMethod === "COD" ? codLiabilityAmount : undefined,
+  }, `Quyết toán đơn hàng [${order._id}]: Nhà hàng +${restaurantAmount} VND${order.shipperId ? (order.paymentMethod === "COD" ? `, Shipper thu COD (-${codLiabilityAmount} VND)` : `, Shipper nhận ship (+${onlineEarningsAmount} VND)`) : ""}`);
+
   return { alreadySettled: false, order, restaurantTransaction, shipperTransaction };
 });
 
@@ -244,6 +276,17 @@ export const settleDepositPayment = async (paymentId, transactionNo = null, prov
   if (provider === "PAYOS") payment.payosReference = transactionNo;
   else payment.vnpTransactionNo = transactionNo;
   await payment.save({ session });
+
+  logger.info({
+    event: "wallet.deposit_settled",
+    paymentId: payment._id,
+    shipperId: payment.shipper,
+    amount: payment.amount,
+    purpose: payment.purpose,
+    provider,
+    newBalance: updated.balance,
+  }, `Nạp tiền ví thành công cho Shipper [${payment.shipper}]: +${payment.amount} VND vào [${payment.purpose}] qua ${provider} (Số dư mới: ${updated.balance} VND)`);
+
   return { alreadySettled: false, payment, transaction };
 });
 

@@ -1,8 +1,9 @@
 import mongoose from "mongoose";
 import express from "express";
 import cors from "cors";
-import morgan from "morgan";
 import rateLimit from "express-rate-limit";
+import requestContext from "./middleware/requestContext.js";
+import { logger } from "./utils/logger.js";
 import foodRouter from "./routes/foodRoute.js";
 import userRouter from "./routes/userRoute.js";
 import cartRouter from "./routes/cartRoute.js";
@@ -30,10 +31,7 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json({ limit: "2mb" }));
-
-if (process.env.NODE_ENV !== "test") {
-  app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
-}
+app.use(requestContext);
 
 app.use("/images", express.static("uploads"));
 
@@ -116,7 +114,15 @@ app.use((err, req, res, next) => {
 
   const statusCode = err.statusCode || err.status || 500;
   if (statusCode === 500) {
-    console.error("Server error:", err.stack || err);
+    const log = req.log || logger;
+    log.error({
+      err: {
+        message: err.message,
+        stack: err.stack,
+        name: err.name,
+      },
+      statusCode,
+    }, "Unhandled server error occurred");
   }
   res
     .status(statusCode)

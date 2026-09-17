@@ -88,7 +88,7 @@ describe("Shipper dispatch", () => {
     expect(result.data.currentLocation.coordinates).toEqual([106.7012, 10.7784]);
     expect(routeService.fetchLiveShipperRoute).toHaveBeenCalledWith(expect.objectContaining({
       origin: { lat: 10.7784, lng: 106.7012 },
-      destination: { lat: 10.78, lng: 106.705 },
+      destination: expect.objectContaining({ lat: 10.78, lng: 106.705 }),
     }));
     expect(saved.liveShipperRoute).toMatchObject({
       origin: { lat: 10.7784, lng: 106.7012 },

@@ -16,6 +16,7 @@ import { resolveAddressSnapshot } from "./addressBookService.js";
 import { attachReviewFlows } from "./orderReviewService.js";
 import { Order, ShipperProfile } from "../models/index.cjs";
 import { isCustomerTrackableShipperOrder, serialiseLiveShipperRoute } from "../utils/orderRealtime.js";
+import { logger } from "../utils/logger.js";
 
 const VNPAY_DEFAULT_URL = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
 const SHIPPER_ASSIGNMENT_WINDOW_MS = 10 * 60 * 1000;
@@ -350,6 +351,18 @@ export const placeOrder = async (user, orderData, clientIp) => {
     await userRepo.updateById(user._id, { cart: [] });
   }
 
+  logger.info({
+    event: "order.placed",
+    orderId: newOrder._id,
+    userId: user._id,
+    restaurantId: restaurantId.toString(),
+    paymentMethod,
+    deliveryMethod,
+    totalPrice: payableTotal,
+    itemsCount: orderItems.length,
+    discountAmount,
+  }, `Đơn hàng [${newOrder._id}] đã được tạo thành công bởi User [${user._id}] (${payableTotal} VND, ${paymentMethod}, ${deliveryMethod})`);
+
   return {
     success: true,
     ...(paymentUrl && { paymentUrl, checkoutUrl: paymentUrl }),
@@ -400,6 +413,14 @@ const recordVnpayResult = async (query) => {
       vnpTransactionNo: query.vnp_TransactionNo || null,
       paymentResult: { id: query.vnp_TransactionNo, status: query.vnp_ResponseCode, update_time: query.vnp_PayDate },
     });
+    logger.info({
+      event: "order.payment_confirmed",
+      orderId,
+      userId: order.user,
+      provider: "VNPAY",
+      amount: order.totalPrice,
+      transactionNo: query.vnp_TransactionNo,
+    }, `Xác nhận thanh toán VNPay thành công cho đơn [${orderId}] (${order.totalPrice} VND)`);
     return { ...result, paid: true, newlyPaid: true };
   }
   if (hashIsValid && order && !paid && !order.isPaid) {
@@ -463,6 +484,14 @@ export const handlePayosWebhook = async (payload) => {
       update_time: payment.transactionDateTime,
     },
   });
+  logger.info({
+    event: "order.payment_confirmed",
+    orderId: order._id,
+    userId: order.user,
+    provider: "PAYOS",
+    amount: order.totalPrice,
+    orderCode,
+  }, `Xác nhận thanh toán PayOS thành công cho đơn [${order._id}] (${order.totalPrice} VND)`);
   return { paid: true, newlyPaid: true, orderId: order._id };
 };
 
@@ -888,6 +917,16 @@ export const updateStatus = async (user, updateData) => {
     reason: reason || "",
     metadata: { from: previousStatus, to: status },
   });
+
+  logger.info({
+    event: "order.status_updated",
+    orderId,
+    actorId: user._id,
+    actorRole: user.role,
+    previousStatus,
+    newStatus: status,
+    reason: reason || undefined,
+  }, `Trạng thái đơn hàng [${orderId}] cập nhật: "${previousStatus}" -> "${status}" bởi [${user.role}:${user._id}]`);
 
   return { success: true, message: "Status Updated", settlement };
 };

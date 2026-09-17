@@ -9,6 +9,7 @@ import {
   shipperWithdrawalBankAccountSnapshot,
 } from "./bankAccountService.js";
 import { decryptBankAccountNumber } from "../utils/bankAccountCrypto.js";
+import { logger } from "../utils/logger.js";
 
 export const MIN_WITHDRAWAL = 500000;
 export const MAX_WITHDRAWALS_PER_DAY = 3;
@@ -78,12 +79,27 @@ export const createRestaurantWithdrawal = async (user, amount) => {
   const bankAccountSnapshot = await restaurantWithdrawalBankAccountSnapshot(user);
   const request = await createFor({ actorType: "restaurant", actorId: restaurant._id, amount, bankAccountSnapshot });
   await recordAudit({ actor: user, action: "withdrawal.requested", targetType: "withdrawal", targetId: request._id, category: "money", metadata: { amount } });
+  logger.info({
+    event: "withdrawal.requested",
+    withdrawalId: request._id,
+    actorType: "restaurant",
+    actorId: restaurant._id,
+    amount,
+  }, `Nhà hàng [${restaurant._id}] yêu cầu rút tiền: ${amount} VND (Mã: ${request._id})`);
   return request;
 };
 
 export const createShipperWithdrawal = async (user, amount) => {
   const bankAccountSnapshot = await shipperWithdrawalBankAccountSnapshot(user._id);
-  return createFor({ actorType: "shipper", actorId: user._id, amount, bankAccountSnapshot });
+  const request = await createFor({ actorType: "shipper", actorId: user._id, amount, bankAccountSnapshot });
+  logger.info({
+    event: "withdrawal.requested",
+    withdrawalId: request._id,
+    actorType: "shipper",
+    actorId: user._id,
+    amount,
+  }, `Shipper [${user._id}] yêu cầu rút tiền: ${amount} VND (Mã: ${request._id})`);
+  return request;
 };
 
 export const listRestaurantWithdrawals = async (user) => {
@@ -131,7 +147,16 @@ export const payoutDetails = async (admin, withdrawalId) => {
 
 export const approveWithdrawal = async (admin, withdrawalId) => runInTransaction(async (session) => {
   const approved = await withdrawalRepo.approve(withdrawalId, admin._id, session);
-  if (approved) return { alreadyApproved: false, request: approved };
+  if (approved) {
+    logger.info({
+      event: "withdrawal.approved",
+      withdrawalId,
+      adminId: admin._id,
+      amount: approved.amount,
+      actorType: approved.actorType,
+    }, `Admin [${admin._id}] DUYỆT yêu cầu rút tiền [${withdrawalId}] (${approved.amount} VND)`);
+    return { alreadyApproved: false, request: approved };
+  }
   const request = await withdrawalRepo.findById(withdrawalId).session(session);
   if (!request) throw new AppError("Withdrawal request not found", 404);
   if (request.status === "approved") return { alreadyApproved: true, request };
@@ -148,6 +173,12 @@ export const rejectWithdrawal = async (admin, withdrawalId, reason) => runInTran
   const rejected = await withdrawalRepo.reject(withdrawalId, admin._id, reason, session);
   if (!rejected) throw new AppError("Withdrawal request changed concurrently", 409);
   if (!await release(request, reservedAmount, session)) throw new AppError("Withdrawal reservation is inconsistent", 409);
+  logger.info({
+    event: "withdrawal.rejected",
+    withdrawalId,
+    adminId: admin._id,
+    reason,
+  }, `Admin [${admin._id}] TỪ CHỐI yêu cầu rút tiền [${withdrawalId}], lý do: "${reason}"`);
   return { alreadyRejected: false, request: rejected };
 });
 
@@ -168,5 +199,12 @@ export const payWithdrawal = async (admin, withdrawalId, bankTransactionReferenc
   }, session);
   const paid = await withdrawalRepo.markPaid(withdrawalId, admin._id, bankTransactionReference, session);
   if (!paid) throw new AppError("Withdrawal request changed concurrently", 409);
+  logger.info({
+    event: "withdrawal.paid",
+    withdrawalId,
+    adminId: admin._id,
+    amount: reservedAmount,
+    bankTransactionReference,
+  }, `Admin [${admin._id}] XÁC NHẬN CHUYỂN TIỀN thành công cho yêu cầu rút [${withdrawalId}] (${reservedAmount} VND)`);
   return { alreadyPaid: false, request: paid, transaction };
 });

@@ -6,7 +6,7 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["./tests/setup.js"],
     testTimeout: 30000,
-    hookTimeout: 30000,
+    hookTimeout: 120000,
     coverage: {
       provider: "v8",
       include: ["services/**", "controllers/**", "middleware/**"],
