@@ -12,7 +12,8 @@
           "photosPermission": "Drone Food dùng ảnh để đăng món vào thực đơn.",
           "cameraPermission": "Drone Food dùng camera để chụp ảnh món ăn."
         }
-      ]
+      ],
+      "expo-notifications"
     ],
     "android": { "package": "com.dronefood.restaurant" },
     "ios": { "bundleIdentifier": "com.dronefood.restaurant" }

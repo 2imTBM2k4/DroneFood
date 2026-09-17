@@ -7,7 +7,7 @@ import { toast } from "react-toastify";
 import { Mail, ArrowLeft, Loader2, X } from "lucide-react";
 
 const LoginPopup = ({ setShowLogin }) => {
-  const { url, setToken } = useContext(StoreContext);
+  const { url, setToken, resetCustomerSessionExpiry } = useContext(StoreContext);
   const navigate = useNavigate();
   const dialogRef = useRef(null);
 
@@ -72,6 +72,9 @@ const LoginPopup = ({ setShowLogin }) => {
       if (response.data.success) {
         setToken(response.data.token);
         localStorage.setItem("token", response.data.token);
+        if (response.data.refreshToken) localStorage.setItem("refreshToken", response.data.refreshToken);
+        else localStorage.removeItem("refreshToken");
+        resetCustomerSessionExpiry();
         setShowLogin(false);
         navigate("/");
       } else {

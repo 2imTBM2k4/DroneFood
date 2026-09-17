@@ -12,7 +12,7 @@ export const ActiveOrderBanner: React.FC<ActiveOrderBannerProps> = ({
   order,
   onPress,
 }) => {
-  if (!order || (order.orderStatus !== "preparing" && order.orderStatus !== "delivering")) {
+  if (!order || !["preparing", "delivering", "arrived_at_delivery"].includes(order.orderStatus)) {
     return null;
   }
 
@@ -30,11 +30,13 @@ export const ActiveOrderBanner: React.FC<ActiveOrderBannerProps> = ({
           <View>
             <Text style={styles.title}>
               Đơn #{order._id.slice(-6).toUpperCase()} •{" "}
-              {order.orderStatus === "delivering"
-                ? isDrone
-                  ? "Drone đang bay đến bạn"
-                  : "Shipper đang giao hàng"
-                : "Quán đang chuẩn bị món"}
+              {order.orderStatus === "arrived_at_delivery"
+                ? "Tài xế đã tới điểm giao"
+                : order.orderStatus === "delivering"
+                  ? isDrone
+                    ? "Drone đang bay đến bạn"
+                    : "Shipper đang giao hàng"
+                  : "Quán đang chuẩn bị món"}
             </Text>
             <Text style={styles.subtitle}>Chạm để xem lộ trình trực tiếp</Text>
           </View>

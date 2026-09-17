@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import axios from "axios";
+import { useCallback, useContext, useEffect, useState } from "react";
+import { StoreContext } from "../../context/StoreContext";
 import { Pencil, Plus, Star, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
 import AddressFormModal from "../AddressFormModal/AddressFormModal";
@@ -8,22 +8,21 @@ import "./AddressBookManager.css";
 
 const toForm = (entry) => ({ ...emptyDeliveryAddress, ...entry });
 
-const AddressBookManager = ({ url, token, fullName, onChange }) => {
+const AddressBookManager = ({ fullName, onChange }) => {
+  const { customerApi, token } = useContext(StoreContext);
   const [entries, setEntries] = useState([]);
   const [form, setForm] = useState(emptyDeliveryAddress);
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
-  const config = useMemo(() => ({ headers: { token } }), [token]);
-
   const refresh = useCallback(async () => {
-    const response = await axios.get(`${url}/api/address-book`, config);
+    const response = await customerApi.get("/api/address-book");
     const next = response.data.data || [];
     setEntries(next);
     onChange?.(next);
     return next;
-  }, [config, onChange, url]);
+  }, [customerApi, onChange]);
 
   useEffect(() => {
     if (!token) return undefined;
@@ -42,8 +41,8 @@ const AddressBookManager = ({ url, token, fullName, onChange }) => {
     try {
       const addressFields = Object.fromEntries(Object.entries(nextForm).filter(([key]) => key !== "recipient"));
       const payload = { ...addressFields, lat: Number(addressFields.lat), lng: Number(addressFields.lng) };
-      if (editingId) await axios.patch(`${url}/api/address-book/${editingId}`, payload, config);
-      else await axios.post(`${url}/api/address-book`, payload, config);
+      if (editingId) await customerApi.patch(`/api/address-book/${editingId}`, payload);
+      else await customerApi.post("/api/address-book", payload);
       await refresh();
       setFormOpen(false);
       setEditingId(null);
@@ -53,12 +52,12 @@ const AddressBookManager = ({ url, token, fullName, onChange }) => {
     } finally { setSaving(false); }
   };
   const makeDefault = async (entry) => {
-    try { await axios.put(`${url}/api/address-book/${entry.id}/default`, {}, config); await refresh(); }
+    try { await customerApi.put(`/api/address-book/${entry.id}/default`, {}); await refresh(); }
     catch (error) { toast.error(error.response?.data?.message || "Could not change default address"); }
   };
   const remove = async (entry) => {
     if (!window.confirm(`Delete “${entry.label}”?`)) return;
-    try { await axios.delete(`${url}/api/address-book/${entry.id}`, config); await refresh(); }
+    try { await customerApi.delete(`/api/address-book/${entry.id}`); await refresh(); }
     catch (error) { toast.error(error.response?.data?.message || "Could not delete address"); }
   };
 

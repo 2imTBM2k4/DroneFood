@@ -35,6 +35,18 @@ export const getApiUrl = () => {
 
 export const API_URL = getApiUrl();
 const TOKEN_KEY = "customerAccessToken";
+const REFRESH_TOKEN_KEY = "customerRefreshToken";
+
+type RetriableRequestConfig = {
+  _customerAuthRetried?: boolean;
+  url?: string;
+  headers?: Record<string, string>;
+};
+
+type SessionExpiredHandler = (() => void | Promise<void>) | null;
+let refreshPromise: Promise<string> | null = null;
+let sessionExpiredHandler: SessionExpiredHandler = null;
+let expiryNotified = false;
 
 export const storage = {
   async getItem(key: string): Promise<string | null> {
@@ -78,6 +90,18 @@ export const storage = {
 export const getStoredToken = () => storage.getItem(TOKEN_KEY);
 export const setStoredToken = (token: string) => storage.setItem(TOKEN_KEY, token);
 export const removeStoredToken = () => storage.deleteItem(TOKEN_KEY);
+export const getStoredRefreshToken = () => storage.getItem(REFRESH_TOKEN_KEY);
+export const setStoredRefreshToken = (token: string) => storage.setItem(REFRESH_TOKEN_KEY, token);
+export const removeStoredRefreshToken = () => storage.deleteItem(REFRESH_TOKEN_KEY);
+export const clearCustomerSession = async () => {
+  await Promise.all([removeStoredToken(), removeStoredRefreshToken()]);
+};
+export const setSessionExpiredHandler = (handler: SessionExpiredHandler) => {
+  sessionExpiredHandler = handler;
+};
+export const resetSessionExpiryNotification = () => {
+  expiryNotified = false;
+};
 
 export const apiError = (cause: unknown, fallback = "Có lỗi xảy ra") =>
   axios.isAxiosError(cause)
@@ -105,10 +129,11 @@ export const haversineKm = (
   return 2 * 6371 * Math.asin(Math.sqrt(h));
 };
 
-// Axios instance
+// Axios instances
 export const api = axios.create({
   baseURL: API_URL,
 });
+const refreshApi = axios.create({ baseURL: API_URL });
 
 api.interceptors.request.use(async (config) => {
   const token = await getStoredToken();
@@ -118,17 +143,67 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+const expireCustomerSession = async () => {
+  await clearCustomerSession();
+  if (!expiryNotified) {
+    expiryNotified = true;
+    await sessionExpiredHandler?.();
+  }
+};
+
+const refreshAccessToken = async () => {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      const refreshToken = await getStoredRefreshToken();
+      if (!refreshToken) throw new Error("refresh-token-missing");
+      const response = await refreshApi.post<{ token?: string }>("/api/user/refresh-token", { refreshToken });
+      if (!response.data?.token) throw new Error("refresh-token-invalid-response");
+      await setStoredToken(response.data.token);
+      return response.data.token;
+    })().finally(() => { refreshPromise = null; });
+  }
+  return refreshPromise;
+};
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const original = error.config as RetriableRequestConfig | undefined;
+    const status = error.response?.status;
+    const isRefreshRequest = original?.url?.includes("/api/user/refresh-token");
+    if (status !== 401 || !original || isRefreshRequest) return Promise.reject(error);
+
+    if (original._customerAuthRetried) {
+      await expireCustomerSession();
+      return Promise.reject(error);
+    }
+
+    original._customerAuthRetried = true;
+    try {
+      const token = await refreshAccessToken();
+      original.headers = original.headers || {};
+      original.headers.Authorization = `Bearer ${token}`;
+      return api(original);
+    } catch (refreshError: any) {
+      const refreshStatus = refreshError?.response?.status;
+      const refreshFailure = refreshStatus === 401 || refreshStatus === 403 || String(refreshError?.message || "").startsWith("refresh-token-");
+      if (refreshFailure) await expireCustomerSession();
+      return Promise.reject(refreshError);
+    }
+  }
+);
+
 // API Functions
 export const authApi = {
   login: async (email: string, password: string) => {
-    const res = await api.post<{ token: string; user: UserProfile }>(
+    const res = await refreshApi.post<{ token: string; refreshToken?: string; user: UserProfile }>(
       "/api/user/login",
       { email: email.trim(), password }
     );
     return res.data;
   },
   register: async (name: string, email: string, password: string, phone?: string) => {
-    const res = await api.post<{ token: string; user: UserProfile }>(
+    const res = await refreshApi.post<{ token: string; refreshToken?: string; user: UserProfile }>(
       "/api/user/register",
       { name: name.trim(), email: email.trim(), password, phone: phone?.trim() }
     );

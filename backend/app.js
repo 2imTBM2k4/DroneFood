@@ -21,6 +21,7 @@ import refundRouter from "./routes/refundRoute.js";
 import addressBookRouter from "./routes/addressBookRoute.js";
 import orderReviewRouter from "./routes/orderReviewRoute.js";
 import notificationRouter from "./routes/notificationRoute.js";
+import pushTokenRouter from "./routes/pushTokenRoute.js";
 
 const app = express();
 
@@ -68,6 +69,7 @@ app.use("/api/refunds", refundRouter);
 app.use("/api/address-book", addressBookRouter);
 app.use("/api/order-reviews", orderReviewRouter);
 app.use("/api/notifications", notificationRouter);
+app.use("/api/push-tokens", pushTokenRouter);
 
 app.get("/api/health", (req, res) => {
   const dbState = mongoose.connection.readyState;

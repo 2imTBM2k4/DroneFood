@@ -1,6 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
 import { Check, MapPin, Plus } from "lucide-react";
 import { toast } from "react-toastify";
 import "./Checkout.css";
@@ -15,7 +14,7 @@ const toShippingAddress = (entry, fullName) => ({ fullName: fullName || entry.re
 const isComplete = (address) => ["fullName", "phone", "address", "city", "state", "country"].every((key) => Boolean(address[key]?.trim())) && Number.isFinite(address.lat) && Number.isFinite(address.lng);
 
 const Checkout = () => {
-  const { url, token, user, setUser, clearCart, cartLines, isHydrated, activeAddressId, setActiveAddressId } = useContext(StoreContext);
+  const { token, customerApi, user, setUser, clearCart, cartLines, isHydrated, activeAddressId, setActiveAddressId } = useContext(StoreContext);
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [savedAddresses, setSavedAddresses] = useState([]);
@@ -35,7 +34,7 @@ const Checkout = () => {
   useEffect(() => {
     if (!token) return undefined;
     let active = true;
-    axios.get(`${url}/api/address-book`, { headers: { token } }).then((response) => {
+    customerApi.get("/api/address-book").then((response) => {
       if (!active) return;
       const entries = response.data.data || [];
       setSavedAddresses(entries);
@@ -44,7 +43,7 @@ const Checkout = () => {
       if (preferred) { setSelectedAddressId(preferred.id); setActiveAddressId(preferred.id); }
     }).catch(() => { if (active) setSavedAddresses([]); });
     return () => { active = false; };
-  }, [activeAddressId, setActiveAddressId, setUser, token, url]);
+  }, [activeAddressId, customerApi, setActiveAddressId, setUser, token]);
 
   const selectedEntry = savedAddresses.find((entry) => entry.id === selectedAddressId);
   const address = useMemo(() => oneTimeAddress || (selectedEntry ? toShippingAddress(selectedEntry, user?.name) : null), [oneTimeAddress, selectedEntry, user?.name]);
@@ -52,13 +51,13 @@ const Checkout = () => {
     if (!address || !isComplete(address) || !token) { setDeliveryQuote(null); return undefined; }
     let active = true;
     setQuoteError("");
-    axios.post(`${url}/api/order/quote`, selectedAddressId && !oneTimeAddress ? { deliveryMethod, voucherCode: appliedVoucherCode || undefined, addressEntryId: selectedAddressId } : { deliveryMethod, voucherCode: appliedVoucherCode || undefined, address }, { headers: { token } }).then((response) => { if (active) setDeliveryQuote(response.data.data || null); }).catch((error) => {
+    customerApi.post("/api/order/quote", selectedAddressId && !oneTimeAddress ? { deliveryMethod, voucherCode: appliedVoucherCode || undefined, addressEntryId: selectedAddressId } : { deliveryMethod, voucherCode: appliedVoucherCode || undefined, address }).then((response) => { if (active) setDeliveryQuote(response.data.data || null); }).catch((error) => {
       if (!active) return;
       const message = error.response?.data?.message || "Unable to calculate delivery fee.";
       if (appliedVoucherCode) { setAppliedVoucherCode(""); setVoucherError(message); } else { setDeliveryQuote(null); setQuoteError(message); }
     });
     return () => { active = false; };
-  }, [address, appliedVoucherCode, deliveryMethod, oneTimeAddress, selectedAddressId, token, url]);
+  }, [address, appliedVoucherCode, customerApi, deliveryMethod, oneTimeAddress, selectedAddressId, token]);
 
   const selectSaved = (entry) => { setOneTimeAddress(null); setSelectedAddressId(entry.id); setActiveAddressId(entry.id); };
   const useOneTimeAddress = (form) => { setOneTimeAddress({ ...toShippingAddress(form, user?.name), zipCode: form.zipCode || "" }); setSelectedAddressId(""); setAddressModalOpen(false); };
@@ -67,12 +66,12 @@ const Checkout = () => {
     if (paymentMethod === "COD" && deliveryMethod !== "shipper") { toast.error("Cash on delivery is only available with a human shipper."); return; }
     setPlacing(true);
     try {
-      const response = await axios.post(`${url}/api/order/place`, { ...(selectedAddressId && !oneTimeAddress ? { addressEntryId: selectedAddressId } : { address }), paymentMethod, deliveryMethod, voucherCode: appliedVoucherCode || undefined }, { headers: { token } });
+      const response = await customerApi.post("/api/order/place", { ...(selectedAddressId && !oneTimeAddress ? { addressEntryId: selectedAddressId } : { address }), paymentMethod, deliveryMethod, voucherCode: appliedVoucherCode || undefined });
       if (!response.data.success) throw new Error(response.data.message || "Error placing order");
       if (paymentMethod === "PAYOS" && response.data.checkoutUrl) { window.location.assign(response.data.checkoutUrl); return; }
       await clearCart(); toast.success("Order placed successfully!"); navigate("/myorders");
     } catch (error) { toast.error(error.response?.data?.message || error.message || "Server error. Please try again."); } finally { setPlacing(false); }
-  }, [address, appliedVoucherCode, clearCart, deliveryMethod, navigate, oneTimeAddress, paymentMethod, selectedAddressId, token, url]);
+  }, [address, appliedVoucherCode, clearCart, customerApi, deliveryMethod, navigate, oneTimeAddress, paymentMethod, selectedAddressId]);
 
   const canContinueAddress = Boolean(address && isComplete(address));
   if (!isHydrated) return <div className="checkout"><div className="skeleton" style={{ height: 44, maxWidth: 340 }} /><div className="checkout-body" style={{ marginTop: 26 }}><div className="skeleton" style={{ height: 420 }} /><div className="skeleton" style={{ height: 300 }} /></div></div>;

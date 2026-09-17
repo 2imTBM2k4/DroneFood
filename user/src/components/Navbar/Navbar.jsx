@@ -20,7 +20,7 @@ const Navbar = ({ setShowLogin }) => {
   const [profileOpen, setProfileOpen] = useState(false);
   const [isDark, setIsDark] = useState(() => localStorage.getItem("mode") === "dark");
   const [scrolled, setScrolled] = useState(false);
-  const { getCartItemCount, token, setToken, user, liveLocation, liveAddress, activeAddressId, setActiveAddressId } =
+  const { getCartItemCount, token, logoutCustomer, user, liveLocation, liveAddress, activeAddressId, setActiveAddressId } =
     useContext(StoreContext);
   const navigate = useNavigate();
   const location = useLocation();
@@ -31,8 +31,7 @@ const Navbar = ({ setShowLogin }) => {
   const connectRealtime = useCallback(() => io(apiUrl, { auth: { token } }), [apiUrl, token]);
 
   const logout = () => {
-    localStorage.removeItem("token");
-    setToken("");
+    logoutCustomer();
     navigate("/");
   };
 

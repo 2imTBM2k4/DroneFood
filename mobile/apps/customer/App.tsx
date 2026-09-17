@@ -20,11 +20,12 @@ import {
   apiError,
   cartApi,
   droneApi,
+  clearCustomerSession,
   getStoredToken,
   haversineKm,
   orderApi,
-  removeStoredToken,
   restaurantApi,
+  setSessionExpiredHandler,
   foodApi,
   userApi,
 } from "./src/api/client";
@@ -50,6 +51,7 @@ import { FloatingCartBar } from "./src/components/navigation/FloatingCartBar";
 import { ActiveOrderBanner } from "./src/components/navigation/ActiveOrderBanner";
 import { OptionGroupModal } from "./src/components/food/OptionGroupModal";
 import { AddressBookModal } from "./src/components/address/AddressBookModal";
+import { registerPushNotifications, unregisterPushNotifications } from "./src/pushNotifications";
 
 // Screens
 import { AuthScreen } from "./src/screens/auth/AuthScreen";
@@ -59,10 +61,18 @@ import { CartScreen } from "./src/screens/cart/CartScreen";
 import { CheckoutScreen } from "./src/screens/checkout/CheckoutScreen";
 import { OrdersScreen } from "./src/screens/orders/OrdersScreen";
 import { DroneTrackingScreen } from "./src/screens/orders/DroneTrackingScreen";
+import { ShipperTrackingScreen } from "./src/screens/orders/ShipperTrackingScreen";
+import { CompletedOrderDetailScreen } from "./src/screens/orders/CompletedOrderDetailScreen";
 import { ProfileScreen } from "./src/screens/profile/ProfileScreen";
 
 const queryClient = new QueryClient();
 const NEARBY_RADIUS_KM = 15;
+
+const isActiveShipperTrackingOrder = (order: Order | null) => (
+  order?.deliveryMethod === "shipper" && ["delivering", "arrived_at_delivery"].includes(order.orderStatus)
+);
+
+const isCompletedOrder = (order: Order | null) => order?.orderStatus === "delivered";
 
 const defaultAddress: Address = {
   fullName: "",
@@ -98,6 +108,26 @@ function CustomerApp() {
   useEffect(() => {
     getStoredToken().then(setToken);
   }, []);
+
+  useEffect(() => {
+    let expired = false;
+    setSessionExpiredHandler(async () => {
+      if (expired) return;
+      expired = true;
+      queryClient.clear();
+      setTrackingOrderId(null);
+      setSelectedRestaurant(null);
+      setScreen("home");
+      setToken(null);
+      Alert.alert("Phiên đăng nhập đã hết hạn", "Vui lòng đăng nhập lại.");
+    });
+    return () => setSessionExpiredHandler(null);
+  }, []);
+
+  useEffect(() => {
+    if (!token) return;
+    registerPushNotifications(API_URL, token).catch(() => undefined);
+  }, [token]);
 
   // Queries
   const restaurantsQuery = useQuery({
@@ -141,6 +171,14 @@ function CustomerApp() {
     queryFn: orderApi.getUserOrders,
     enabled: Boolean(token),
     refetchInterval: screen === "track" || screen === "orders" ? 20000 : false,
+  });
+
+  const trackedOrderFromList = (ordersQuery.data || []).find((order) => order._id === trackingOrderId) || null;
+  const shipperTrackingDetailQuery = useQuery({
+    queryKey: ["customer-order-detail", token, trackingOrderId],
+    enabled: Boolean(token && screen === "track" && trackingOrderId && isActiveShipperTrackingOrder(trackedOrderFromList)),
+    queryFn: () => orderApi.getDetail(trackingOrderId!),
+    refetchInterval: 20_000,
   });
 
   // Calculate nearby restaurants
@@ -283,11 +321,40 @@ function CustomerApp() {
       socket.emit("joinCustomer");
     });
 
-    socket.on("orderStatusUpdated", () => {
+    socket.on("orderStatusUpdated", (payload) => {
       queryClient.invalidateQueries({ queryKey: ["orders", token] });
+      if (payload?.orderId) queryClient.invalidateQueries({ queryKey: ["customer-order-detail", token, String(payload.orderId)] });
+    });
+
+    socket.on("shipperLocationUpdated", (payload) => {
+      const orderId = typeof payload?.orderId === "string" ? payload.orderId : "";
+      const location = payload?.location;
+      if (!orderId || !Number.isFinite(location?.lat) || !Number.isFinite(location?.lng)) return;
+
+      const route = payload?.route;
+      const validRoute = route && Number.isFinite(route?.origin?.lat) && Number.isFinite(route?.origin?.lng) &&
+        Array.isArray(route?.geometry) && route.geometry.length >= 2 &&
+        route.geometry.every(([lng, lat]: [number, number]) => Number.isFinite(lat) && Number.isFinite(lng)) &&
+        Number.isFinite(route?.durationSeconds) && route.durationSeconds >= 0 && typeof route?.generatedAt === "string";
+      const mergeTracking = (order: Order | null | undefined) => {
+        if (!order || order._id !== orderId) return order;
+        return {
+          ...order,
+          tracking: {
+            ...order.tracking,
+            location,
+            updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : new Date().toISOString(),
+            ...(validRoute ? { route } : {}),
+          },
+        };
+      };
+
+      queryClient.setQueryData<Order[]>(["orders", token], (orders) => orders?.map((order) => mergeTracking(order)) || orders);
+      queryClient.setQueryData<Order>(["customer-order-detail", token, orderId], mergeTracking);
     });
 
     return () => {
+      socket.off("shipperLocationUpdated");
       socket.disconnect();
     };
   }, [token]);
@@ -338,7 +405,8 @@ function CustomerApp() {
 
   // Actions
   const handleLogout = async () => {
-    await removeStoredToken();
+    if (token) await unregisterPushNotifications(API_URL, token).catch(() => undefined);
+    await clearCustomerSession();
     queryClient.clear();
     setToken(null);
     setScreen("home");
@@ -617,10 +685,7 @@ function CustomerApp() {
   };
 
   // Find tracking order
-  const trackingOrder =
-    (ordersQuery.data || []).find((o) => o._id === trackingOrderId) ||
-    (ordersQuery.data || [])[0] ||
-    null;
+  const trackingOrder = trackedOrderFromList || (ordersQuery.data || [])[0] || null;
 
   // Active order for banner
   const activeOrder = useMemo(() => {
@@ -731,10 +796,27 @@ function CustomerApp() {
               setTrackingOrderId(o._id);
               setScreen("track");
             }}
+            onReviewFlowChanged={(orderId, updatedFlow) => {
+              queryClient.setQueryData<Order[]>(["orders", token], (orders) =>
+                orders?.map((order) => order._id === orderId ? { ...order, reviewFlow: updatedFlow } : order) || orders
+              );
+            }}
           />
         )}
 
-        {screen === "track" && (
+        {screen === "track" && isCompletedOrder(trackingOrder) ? (
+          <CompletedOrderDetailScreen
+            order={trackingOrder}
+            loading={ordersQuery.isLoading}
+            onBack={() => setScreen("orders")}
+          />
+        ) : screen === "track" && isActiveShipperTrackingOrder(trackingOrder) ? (
+          <ShipperTrackingScreen
+            order={shipperTrackingDetailQuery.data ?? trackingOrder}
+            loading={ordersQuery.isLoading || shipperTrackingDetailQuery.isLoading}
+            onBack={() => setScreen("orders")}
+          />
+        ) : screen === "track" ? (
           <DroneTrackingScreen
             order={trackingOrder}
             loading={ordersQuery.isLoading}
@@ -744,7 +826,7 @@ function CustomerApp() {
             onCancelOrder={handleCancelOrder}
             working={working}
           />
-        )}
+        ) : null}
 
         {screen === "profile" && (
           <ProfileScreen

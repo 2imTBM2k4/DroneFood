@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import app from "../../app.js";
-import { Order } from "../../models/index.cjs";
+import { Order, ShipperProfile } from "../../models/index.cjs";
+import { emitCustomerShipperLocation } from "../../utils/orderRealtime.js";
 import {
   createUser,
   createAdmin,
@@ -220,6 +221,178 @@ describe("Order API", () => {
 
       expect(res.status).toBe(404);
       expect(res.body.success).toBe(false);
+    });
+
+    it("returns a shipper GPS point only after the shipper picked up the order", async () => {
+      const { restaurant } = await createRestaurantOwner();
+      const customer = await createUser({ email: "customer-live-tracking@test.com" });
+      const shipper = await createUser({ role: "shipper", email: "shipper-live-tracking@test.com" });
+      const order = await createOrder(customer._id, restaurant._id, {
+        deliveryMethod: "shipper",
+        shipperId: shipper._id,
+        shipperAssignmentStatus: "picked_up",
+        shipperPickedUpAt: new Date(),
+        orderStatus: "delivering",
+        liveShipperRoute: {
+          origin: { lat: 10.7784, lng: 106.7012 },
+          geometry: [[106.7012, 10.7784], [106.702, 10.779]],
+          durationSeconds: 480,
+          generatedAt: new Date("2026-09-16T08:00:00.000Z"),
+        },
+      });
+      await ShipperProfile.create({
+        user: shipper._id,
+        status: "delivering",
+        approvalStatus: "approved",
+        currentOrder: order._id,
+        currentLocation: { type: "Point", coordinates: [106.7012, 10.7784] },
+        locationUpdatedAt: new Date("2026-09-16T08:00:00.000Z"),
+      });
+
+      const res = await request(app)
+        .get(`/api/order/${order._id}/customer-detail`)
+        .set("Authorization", `Bearer ${generateToken(customer._id)}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.tracking).toEqual({
+        location: { lat: 10.7784, lng: 106.7012 },
+        updatedAt: "2026-09-16T08:00:00.000Z",
+        route: {
+          origin: { lat: 10.7784, lng: 106.7012 },
+          geometry: [[106.7012, 10.7784], [106.702, 10.779]],
+          durationSeconds: 480,
+          generatedAt: "2026-09-16T08:00:00.000Z",
+        },
+      });
+    });
+
+    it("stores a valid current live shipper route snapshot", async () => {
+      const { restaurant } = await createRestaurantOwner();
+      const customer = await createUser({ email: "route-schema@test.com" });
+      const order = await createOrder(customer._id, restaurant._id, {
+        liveShipperRoute: {
+          origin: { lat: 10.7784, lng: 106.7012 },
+          geometry: [[106.7012, 10.7784], [106.702, 10.779]],
+          durationSeconds: 480,
+          generatedAt: new Date("2026-09-17T08:00:00.000Z"),
+        },
+      });
+
+      expect(order.liveShipperRoute.geometry).toEqual([[106.7012, 10.7784], [106.702, 10.779]]);
+      expect(order.liveShipperRoute.durationSeconds).toBe(480);
+    });
+
+    it("keeps GPS tracking available after the shipper arrives at the delivery point", async () => {
+      const { restaurant } = await createRestaurantOwner();
+      const customer = await createUser({ email: "customer-arrival-tracking@test.com" });
+      const shipper = await createUser({ role: "shipper", email: "shipper-arrival-tracking@test.com" });
+      const order = await createOrder(customer._id, restaurant._id, {
+        deliveryMethod: "shipper",
+        shipperId: shipper._id,
+        shipperAssignmentStatus: "arrived",
+        shipperArrivedAt: new Date(),
+        orderStatus: "arrived_at_delivery",
+        liveShipperRoute: {
+          origin: { lat: 10.7784, lng: 106.7012 },
+          geometry: [[106.7012, 10.7784], [106.702, 10.779]],
+          durationSeconds: 480,
+          generatedAt: new Date("2026-09-16T08:00:00.000Z"),
+        },
+      });
+      await ShipperProfile.create({
+        user: shipper._id,
+        status: "delivering",
+        approvalStatus: "approved",
+        currentOrder: order._id,
+        currentLocation: { type: "Point", coordinates: [106.7012, 10.7784] },
+        locationUpdatedAt: new Date("2026-09-16T08:00:00.000Z"),
+      });
+
+      const res = await request(app)
+        .get(`/api/order/${order._id}/customer-detail`)
+        .set("Authorization", `Bearer ${generateToken(customer._id)}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.tracking.location).toEqual({ lat: 10.7784, lng: 106.7012 });
+      expect(res.body.data.tracking.route.durationSeconds).toBe(480);
+    });
+
+    it("does not return a shipper GPS point before pickup or after delivery", async () => {
+      const { restaurant } = await createRestaurantOwner();
+      const customer = await createUser({ email: "customer-private-tracking@test.com" });
+      const shipper = await createUser({ role: "shipper", email: "shipper-private-tracking@test.com" });
+      const order = await createOrder(customer._id, restaurant._id, {
+        deliveryMethod: "shipper",
+        shipperId: shipper._id,
+        shipperAssignmentStatus: "accepted",
+        orderStatus: "preparing",
+      });
+      await ShipperProfile.create({
+        user: shipper._id,
+        status: "assigned",
+        approvalStatus: "approved",
+        currentOrder: order._id,
+        currentLocation: { type: "Point", coordinates: [106.7012, 10.7784] },
+        locationUpdatedAt: new Date(),
+      });
+
+      const res = await request(app)
+        .get(`/api/order/${order._id}/customer-detail`)
+        .set("Authorization", `Bearer ${generateToken(customer._id)}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.tracking).toBeUndefined();
+    });
+
+    it("emits a GPS update only to the owner of an actively delivered order", async () => {
+      const { restaurant } = await createRestaurantOwner();
+      const customer = await createUser({ email: "customer-location-event@test.com" });
+      const shipper = await createUser({ role: "shipper", email: "shipper-location-event@test.com" });
+      const order = await createOrder(customer._id, restaurant._id, {
+        deliveryMethod: "shipper",
+        shipperId: shipper._id,
+        shipperAssignmentStatus: "picked_up",
+        shipperPickedUpAt: new Date(),
+        orderStatus: "delivering",
+        liveShipperRoute: {
+          origin: { lat: 10.7784, lng: 106.7012 },
+          geometry: [[106.7012, 10.7784], [106.702, 10.779]],
+          durationSeconds: 480,
+          generatedAt: new Date("2026-09-16T08:00:00.000Z"),
+        },
+      });
+      const profile = await ShipperProfile.create({
+        user: shipper._id,
+        status: "delivering",
+        approvalStatus: "approved",
+        currentOrder: order._id,
+        currentLocation: { type: "Point", coordinates: [106.7012, 10.7784] },
+        locationUpdatedAt: new Date("2026-09-16T08:00:00.000Z"),
+      });
+      const emissions = [];
+      const io = { to: (room) => ({ emit: (event, payload) => emissions.push({ room, event, payload }) }) };
+
+      await emitCustomerShipperLocation(io, shipper._id, profile);
+
+      expect(emissions).toEqual([{
+        room: `customer_${customer._id}`,
+        event: "shipperLocationUpdated",
+        payload: {
+          orderId: order._id.toString(),
+          location: { lat: 10.7784, lng: 106.7012 },
+          updatedAt: "2026-09-16T08:00:00.000Z",
+          route: {
+            origin: { lat: 10.7784, lng: 106.7012 },
+            geometry: [[106.7012, 10.7784], [106.702, 10.779]],
+            durationSeconds: 480,
+            generatedAt: "2026-09-16T08:00:00.000Z",
+          },
+        },
+      }]);
+
+      await Order.findByIdAndUpdate(order._id, { $set: { orderStatus: "delivered" } });
+      await emitCustomerShipperLocation(io, shipper._id, profile);
+      expect(emissions).toHaveLength(1);
     });
 
     it("should return not found for an invalid order id", async () => {

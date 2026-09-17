@@ -1,7 +1,7 @@
 import * as orderService from "../services/orderService.js";
 import * as walletService from "../services/walletService.js";
 import { emitCustomerOrderUpdate } from "../utils/orderRealtime.js";
-import { notifyCustomerOrderStatus, notifyCustomerPaymentConfirmed, notifyRestaurantNewOrder } from "../utils/notificationEvents.js";
+import { notifyCustomerOrderStatus, notifyCustomerPaymentConfirmed, notifyRestaurantNewOrder, notifyShippersNewOrder, notifyWalletTransaction } from "../utils/notificationEvents.js";
 
 const notifyPaidOrder = async (req, result) => {
   if (!result.newlyPaid) return;
@@ -19,6 +19,7 @@ const notifyPaidOrder = async (req, result) => {
     shipperIds.forEach((shipperId) => req.app.get("io").to(`shipper_${shipperId}`).emit("shipperOrderOffer", {
       orderId: result.orderId, expiresAt: order.shipperAssignmentDeadlineAt,
     }));
+    await notifyShippersNewOrder(req.app.get("io"), result.orderId, shipperIds);
   }
 };
 
@@ -42,6 +43,7 @@ export const placeOrder = async (req, res) => {
           expiresAt: order.shipperAssignmentDeadlineAt,
         });
       });
+      await notifyShippersNewOrder(req.app.get("io"), result.orderId, shipperIds);
     }
 
     res.json(result);
@@ -114,6 +116,7 @@ export const payosWebhook = async (req, res) => {
     const result = await orderService.handlePayosWebhook(req.body);
     if (result.ignored) {
       const walletResult = await walletService.handleShipperWalletPayosWebhook(req.body);
+      if (walletResult.newlyPaid) await notifyWalletTransaction(req.app.get("io"), walletResult.transaction);
       return res.status(200).json({ success: true, type: walletResult.ignored ? "sample" : `shipper_${walletResult.purpose}` });
     }
     await notifyPaidOrder(req, result);
@@ -163,6 +166,12 @@ export const updateStatus = async (req, res) => {
     const result = await orderService.updateStatus(req.user, req.body);
     await emitCustomerOrderUpdate(req.app.get("io"), req.body.orderId);
     await notifyCustomerOrderStatus(req.app.get("io"), req.body.orderId);
+    if (!result.settlement?.alreadySettled) {
+      await Promise.all([
+        notifyWalletTransaction(req.app.get("io"), result.settlement?.restaurantTransaction),
+        notifyWalletTransaction(req.app.get("io"), result.settlement?.shipperTransaction),
+      ]);
+    }
     res.json(result);
   } catch (error) {
     res

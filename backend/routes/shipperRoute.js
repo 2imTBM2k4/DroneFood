@@ -17,6 +17,7 @@ router.get("/me/orders/current", protect, authorize("shipper"), controller.curre
 router.get("/me/orders/history", protect, authorize("shipper"), controller.history);
 router.post("/me/orders/:id/accept", protect, authorize("shipper"), controller.accept);
 router.post("/me/orders/:id/pick-up", protect, authorize("shipper"), controller.pickup);
+router.post("/me/orders/:id/arrive", protect, authorize("shipper"), controller.arrive);
 router.post("/me/orders/:id/complete", protect, authorize("shipper"), controller.complete);
 router.post("/me/orders/:id/decline", protect, authorize("shipper"), validate(declineSchema), controller.decline);
 router.post("/orders/:id/extend-search", protect, authorize("user"), controller.extendSearch);

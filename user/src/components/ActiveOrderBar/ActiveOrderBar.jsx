@@ -1,24 +1,24 @@
 import { useCallback, useContext, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import axios from "axios";
 import { Bike, Navigation, ChevronRight } from "lucide-react";
 import { StoreContext } from "../../context/StoreContext";
 import "./ActiveOrderBar.css";
 
-const ACTIVE_STATUSES = ["pending_payment", "pending", "preparing", "delivering"];
+const ACTIVE_STATUSES = ["pending_payment", "pending", "preparing", "delivering", "arrived_at_delivery"];
 
 const orderStatusLabel = {
   pending_payment: "Chờ thanh toán",
   pending: "Đã đặt",
   preparing: "Đang chuẩn bị",
   delivering: "Đang giao",
+  arrived_at_delivery: "Tài xế đã tới điểm giao",
   delivered: "Đã giao",
   cancelled: "Đã hủy",
   refund_pending: "Chờ hoàn tiền",
 };
 
 const ActiveOrderBar = () => {
-  const { url, token } = useContext(StoreContext);
+  const { token, customerApi } = useContext(StoreContext);
   const location = useLocation();
   const navigate = useNavigate();
   const [order, setOrder] = useState(null);
@@ -29,9 +29,7 @@ const ActiveOrderBar = () => {
       return;
     }
     try {
-      const response = await axios.get(`${url}/api/order/userorders`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await customerApi.get("/api/order/userorders");
       const orders = response.data.data || [];
       // Chỉ lấy đơn hàng đang xử lý (không lấy đơn đã giao 'delivered' hoặc đã hủy 'cancelled')
       const activeOrder = orders.find((o) => ACTIVE_STATUSES.includes(o.orderStatus));
@@ -39,7 +37,7 @@ const ActiveOrderBar = () => {
     } catch {
       setOrder(null);
     }
-  }, [token, url]);
+  }, [customerApi, token]);
 
   useEffect(() => {
     load();

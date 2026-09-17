@@ -1,5 +1,5 @@
 import * as withdrawalService from "../services/withdrawalService.js";
-import { notifyAdmins, notifyWithdrawalOwner } from "../utils/notificationEvents.js";
+import { notifyAdmins, notifyWithdrawalOwner, notifyWalletTransaction } from "../utils/notificationEvents.js";
 
 const respond = (handler) => async (req, res) => {
   try { res.json(await handler(req)); }
@@ -35,7 +35,10 @@ export const approve = respond(async (req) => {
 });
 export const paid = respond(async (req) => {
   const result = await withdrawalService.payWithdrawal(req.user, req.params.id, req.body.bankTransactionReference);
-  if (!result.alreadyPaid) await notifyWithdrawalOwner(req.app.get("io"), result.request, "paid");
+  if (!result.alreadyPaid) await Promise.all([
+    notifyWithdrawalOwner(req.app.get("io"), result.request, "paid"),
+    notifyWalletTransaction(req.app.get("io"), result.transaction),
+  ]);
   return { success: true, data: result };
 });
 export const reject = respond(async (req) => {

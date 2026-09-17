@@ -1,6 +1,5 @@
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import axios from "axios";
 import {
   Bike,
   Clock3,
@@ -19,8 +18,9 @@ import {
   RotateCcw,
   Sparkles,
 } from "lucide-react";
-import { MapContainer, Marker, TileLayer, Popup } from "react-leaflet";
+import { MapContainer, Marker, Polyline, TileLayer, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
+import { io } from "socket.io-client";
 import { toast } from "react-toastify";
 import "leaflet/dist/leaflet.css";
 import { StoreContext } from "../../context/StoreContext";
@@ -62,6 +62,7 @@ const STATUS_TEXT = {
   pending: "Đã đặt đơn",
   preparing: "Nhà hàng đang chuẩn bị",
   delivering: "Đang giao hàng",
+  arrived_at_delivery: "Tài xế đã tới điểm giao",
   delivered: "Giao thành công",
   cancelled: "Đã hủy",
   refund_pending: "Chờ hoàn tiền",
@@ -72,6 +73,7 @@ const STATUS_CLASSES = {
   pending: "status-pending",
   preparing: "status-preparing",
   delivering: "status-delivering",
+  arrived_at_delivery: "status-delivering",
   delivered: "status-delivered",
   cancelled: "status-cancelled",
   refund_pending: "status-refund-pending",
@@ -81,21 +83,55 @@ const hasShipperAcceptedOrder = (order) =>
   order.deliveryMethod === "shipper" &&
   (Boolean(order.shipperId) || ["accepted", "picked_up", "completed"].includes(order.shipperAssignmentStatus));
 
+const isLiveShipperDelivery = (order) =>
+  order?.deliveryMethod === "shipper" &&
+  ((order.orderStatus === "delivering" && (order.shipperAssignmentStatus === "picked_up" || Boolean(order.shipperPickedUpAt))) ||
+    (order.orderStatus === "arrived_at_delivery" && (order.shipperAssignmentStatus === "arrived" || Boolean(order.shipperArrivedAt))));
+
+const formatTrackingTime = (value) => value
+  ? new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" }).format(new Date(value))
+  : "đang chờ tín hiệu";
+
+export const routePositions = (route) => Array.isArray(route?.geometry)
+  ? route.geometry
+    .filter(([lng, lat]) => Number.isFinite(lat) && Number.isFinite(lng))
+    .map(([lng, lat]) => [lat, lng])
+  : [];
+
+export const etaMinutes = (route) => Number.isFinite(route?.durationSeconds) && route.durationSeconds >= 0
+  ? Math.max(1, Math.ceil(route.durationSeconds / 60))
+  : null;
+
+// Do not wrest control of the map away from a customer who is exploring it.
+// The view follows the shipper only when the first live point arrives.
+const CenterOnFirstShipperPoint = ({ position }) => {
+  const map = useMap();
+  const centered = useRef(false);
+
+  useEffect(() => {
+    if (position && !centered.current) {
+      map.setView(position, map.getZoom(), { animate: true });
+      centered.current = true;
+    }
+  }, [map, position]);
+
+  return null;
+};
+
 const OrderDetail = () => {
   const { id } = useParams();
-  const { url, token } = useContext(StoreContext);
+  const { url, token, customerApi } = useContext(StoreContext);
 
   const [order, setOrder] = useState(null);
   const [error, setError] = useState("");
   const [droneReadyForConfirmation, setDroneReadyForConfirmation] = useState(false);
   const [confirmingDrone, setConfirmingDrone] = useState(false);
   const [retryingPayment, setRetryingPayment] = useState(false);
+  const liveShipperDelivery = isLiveShipperDelivery(order);
 
   const load = useCallback(async () => {
     try {
-      const response = await axios.get(`${url}/api/order/${id}/customer-detail`, {
-        headers: { token },
-      });
+      const response = await customerApi.get(`/api/order/${id}/customer-detail`);
       if (response.data.data) {
         setOrder(response.data.data);
         setError("");
@@ -106,27 +142,45 @@ const OrderDetail = () => {
       console.error("Load order detail error:", err);
       setError(err.response?.data?.message || "Không thể tải chi tiết đơn hàng.");
     }
-  }, [id, token, url]);
+  }, [customerApi, id]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   useEffect(() => {
-    if (order?.orderStatus !== "delivering") return undefined;
-    const timer = window.setInterval(load, 10000);
-    return () => window.clearInterval(timer);
-  }, [load, order?.orderStatus]);
+    if (!token) return undefined;
+    const socket = io(url, { auth: { token }, transports: ["websocket", "polling"] });
+    const onOrderStatusUpdated = (payload) => {
+      if (String(payload?.orderId) === String(id)) load();
+    };
+    const onShipperLocationUpdated = (payload) => {
+      if (String(payload?.orderId) !== String(id)) return;
+      if (!Number.isFinite(payload?.location?.lat) || !Number.isFinite(payload?.location?.lng)) return;
+      setOrder((current) => current && isLiveShipperDelivery(current)
+        ? {
+          ...current,
+          tracking: {
+            ...current.tracking,
+            location: payload.location,
+            updatedAt: payload.updatedAt,
+            ...(payload.route && { route: payload.route }),
+          },
+        }
+        : current);
+    };
+
+    socket.on("connect", () => socket.emit("joinCustomer"));
+    socket.on("orderStatusUpdated", onOrderStatusUpdated);
+    socket.on("shipperLocationUpdated", onShipperLocationUpdated);
+    return () => socket.disconnect();
+  }, [id, load, token, url]);
 
   const confirmDroneDelivery = async () => {
     if (!order || confirmingDrone) return;
     setConfirmingDrone(true);
     try {
-      const response = await axios.post(
-        `${url}/api/drone/confirm-delivery`,
-        { orderId: order._id },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await customerApi.post("/api/drone/confirm-delivery", { orderId: order._id });
       if (!response.data.success) {
         throw new Error(response.data.message || "Không thể xác nhận giao hàng.");
       }
@@ -136,16 +190,12 @@ const OrderDetail = () => {
       await load();
     } catch (err) {
       try {
-        await axios.post(
-          `${url}/api/order/status`,
-          {
-            orderId: order._id,
-            status: "delivered",
-            isPaid: true,
-            paidAt: new Date().toISOString(),
-          },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        await customerApi.post("/api/order/status", {
+          orderId: order._id,
+          status: "delivered",
+          isPaid: true,
+          paidAt: new Date().toISOString(),
+        });
         toast.success("Đã xác nhận nhận hàng thành công.");
         setDroneReadyForConfirmation(false);
         window.dispatchEvent(new Event("order-updated"));
@@ -162,11 +212,7 @@ const OrderDetail = () => {
     if (!order || retryingPayment) return;
     setRetryingPayment(true);
     try {
-      const response = await axios.post(
-        `${url}/api/order/retry-payos`,
-        { orderId: order._id },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await customerApi.post("/api/order/retry-payos", { orderId: order._id });
       if (!response.data.success || !response.data.checkoutUrl) {
         throw new Error(response.data.message || "Không thể tạo lại liên kết thanh toán");
       }
@@ -190,15 +236,11 @@ const OrderDetail = () => {
     if (!reason || !reason.trim()) return;
     setCancellingOrder(true);
     try {
-      const response = await axios.post(
-        `${url}/api/order/status`,
-        {
-          orderId: order._id,
-          status: "cancelled",
-          reason: reason.trim(),
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await customerApi.post("/api/order/status", {
+        orderId: order._id,
+        status: "cancelled",
+        reason: reason.trim(),
+      });
       if (response.data.success) {
         toast.success("Đã hủy đơn hàng thành công.");
         window.dispatchEvent(new Event("order-updated"));
@@ -269,10 +311,7 @@ const OrderDetail = () => {
     );
   }
 
-  const isShipperTracking =
-    order.deliveryMethod === "shipper" &&
-    order.orderStatus === "delivering" &&
-    (order.shipperAssignmentStatus === "picked_up" || Boolean(order.shipperPickedUpAt));
+  const isShipperTracking = liveShipperDelivery;
 
   const isDroneTracking =
     order.deliveryMethod === "drone" &&
@@ -281,10 +320,12 @@ const OrderDetail = () => {
 
   const pickup = [order.restaurantId?.lat, order.restaurantId?.lng];
   const dropoff = [order.shippingAddress?.lat, order.shippingAddress?.lng];
-  const shipper = order.tracking?.location
+  const shipper = Number.isFinite(order.tracking?.location?.lat) && Number.isFinite(order.tracking?.location?.lng)
     ? [order.tracking.location.lat, order.tracking.location.lng]
     : null;
   const center = shipper || dropoff || pickup || [10.7769, 106.7008];
+  const liveRoutePositions = routePositions(order.tracking?.route);
+  const remainingMinutes = etaMinutes(order.tracking?.route);
 
   const orderCode = order._id.slice(-8).toUpperCase();
   const isDrone = order.deliveryMethod === "drone";
@@ -447,17 +488,21 @@ const OrderDetail = () => {
                   </div>
                   <div>
                     <h2>Theo dõi tài xế trực tiếp</h2>
-                    <p>Tài xế đã lấy món từ nhà hàng. Tọa độ GPS được tự động cập nhật mỗi 10 giây.</p>
+                    <p>Tài xế đã lấy món từ nhà hàng. Vị trí được cập nhật khi tài xế di chuyển.</p>
                   </div>
                 </div>
 
                 {center && (
                   <div className="order-detail-map-frame">
                     <MapContainer center={center} zoom={14} scrollWheelZoom={false} className="leaflet-map-view">
+                      <CenterOnFirstShipperPoint position={shipper} />
                       <TileLayer
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                         attribution='&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
                       />
+                      {liveRoutePositions.length >= 2 && (
+                        <Polyline positions={liveRoutePositions} pathOptions={{ color: "#2563EB", weight: 5, opacity: 0.84 }} />
+                      )}
                       {pickup[0] && (
                         <Marker position={pickup} icon={storeMarkerIcon}>
                           <Popup>{order.restaurantId?.name || "Nhà hàng"}</Popup>
@@ -482,6 +527,18 @@ const OrderDetail = () => {
                     <Clock3 size={15} />
                     <span>Đang kết nối tín hiệu GPS từ thiết bị của tài xế...</span>
                   </div>
+                )}
+                {order.orderStatus === "arrived_at_delivery" ? (
+                  <p className="shipper-arrival-guidance" role="status">Tài xế đã tới điểm giao. Bạn vẫn có thể xem vị trí trực tiếp của tài xế trên bản đồ.</p>
+                ) : shipper && remainingMinutes !== null ? (
+                  <p className="shipper-route-eta" role="status">Còn khoảng {remainingMinutes} phút</p>
+                ) : shipper ? (
+                  <p className="shipper-route-pending" role="status">Đang cập nhật lộ trình…</p>
+                ) : null}
+                {shipper && (
+                  <p className="shipper-location-updated" role="status" aria-atomic="true">
+                    Vị trí mới nhất lúc {formatTrackingTime(order.tracking?.updatedAt)}
+                  </p>
                 )}
               </section>
             )}

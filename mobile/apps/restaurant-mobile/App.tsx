@@ -34,6 +34,7 @@ import type { DraftFood, Food, Order, Tab } from "./src/types";
 
 // Components
 import { TabBar } from "./src/components/navigation/TabBar";
+import { registerPushNotifications, unregisterPushNotifications } from "./src/pushNotifications";
 
 // Screens
 import { AuthScreen } from "./src/screens/auth/AuthScreen";
@@ -53,6 +54,11 @@ function RestaurantApp() {
   useEffect(() => {
     getStoredToken().then(setToken);
   }, []);
+
+  useEffect(() => {
+    if (!token) return;
+    registerPushNotifications(API_URL, token).catch(() => undefined);
+  }, [token]);
 
   // Queries
   const userQuery = useQuery({
@@ -140,6 +146,7 @@ function RestaurantApp() {
 
   // Actions
   const handleLogout = async () => {
+    if (token) await unregisterPushNotifications(API_URL, token).catch(() => undefined);
     await removeStoredToken();
     queryClient.clear();
     setToken(null);

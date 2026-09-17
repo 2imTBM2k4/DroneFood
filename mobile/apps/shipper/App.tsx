@@ -3,8 +3,8 @@ import * as Location from "expo-location";
 import * as SecureStore from "expo-secure-store";
 import * as TaskManager from "expo-task-manager";
 import axios from "axios";
-import MapView, { Marker } from "./components/Map";
 import { io } from "socket.io-client";
+import { registerPushNotifications, unregisterPushNotifications } from "./pushNotifications";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -45,6 +45,33 @@ const BACKGROUND_LOCATION_TASK = "drone-food-shipper-location";
 const TOKEN_KEY = "shipperAccessToken";
 const REFRESH_TOKEN_KEY = "shipperRefreshToken";
 const queryClient = new QueryClient();
+
+const testLocation = (): Coordinates | null => {
+  // This is deliberately opt-in and development-only. It exists for Android
+  // Emulator sessions whose location provider cannot emit a GPS fix.
+  if (!__DEV__) return null;
+  const values = process.env.EXPO_PUBLIC_SHIPPER_TEST_LOCATION?.split(",").map(Number);
+  const [latitude, longitude] = values || [];
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+    return null;
+  }
+  return { latitude, longitude };
+};
+
+const testRoute = (): Coordinates[] => {
+  // A semicolon-separated route is useful for visually testing customer live
+  // tracking when the Android Emulator cannot produce a GPS stream.
+  if (!__DEV__) return [];
+  const rawRoute = String(process.env.EXPO_PUBLIC_SHIPPER_TEST_ROUTE || "");
+  return rawRoute
+    .split(";")
+    .map((point: string): number[] => point.split(",").map(Number))
+    .map(([latitude, longitude]: number[]): Coordinates => ({ latitude, longitude }))
+    .filter(({ latitude, longitude }: Coordinates) => (
+      Number.isFinite(latitude) && Number.isFinite(longitude) &&
+      Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180
+    ));
+};
 
 const storage = {
   async getItem(key: string): Promise<string | null> {
@@ -112,7 +139,7 @@ type EarningsReport = {
   monthly: { period: string; amount: number; deliveries: number }[];
 };
 type Order = {
-  _id: string; orderStatus: "pending" | "preparing" | "delivering" | "delivered" | "cancelled";
+  _id: string; orderStatus: "pending" | "preparing" | "delivering" | "arrived_at_delivery" | "delivered" | "cancelled";
   totalPrice: number; shippingPrice: number; paymentMethod: "COD" | "VNPAY" | "PAYOS"; createdAt: string; deliveryMethod: "shipper";
   deliveredAt?: string; updatedAt?: string;
   shippingAddress: { fullName?: string; address?: string; city?: string; state?: string; phone?: string; lat?: number; lng?: number };
@@ -124,9 +151,13 @@ type Order = {
 
 const formatVnd = (value = 0) => `${Math.round(value).toLocaleString("vi-VN")} ₫`;
 const formatVietnamDate = (value: string) => new Date(value).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
-const apiError = (error: unknown, fallback = "Có lỗi xảy ra") => axios.isAxiosError(error) ? error.response?.data?.message || fallback : fallback;
+const apiError = (error: unknown, fallback = "Có lỗi xảy ra") => {
+  if (axios.isAxiosError(error)) return error.response?.data?.message || fallback;
+  return error instanceof Error && error.message ? error.message : fallback;
+};
 const authHeaders = (token: string) => ({ Authorization: `Bearer ${token}` });
 const statusLabel: Record<ShipperStatus, string> = { offline: "Ngoại tuyến", available: "Sẵn sàng nhận đơn", assigned: "Đã nhận đơn", delivering: "Đang giao" };
+const tracksLocation = (status?: ShipperStatus) => ["available", "assigned", "delivering"].includes(status || "offline");
 
 async function sendBackgroundLocation(coordinates: Coordinates) {
   let token = await storage.getItem(TOKEN_KEY);
@@ -169,9 +200,15 @@ function ShipperApp() {
   const [tab, setTab] = useState<"offers" | "delivery" | "account">("offers");
   const [working, setWorking] = useState(false);
   const watcher = useRef<Location.LocationSubscription | null>(null);
+  const testRouteTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const locationTrackingStarted = useRef(false);
 
   useEffect(() => { storage.getItem(TOKEN_KEY).then(setToken); }, []);
+
+  useEffect(() => {
+    if (!token) return;
+    registerPushNotifications(API_URL, token).catch(() => undefined);
+  }, [token]);
 
   const user = useQuery({
     queryKey: ["shipper-user", token],
@@ -254,15 +291,71 @@ function ShipperApp() {
   };
 
   const getCurrentLocation = async (): Promise<Coordinates> => {
+    const simulated = testLocation();
+    if (simulated) return simulated;
+
     const foreground = await Location.requestForegroundPermissionsAsync();
     if (foreground.status !== "granted") throw new Error("Cần cho phép vị trí để nhận đơn trong phạm vi tối đa 5 km.");
-    const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-    return { latitude: position.coords.latitude, longitude: position.coords.longitude };
+
+    const lastKnown = await Location
+      .getLastKnownPositionAsync({ maxAge: 60_000, requiredAccuracy: 100 })
+      .catch(() => null);
+    if (lastKnown) return { latitude: lastKnown.coords.latitude, longitude: lastKnown.coords.longitude };
+
+    // Android Emulator often has no cached GPS fix, even after a point is
+    // selected in Extended Controls. Waiting for the first watched point lets
+    // the active provider deliver that simulated fix without weakening the
+    // requirement that a shipper must share a real coordinate before online.
+    return new Promise<Coordinates>((resolve, reject) => {
+      let subscription: Location.LocationSubscription | null = null;
+      let settled = false;
+      let timeout: ReturnType<typeof setTimeout>;
+      const cleanup = () => {
+        clearTimeout(timeout);
+        subscription?.remove();
+      };
+      const succeed = (value: Coordinates) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(value);
+      };
+      const fail = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(error);
+      };
+      timeout = setTimeout(() => {
+        fail(new Error("Không nhận được GPS trong 15 giây. Hãy kiểm tra Location trên Emulator rồi thử lại."));
+      }, 15_000);
+
+      Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.Balanced, distanceInterval: 1, timeInterval: 1_000 },
+        (position) => succeed({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
+      ).then((nextSubscription) => {
+        subscription = nextSubscription;
+        if (settled) subscription.remove();
+      }).catch((error: unknown) => fail(error instanceof Error ? error : new Error("Không thể theo dõi GPS.")));
+    });
   };
 
   const beginLocationTracking = async (initialLocation: Coordinates) => {
     await pushLocation(initialLocation);
     watcher.current?.remove();
+    if (testRouteTimer.current) clearInterval(testRouteTimer.current);
+
+    const route = testRoute();
+    if (route.length > 1) {
+      let nextPoint = 1;
+      testRouteTimer.current = setInterval(() => {
+        const coordinates = route[nextPoint];
+        nextPoint = (nextPoint + 1) % route.length;
+        pushLocation(coordinates).catch(() => undefined);
+      }, 3_000);
+      return;
+    }
+
     watcher.current = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.Balanced, distanceInterval: 50, timeInterval: 20000 },
       (next) => pushLocation({ latitude: next.coords.latitude, longitude: next.coords.longitude }).catch(() => undefined),
@@ -285,9 +378,9 @@ function ShipperApp() {
     }
   };
 
-  /** Restores live location updates when an available shipper reopens the app. */
+  /** Restores live location updates when an active shipper reopens the app. */
   useEffect(() => {
-    if (!token || profile.data?.status !== "available") {
+    if (!token || !tracksLocation(profile.data?.status)) {
       locationTrackingStarted.current = false;
       return undefined;
     }
@@ -314,7 +407,10 @@ function ShipperApp() {
     return () => { active = false; };
   }, [token, profile.data?.status]);
 
-  useEffect(() => () => watcher.current?.remove(), []);
+  useEffect(() => () => {
+    watcher.current?.remove();
+    if (testRouteTimer.current) clearInterval(testRouteTimer.current);
+  }, []);
   useEffect(() => {
     if (!token) return undefined;
     const socket = io(API_URL, { auth: { token }, transports: ["websocket", "polling"] });
@@ -366,8 +462,11 @@ function ShipperApp() {
   };
   const logout = async () => {
     watcher.current?.remove();
+    if (testRouteTimer.current) clearInterval(testRouteTimer.current);
+    testRouteTimer.current = null;
     locationTrackingStarted.current = false;
     if (Platform.OS !== "web" && await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK)) await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+    if (token) await unregisterPushNotifications(API_URL, token).catch(() => undefined);
     await storage.deleteItem(TOKEN_KEY); await storage.deleteItem(REFRESH_TOKEN_KEY);
     queryClient.clear(); setToken(null); setTab("offers");
   };
@@ -390,6 +489,8 @@ function ShipperApp() {
       } else {
         await axios.put(`${API_URL}/api/shippers/me/status`, { status: "offline" }, { headers: authHeaders(token) });
         watcher.current?.remove(); watcher.current = null;
+        if (testRouteTimer.current) clearInterval(testRouteTimer.current);
+        testRouteTimer.current = null;
         locationTrackingStarted.current = false;
         if (await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK)) await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
       }
@@ -408,7 +509,11 @@ function ShipperApp() {
   };
   const advanceDelivery = async () => {
     if (!token || !currentOrder.data) return;
-    const endpoint = currentOrder.data.orderStatus === "preparing" ? "pick-up" : "complete";
+    const endpoint = currentOrder.data.orderStatus === "preparing"
+      ? "pick-up"
+      : currentOrder.data.orderStatus === "delivering"
+        ? "arrive"
+        : "complete";
     try {
       setWorking(true);
       await axios.post(`${API_URL}/api/shippers/me/orders/${currentOrder.data._id}/${endpoint}`, {}, { headers: authHeaders(token) });
@@ -512,21 +617,39 @@ function DeliveryScreen({ order, loading, working, onAdvance }: { order: Order |
   if (!order) return <View style={styles.center}><Text style={styles.screenTitle}>Chưa có đơn đang giao</Text><Text style={styles.muted}>Nhận một đơn ở tab Đơn gần bạn để bắt đầu.</Text></View>;
   const restaurant = order.restaurantId;
   const destination = order.shippingAddress;
-  const canMap = Number.isFinite(restaurant?.lat) && Number.isFinite(restaurant?.lng) && Number.isFinite(destination.lat) && Number.isFinite(destination.lng);
-  const openRestaurantNavigation = async () => {
-    const restaurantDestination = Number.isFinite(restaurant?.lat) && Number.isFinite(restaurant?.lng)
-      ? `${restaurant!.lat},${restaurant!.lng}`
-      : restaurant?.address;
-    if (!restaurantDestination) return Alert.alert("Thiếu vị trí", "Nhà hàng chưa có địa chỉ để chỉ đường.");
-    const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(restaurantDestination)}&travelmode=driving`;
+  const navigatingToCustomer = ["delivering", "arrived_at_delivery"].includes(order.orderStatus);
+  const openNavigation = async () => {
+    const target = navigatingToCustomer
+      ? (Number.isFinite(destination.lat) && Number.isFinite(destination.lng)
+        ? `${destination.lat},${destination.lng}`
+        : [destination.address, destination.city, destination.state].filter(Boolean).join(", "))
+      : (Number.isFinite(restaurant?.lat) && Number.isFinite(restaurant?.lng)
+        ? `${restaurant.lat},${restaurant.lng}`
+        : restaurant?.address);
+    if (!target) return Alert.alert("Thiếu vị trí", navigatingToCustomer ? "Khách hàng chưa có địa chỉ để chỉ đường." : "Nhà hàng chưa có địa chỉ để chỉ đường.");
+    const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(target)}&travelmode=driving`;
     if (!(await Linking.canOpenURL(mapsUrl))) return Alert.alert("Không thể mở bản đồ", "Thiết bị không hỗ trợ mở chỉ đường.");
     await Linking.openURL(mapsUrl);
   };
-  const action = order.orderStatus === "preparing" ? "Đã lấy hàng từ nhà hàng" : order.orderStatus === "delivering" ? "Hoàn tất giao hàng" : null;
+  const action = order.orderStatus === "preparing"
+    ? "Đã lấy hàng từ nhà hàng"
+    : order.orderStatus === "delivering"
+      ? "Đã tới điểm giao"
+      : order.orderStatus === "arrived_at_delivery"
+        ? "Hoàn tất giao hàng"
+        : null;
+  const notice = order.orderStatus === "pending"
+    ? "Đã nhận đơn. Chờ nhà hàng chuẩn bị món trước khi đến lấy."
+    : order.orderStatus === "preparing"
+      ? "Hãy đến gần quán trong phạm vi 200 m trước khi xác nhận lấy hàng."
+      : order.orderStatus === "delivering"
+        ? "Hãy đến gần điểm giao trong phạm vi 200 m trước khi xác nhận đã tới."
+        : order.orderStatus === "arrived_at_delivery"
+          ? "Bạn đã xác nhận tới điểm giao. Hoàn tất giao hàng khi đã bàn giao món."
+          : null;
   return <ScrollView contentContainerStyle={styles.list}><Text style={styles.screenTitle}>Đơn đang thực hiện</Text><OrderCard order={order} working={working} />
-    {canMap ? <MapView style={styles.map} initialRegion={{ latitude: ((restaurant!.lat || 0) + (destination.lat || 0)) / 2, longitude: ((restaurant!.lng || 0) + (destination.lng || 0)) / 2, latitudeDelta: Math.max(Math.abs((restaurant!.lat || 0) - (destination.lat || 0)) * 1.8, 0.01), longitudeDelta: Math.max(Math.abs((restaurant!.lng || 0) - (destination.lng || 0)) * 1.8, 0.01) }}><Marker coordinate={{ latitude: restaurant!.lat!, longitude: restaurant!.lng! }} title="Nhà hàng" pinColor="#EA580C" /><Marker coordinate={{ latitude: destination.lat!, longitude: destination.lng! }} title="Khách hàng" pinColor="#2563EB" /></MapView> : null}
-    {order.orderStatus === "pending" ? <Text style={styles.notice}>Đã nhận đơn. Chờ nhà hàng xác nhận và chuẩn bị món trước khi đến lấy.</Text> : null}
-    <SecondaryButton label="Chỉ đường đến quán" onPress={openRestaurantNavigation} />
+    {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+    <SecondaryButton label={navigatingToCustomer ? "Chỉ đường tới khách hàng" : "Chỉ đường tới quán"} onPress={openNavigation} />
     {action ? <PrimaryButton label={action} disabled={working} onPress={onAdvance} /> : null}
   </ScrollView>;
 }

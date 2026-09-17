@@ -39,6 +39,7 @@ const VoucherUserUsage = require("./voucherUserUsageModel.cjs");
 const RefundRequest = require("./refundRequestModel.cjs");
 const OrderReview = require("./orderReviewModel.cjs");
 const Notification = require("./notificationModel.cjs");
+const ExpoPushToken = require("./expoPushTokenModel.cjs");
 
 module.exports = {
   User,
@@ -62,4 +63,5 @@ module.exports = {
   RefundRequest,
   OrderReview,
   Notification,
+  ExpoPushToken,
 };

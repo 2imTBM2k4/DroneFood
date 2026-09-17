@@ -25,6 +25,11 @@ const statusConfig: Record<string, { bg: string; text: string; label: string }> 
     text: colors.statusDeliveringText,
     label: "Đang giao",
   },
+  arrived_at_delivery: {
+    bg: "#CFFAFE",
+    text: "#155E75",
+    label: "Đã tới điểm giao",
+  },
   delivered: {
     bg: colors.statusDeliveredBg,
     text: colors.statusDeliveredText,

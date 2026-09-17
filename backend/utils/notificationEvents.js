@@ -32,7 +32,10 @@ export const notifyCustomerOrderStatus = async (io, orderId) => {
   }[order.orderStatus] || "Trạng thái đơn hàng đã được cập nhật.";
   return safelyNotify(io, {
     recipient: order.user, role: "user", type: "order.status",
-    title: "Cập nhật đơn hàng", body: statusText,
+    title: order.orderStatus === "preparing" ? "Đơn hàng đang được chuẩn bị"
+      : order.orderStatus === "delivered" ? "Đơn hàng đã đến nơi"
+        : "Cập nhật đơn hàng",
+    body: statusText,
     data: { orderId: String(order._id), path: orderPath(order._id) }, eventKey: `order:${order._id}:status:${order.orderStatus}`,
   });
 };
@@ -54,6 +57,44 @@ export const notifyCustomerShipperAccepted = async (io, orderId) => {
     recipient: order.user, role: "user", type: "order.shipper_accepted", title: "Tài xế đã nhận đơn",
     body: "Tài xế đã nhận đơn hàng và nhà hàng sẽ bắt đầu chuẩn bị.",
     data: { orderId: String(order._id), path: orderPath(order._id) }, eventKey: `order:${order._id}:shipper:accepted`,
+  });
+};
+
+export const notifyShippersNewOrder = async (io, orderId, shipperIds) => {
+  if (!shipperIds?.length) return [];
+  const order = await Order.findById(orderId).select("_id").lean();
+  if (!order) return [];
+  const shortId = String(order._id).slice(-6).toUpperCase();
+  return Promise.all(shipperIds.map((shipperId) => safelyNotify(io, {
+    recipient: shipperId,
+    role: "shipper",
+    type: "order.offer",
+    title: "Có đơn hàng mới gần bạn",
+    body: `Đơn #${shortId} đang chờ tài xế nhận.`,
+    data: { orderId: String(order._id), path: "/offers" },
+    eventKey: `order:${order._id}:shipper:offer`,
+  })));
+};
+
+export const notifyWalletTransaction = async (io, transaction) => {
+  if (!transaction?.ownerId || !transaction?._id || !transaction.amount) return null;
+  let recipient = transaction.ownerId;
+  let role = "shipper";
+  if (transaction.ownerType === "restaurant") {
+    const restaurant = await Restaurant.findById(transaction.ownerId).select("owner").lean();
+    recipient = restaurant?.owner;
+    role = "restaurant_owner";
+  }
+  if (!recipient) return null;
+  const increased = transaction.amount > 0;
+  return safelyNotify(io, {
+    recipient,
+    role,
+    type: increased ? "wallet.increased" : "wallet.decreased",
+    title: increased ? "Số dư ví đã tăng" : "Số dư ví đã giảm",
+    body: increased ? "Ví của bạn vừa được ghi có. Mở ứng dụng để xem chi tiết." : "Ví của bạn vừa được ghi giảm. Mở ứng dụng để xem chi tiết.",
+    data: { transactionId: String(transaction._id), path: "/wallet" },
+    eventKey: `wallet:${transaction._id}`,
   });
 };
 

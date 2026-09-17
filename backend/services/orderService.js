@@ -14,6 +14,8 @@ import * as voucherService from "./voucherService.js";
 import * as voucherRepo from "../repositories/voucherRepository.js";
 import { resolveAddressSnapshot } from "./addressBookService.js";
 import { attachReviewFlows } from "./orderReviewService.js";
+import { Order, ShipperProfile } from "../models/index.cjs";
+import { isCustomerTrackableShipperOrder, serialiseLiveShipperRoute } from "../utils/orderRealtime.js";
 
 const VNPAY_DEFAULT_URL = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
 const SHIPPER_ASSIGNMENT_WINDOW_MS = 10 * 60 * 1000;
@@ -499,12 +501,35 @@ export const customerOrderDetail = async (userId, orderId) => {
   }
 
   const [reviewFlow] = await attachReviewFlows([order]);
+  const rawOrder = typeof order.toObject === "function" ? order.toObject() : order;
+  const tracking = await customerShipperTracking(rawOrder);
   return {
     success: true,
     data: {
-      ...(typeof order.toObject === "function" ? order.toObject() : order),
+      ...rawOrder,
       reviewFlow,
+      ...(tracking && { tracking }),
     },
+  };
+};
+
+const customerShipperTracking = async (order) => {
+  if (!isCustomerTrackableShipperOrder(order) || !order.shipperId) return null;
+
+  const shipperId = order.shipperId._id || order.shipperId;
+  const profile = await ShipperProfile.findOne({
+    user: shipperId,
+    currentOrder: order._id,
+    status: "delivering",
+  }).select("currentLocation locationUpdatedAt").lean();
+  const [lng, lat] = profile?.currentLocation?.coordinates || [];
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  const route = serialiseLiveShipperRoute(order.liveShipperRoute);
+  return {
+    location: { lat, lng },
+    updatedAt: profile.locationUpdatedAt?.toISOString?.() || null,
+    ...(route && { route }),
   };
 };
 
@@ -628,8 +653,8 @@ export const updateStatus = async (user, updateData) => {
     }
 
     if (status === "delivered") {
-      if (order.orderStatus !== "delivering") {
-        throw new AppError("Cannot mark received yet (not delivering)", 400);
+      if (order.orderStatus !== "delivering" || order.deliveryMethod === "shipper") {
+        throw new AppError("Customers cannot complete this delivery", 403);
       }
     } else if (status === "cancelled") {
       if (!["pending", "pending_payment"].includes(order.orderStatus)) {
@@ -651,8 +676,8 @@ export const updateStatus = async (user, updateData) => {
     if (String(order.shipperId) !== String(user._id)) {
       throw new AppError("Unauthorized: Not your delivery", 403);
     }
-    if (order.orderStatus !== "delivering") {
-      throw new AppError("Cannot complete before pickup", 400);
+    if (order.orderStatus !== "arrived_at_delivery" || order.shipperAssignmentStatus !== "arrived") {
+      throw new AppError("Cannot complete before confirming arrival at the delivery point", 409);
     }
   } else if (user.role === "admin") {
     // An admin can override any transition — that is what a support console is
@@ -832,8 +857,9 @@ export const updateStatus = async (user, updateData) => {
 
   }
 
+  let settlement = null;
   if (status === "delivered") {
-    await settleDeliveredOrder(orderId, {
+    settlement = await settleDeliveredOrder(orderId, {
       deliveredAt: updateDataObj.deliveredAt,
       paidAt: updateDataObj.paidAt,
       shipperCompletedAt: updateDataObj.shipperCompletedAt,
@@ -841,6 +867,7 @@ export const updateStatus = async (user, updateData) => {
   } else {
     await orderRepo.updateById(orderId, updateDataObj);
     if (status === "cancelled") {
+      await Order.updateOne({ _id: orderId }, { $unset: { liveShipperRoute: 1 } });
       await voucherRepo.releaseForOrder(orderId, "order_cancelled");
     }
     if (status === "cancelled" && order.codReservationStatus === "reserved") {
@@ -862,7 +889,7 @@ export const updateStatus = async (user, updateData) => {
     metadata: { from: previousStatus, to: status },
   });
 
-  return { success: true, message: "Status Updated" };
+  return { success: true, message: "Status Updated", settlement };
 };
 
 export const getStatusStats = async () => {

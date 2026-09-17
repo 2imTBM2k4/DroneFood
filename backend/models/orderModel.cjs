@@ -8,6 +8,27 @@ const orderItemOptionSchema = new mongoose.Schema({
   priceDelta: { type: Number, default: 0 },
 }, { _id: false });
 
+const coordinateSchema = new mongoose.Schema({
+  lat: { type: Number, required: true, min: -90, max: 90 },
+  lng: { type: Number, required: true, min: -180, max: 180 },
+}, { _id: false });
+
+const liveShipperRouteSchema = new mongoose.Schema({
+  origin: { type: coordinateSchema, required: true },
+  geometry: {
+    type: [[Number]],
+    required: true,
+    validate: {
+      validator: (points) => Array.isArray(points) && points.length >= 2 && points.every(
+        ([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+      ),
+      message: "A live shipper route needs at least two valid longitude/latitude points.",
+    },
+  },
+  durationSeconds: { type: Number, required: true, min: 0 },
+  generatedAt: { type: Date, required: true },
+}, { _id: false });
+
 const orderSchema = new mongoose.Schema(
   {
     user: {
@@ -139,13 +160,17 @@ const orderSchema = new mongoose.Schema(
     shipperId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     shipperAssignmentStatus: {
       type: String,
-      enum: ["not_applicable", "unassigned", "accepted", "picked_up", "completed", "expired"],
+      enum: ["not_applicable", "unassigned", "accepted", "picked_up", "arrived", "completed", "expired"],
       default: "not_applicable",
     },
     shipperAssignmentDeadlineAt: { type: Date, default: null, index: true },
     shipperAcceptedAt: { type: Date, default: null },
     shipperPickedUpAt: { type: Date, default: null },
+    shipperArrivedAt: { type: Date, default: null },
     shipperCompletedAt: { type: Date, default: null },
+    // Current projected road route from the shipper's latest GPS point to the customer.
+    // It is replaced on refresh; the platform intentionally does not retain GPS history.
+    liveShipperRoute: { type: liveShipperRouteSchema, default: undefined },
     cancellationCode: { type: String, default: "" },
     paymentMethod: {
       type: String,
@@ -197,7 +222,7 @@ const orderSchema = new mongoose.Schema(
     },
     orderStatus: {
       type: String,
-      enum: ["pending_payment", "pending", "refund_pending", "preparing", "delivering", "delivered", "cancelled"],
+      enum: ["pending_payment", "pending", "refund_pending", "preparing", "delivering", "arrived_at_delivery", "delivered", "cancelled"],
       default: "pending",
     },
     reason: {

@@ -16,6 +16,7 @@ export interface MapViewProps {
 export interface MarkerProps {
   coordinate: { latitude: number; longitude: number };
   title?: string;
+  description?: string;
   pinColor?: string;
   draggable?: boolean;
   onDragEnd?: (event: { nativeEvent: { coordinate: { latitude: number; longitude: number } } }) => void;

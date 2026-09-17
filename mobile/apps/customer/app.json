@@ -12,7 +12,8 @@
         {
           "locationWhenInUsePermission": "Drone Food uses your location to quote and place deliveries."
         }
-      ]
+      ],
+      "expo-notifications"
     ],
     "ios": {
       "supportsTablet": true

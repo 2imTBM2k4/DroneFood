@@ -1,5 +1,4 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
-import axios from "axios";
 import { StoreContext } from "../../context/StoreContext";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
@@ -30,6 +29,7 @@ const STATUS_CONFIG = {
   pending: { label: "Chờ xác nhận", colorClass: "status-pending" },
   preparing: { label: "Đang chuẩn bị", colorClass: "status-preparing" },
   delivering: { label: "Đang giao", colorClass: "status-delivering" },
+  arrived_at_delivery: { label: "Tài xế đã tới điểm giao", colorClass: "status-delivering" },
   delivered: { label: "Đã giao", colorClass: "status-delivered" },
   cancelled: { label: "Đã hủy", colorClass: "status-cancelled" },
   refund_pending: { label: "Chờ hoàn tiền", colorClass: "status-refund-pending" },
@@ -44,10 +44,10 @@ const TAB_OPTIONS = [
 
 const hasShipperAcceptedOrder = (order) =>
   order.deliveryMethod === "shipper" &&
-  (Boolean(order.shipperId) || ["accepted", "picked_up", "completed"].includes(order.shipperAssignmentStatus));
+  (Boolean(order.shipperId) || ["accepted", "picked_up", "arrived", "completed"].includes(order.shipperAssignmentStatus));
 
 const isCancellationLockedByShipper = (order) =>
-  hasShipperAcceptedOrder(order) && ["pending", "preparing", "delivering"].includes(order.orderStatus);
+  hasShipperAcceptedOrder(order) && ["pending", "preparing", "delivering", "arrived_at_delivery"].includes(order.orderStatus);
 
 const canShowCancellationAction = (order) =>
   !isCancellationLockedByShipper(order) &&
@@ -60,7 +60,7 @@ const canShowCancellationAction = (order) =>
       order.isPaid));
 
 const MyOrders = () => {
-  const { url, token, setShowLogin } = useContext(StoreContext);
+  const { url, token, customerApi, setShowLogin } = useContext(StoreContext);
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -86,9 +86,7 @@ const MyOrders = () => {
         setIsLoading(true);
         setLoadError(null);
       }
-      const response = await axios.get(`${url}/api/order/userorders`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await customerApi.get("/api/order/userorders");
       if (response.data.success) {
         setOrders(response.data.data || []);
       } else {
@@ -114,12 +112,11 @@ const MyOrders = () => {
     try {
       const order = orders.find((item) => item._id === showCancelModal);
       const needsManualRefund = order?.paymentMethod === "PAYOS" && order.isPaid;
-      const response = await axios.post(
-        needsManualRefund ? `${url}/api/refunds/request` : `${url}/api/order/status`,
+      const response = await customerApi.post(
+        needsManualRefund ? "/api/refunds/request" : "/api/order/status",
         needsManualRefund
           ? { orderId: showCancelModal, reason: cancelReason, bank: refundBank }
-          : { orderId: showCancelModal, status: "cancelled", reason: cancelReason },
-        { headers: { Authorization: `Bearer ${token}` } }
+          : { orderId: showCancelModal, status: "cancelled", reason: cancelReason }
       );
       if (response.data.success) {
         toast.success(needsManualRefund ? "Yêu cầu hoàn tiền đã được gửi thành công." : "Đã hủy đơn hàng.");
@@ -146,11 +143,7 @@ const MyOrders = () => {
   const handleExtendShipperSearch = async (orderId) => {
     setExtendingSearchId(orderId);
     try {
-      const response = await axios.post(
-        `${url}/api/shippers/orders/${orderId}/extend-search`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await customerApi.post(`/api/shippers/orders/${orderId}/extend-search`, {});
       if (!response.data.success) {
         throw new Error(response.data.message || "Không thể tiếp tục tìm kiếm shipper");
       }
@@ -166,11 +159,7 @@ const MyOrders = () => {
   const handleRetryPayosPayment = async (orderId) => {
     setRetryingPaymentId(orderId);
     try {
-      const response = await axios.post(
-        `${url}/api/order/retry-payos`,
-        { orderId },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await customerApi.post("/api/order/retry-payos", { orderId });
       if (!response.data.success || !response.data.checkoutUrl) {
         throw new Error(response.data.message || "Không thể tạo lại liên kết thanh toán");
       }
@@ -426,7 +415,7 @@ const MyOrders = () => {
                           </div>
 
                           <div className={`order-status-pill ${statusInfo.colorClass}`}>
-                            {order.orderStatus === "delivering" && (
+                            {["delivering", "arrived_at_delivery"].includes(order.orderStatus) && (
                               <span className="live-pulse-dot" aria-hidden="true" />
                             )}
                             <span>{statusInfo.label}</span>
@@ -545,8 +534,6 @@ const MyOrders = () => {
                       {/* Review Flow Integration */}
                       <OrderReviewPrompt
                         order={order}
-                        url={url}
-                        token={token}
                         onFlowChanged={handleReviewFlowChanged}
                       />
 
@@ -640,7 +627,7 @@ const MyOrders = () => {
                               className="btn-view-details"
                               onClick={() => navigate(`/myorders/${order._id}`)}
                             >
-                              <span>{order.orderStatus === "delivering" ? "Theo dõi đơn" : "Chi tiết đơn"}</span>
+                              <span>{["delivering", "arrived_at_delivery"].includes(order.orderStatus) ? "Theo dõi đơn" : "Chi tiết đơn"}</span>
                               <ChevronRight size={15} />
                             </button>
                           </div>

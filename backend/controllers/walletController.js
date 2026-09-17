@@ -1,4 +1,5 @@
 import * as walletService from "../services/walletService.js";
+import { notifyWalletTransaction } from "../utils/notificationEvents.js";
 
 const respond = (handler) => async (req, res) => {
   try {
@@ -33,7 +34,9 @@ export const createEarningsTopUpPayment = respond((req) =>
 
 export const depositVnpayIpn = async (req, res) => {
   try {
-    res.json(await walletService.handleDepositVnpayIpn(req.query));
+    const result = await walletService.handleDepositVnpayIpn(req.query);
+    if (!result.settlement?.alreadySettled) await notifyWalletTransaction(req.app.get("io"), result.settlement?.transaction);
+    res.json({ RspCode: result.RspCode, Message: result.Message });
   } catch {
     res.json({ RspCode: "99", Message: "Unknown error" });
   }

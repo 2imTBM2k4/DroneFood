@@ -64,7 +64,7 @@ export const updateById = async (id, updates, { session } = {}) => {
   // Handle specific updates like orderStatus enum
   if (
     updates.orderStatus &&
-    !["pending_payment", "pending", "refund_pending", "preparing", "delivering", "delivered", "cancelled"].includes(
+    !["pending_payment", "pending", "refund_pending", "preparing", "delivering", "arrived_at_delivery", "delivered", "cancelled"].includes(
       updates.orderStatus
     )
   ) {

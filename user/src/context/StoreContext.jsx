@@ -1,6 +1,7 @@
 import axios from "axios";
-import { createContext, useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
+import { clearCustomerAuthStorage, createCustomerClient } from "../api/customerClient";
 import { reverseGeocode } from "../lib/trackasia";
 import { haversineKm } from "../lib/distance";
 
@@ -27,6 +28,9 @@ const StoreContextProvider = (props) => {
   const geocodeRequestId = useRef(0);
   const url = import.meta.env.VITE_API_URL;
   const [token, setToken] = useState("");
+  const customerClient = useMemo(() => createCustomerClient(url), [url]);
+  const customerApi = customerClient.api;
+  const resetCustomerSessionExpiry = useCallback(() => customerClient.resetSessionExpiryNotification(), [customerClient]);
   const [food_list, setFoodList] = useState([]);
   const [restaurant_list, setRestaurantList] = useState([]);
   const [isLoadingFoods, setIsLoadingFoods] = useState(true);
@@ -118,11 +122,9 @@ const StoreContextProvider = (props) => {
     setCartRestaurantId(null);
   }, []);
 
-  const loadCartData = useCallback(async (authToken) => {
+  const loadCartData = useCallback(async () => {
     try {
-      const res = await axios.get(`${url}/api/cart/get`, {
-        headers: { token: authToken },
-      });
+      const res = await customerApi.get("/api/cart/get");
       if (res.data.success) {
         applyCartResponse(res.data);
       } else {
@@ -132,18 +134,16 @@ const StoreContextProvider = (props) => {
       console.error("Load cart error:", err);
       clearLocalCart();
     }
-  }, [applyCartResponse, clearLocalCart, url]);
+  }, [applyCartResponse, clearLocalCart, customerApi]);
 
-  const fetchUserInfo = useCallback(async (authToken) => {
+  const fetchUserInfo = useCallback(async () => {
     try {
-      const res = await axios.get(`${url}/api/user/me`, {
-        headers: { token: authToken },
-      });
+      const res = await customerApi.get("/api/user/me");
       if (res.data.success) setUser(res.data.data);
     } catch (err) {
       console.error(err);
     }
-  }, [url]);
+  }, [customerApi]);
 
   /**
    * Add a dish, optionally with option picks and a kitchen note. The server
@@ -163,11 +163,7 @@ const StoreContextProvider = (props) => {
     }
 
     try {
-      const res = await axios.post(
-        `${url}/api/cart/add`,
-        { itemId, quantity, selectedOptions, note },
-        { headers: { token } }
-      );
+      const res = await customerApi.post("/api/cart/add", { itemId, quantity, selectedOptions, note });
       if (!res.data.success) throw new Error(res.data.message || "Add failed");
       applyCartResponse(res.data);
       return true;
@@ -186,11 +182,7 @@ const StoreContextProvider = (props) => {
   const updateLine = async (lineKey, quantity) => {
     if (!token) return false;
     try {
-      const res = await axios.post(
-        `${url}/api/cart/update-line`,
-        { lineKey, quantity },
-        { headers: { token } }
-      );
+      const res = await customerApi.post("/api/cart/update-line", { lineKey, quantity });
       if (!res.data.success) throw new Error(res.data.message);
       applyCartResponse(res.data);
       return true;
@@ -204,11 +196,7 @@ const StoreContextProvider = (props) => {
   const removeLine = async (lineKey) => {
     if (!token) return false;
     try {
-      const res = await axios.post(
-        `${url}/api/cart/remove-line`,
-        { lineKey },
-        { headers: { token } }
-      );
+      const res = await customerApi.post("/api/cart/remove-line", { lineKey });
       if (!res.data.success) throw new Error(res.data.message);
       applyCartResponse(res.data);
       return true;
@@ -224,11 +212,7 @@ const StoreContextProvider = (props) => {
       return;
     }
     try {
-      const res = await axios.post(
-        `${url}/api/cart/clear`,
-        {},
-        { headers: { token } }
-      );
+      const res = await customerApi.post("/api/cart/clear", {});
       if (res.data.success) clearLocalCart();
     } catch (err) {
       console.error("Clear cart error:", err);
@@ -324,10 +308,31 @@ const StoreContextProvider = (props) => {
     };
   }, []);
 
+  const logoutCustomer = useCallback(() => {
+    clearCustomerAuthStorage();
+    setToken("");
+    setUser(null);
+    clearLocalCart();
+    localStorage.removeItem("cartItems");
+    localStorage.removeItem("cartRestaurantId");
+  }, [clearLocalCart]);
+
+  useEffect(() => {
+    let notified = false;
+    customerClient.setSessionExpiredHandler(() => {
+      if (notified) return;
+      notified = true;
+      logoutCustomer();
+      setShowLogin(true);
+      toast.info("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+    });
+    return () => customerClient.setSessionExpiredHandler(null);
+  }, [customerClient, logoutCustomer]);
+
   useEffect(() => {
     if (token) {
-      fetchUserInfo(token);
-      loadCartData(token).finally(() => setIsHydrated(true));
+      fetchUserInfo();
+      loadCartData().finally(() => setIsHydrated(true));
     } else {
       clearLocalCart();
       setUser(null);
@@ -360,6 +365,9 @@ const StoreContextProvider = (props) => {
     url,
     token,
     setToken,
+    customerApi,
+    logoutCustomer,
+    resetCustomerSessionExpiry,
     showLogin,
     setShowLogin,
     cartRestaurantId,

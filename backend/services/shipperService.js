@@ -5,6 +5,8 @@ import AppError from "../utils/AppError.js";
 import { recordAudit } from "../utils/auditLog.js";
 import * as orderService from "./orderService.js";
 import { getShipperWalletSummary, requireShipperCanAcceptOrders, reserveCodLiability } from "./walletService.js";
+import { fetchLiveShipperRoute, shouldRefreshLiveRoute } from "./shipperRouteService.js";
+import { requireShipperWithinMetres } from "./shipperLocationVerificationService.js";
 
 const LOCATION_STALE_MS = 90 * 1000;
 const OFFER_RADIUS_METRES = 5000;
@@ -24,6 +26,19 @@ const requireApproved = (profile) => {
     throw new AppError("Shipper profile is pending approval", 403);
   }
 };
+
+const activeTrackingOrderFor = (shipperId, orderId) => Order.findOne({
+  _id: orderId,
+  shipperId,
+  deliveryMethod: "shipper",
+  $or: [
+    { orderStatus: "delivering", shipperAssignmentStatus: "picked_up" },
+    { orderStatus: "arrived_at_delivery", shipperAssignmentStatus: "arrived" },
+  ],
+}).select("_id orderStatus shipperAssignmentStatus shippingAddress liveShipperRoute");
+
+const hasCoordinates = (point) => Number.isFinite(point?.lat) && Number.isFinite(point?.lng) &&
+  Math.abs(point.lat) <= 90 && Math.abs(point.lng) <= 180;
 
 const requireFreshLocation = (profile) => {
   const fresh = profile.locationUpdatedAt && Date.now() - profile.locationUpdatedAt.getTime() <= LOCATION_STALE_MS;
@@ -55,7 +70,39 @@ export const updateLocation = async (userId, { lat, lng, pushToken }) => {
     },
     { new: true, runValidators: true }
   );
-  return { success: true, data: updated };
+
+  let trackingOrder = null;
+  if (updated?.currentOrder) {
+    const activeOrder = await activeTrackingOrderFor(userId, updated.currentOrder);
+    const origin = { lat, lng };
+    const destination = activeOrder?.shippingAddress;
+    if (activeOrder && hasCoordinates(origin) && hasCoordinates(destination)) {
+      trackingOrder = activeOrder;
+      if (activeOrder.orderStatus === "delivering" && activeOrder.shipperAssignmentStatus === "picked_up" && shouldRefreshLiveRoute(activeOrder.liveShipperRoute, origin, now)) {
+        try {
+          const liveShipperRoute = await fetchLiveShipperRoute({
+            origin,
+            destination,
+            now,
+            onFailure: ({ category, httpStatus }) => console.warn("Live shipper route refresh failed", {
+              orderId: String(activeOrder._id),
+              category,
+              ...(httpStatus && { httpStatus }),
+            }),
+          });
+          trackingOrder = await Order.findByIdAndUpdate(
+            activeOrder._id,
+            { $set: { liveShipperRoute } },
+            { new: true }
+          ).select("_id shippingAddress liveShipperRoute");
+        } catch {
+          // GPS delivery remains available if the external routing provider is temporarily unavailable.
+        }
+      }
+    }
+  }
+
+  return { success: true, data: updated, trackingOrder };
 };
 
 export const updateStatus = async (userId, status) => {
@@ -186,10 +233,27 @@ export const acceptOrder = async (user, orderId) => {
 };
 
 export const pickupOrder = async (user, orderId) => {
+  const profile = await getProfile(user._id);
+  requireApproved(profile);
+  const readyOrder = await Order.findOne({
+    _id: orderId,
+    deliveryMethod: "shipper",
+    shipperId: user._id,
+    shipperAssignmentStatus: "accepted",
+    orderStatus: "preparing",
+  }).populate("restaurantId", "lat lng");
+  if (!readyOrder) throw new AppError("Order is not ready for pickup", 409);
+
+  requireShipperWithinMetres({
+    profile,
+    target: { lat: readyOrder.restaurantId?.lat, lng: readyOrder.restaurantId?.lng },
+    message: "Vị trí của bạn chưa gần quán. Hãy đến trong phạm vi 200 m để xác nhận lấy hàng.",
+  });
+
   const now = new Date();
   const order = await Order.findOneAndUpdate(
     {
-      _id: orderId,
+      _id: readyOrder._id,
       deliveryMethod: "shipper",
       shipperId: user._id,
       shipperAssignmentStatus: "accepted",
@@ -204,8 +268,44 @@ export const pickupOrder = async (user, orderId) => {
   return { success: true, data: order };
 };
 
+export const arriveAtDelivery = async (user, orderId) => {
+  const profile = await getProfile(user._id);
+  requireApproved(profile);
+  const activeOrder = await Order.findOne({
+    _id: orderId,
+    deliveryMethod: "shipper",
+    shipperId: user._id,
+    shipperAssignmentStatus: "picked_up",
+    orderStatus: "delivering",
+  }).select("shippingAddress");
+  if (!activeOrder) throw new AppError("Order is not being delivered by this shipper", 409);
+
+  requireShipperWithinMetres({
+    profile,
+    target: { lat: activeOrder.shippingAddress?.lat, lng: activeOrder.shippingAddress?.lng },
+    message: "Vị trí của bạn chưa gần điểm giao. Hãy đến trong phạm vi 200 m để xác nhận đã tới điểm giao.",
+  });
+
+  const now = new Date();
+  const order = await Order.findOneAndUpdate(
+    {
+      _id: activeOrder._id,
+      deliveryMethod: "shipper",
+      shipperId: user._id,
+      shipperAssignmentStatus: "picked_up",
+      orderStatus: "delivering",
+    },
+    { $set: { orderStatus: "arrived_at_delivery", shipperAssignmentStatus: "arrived", shipperArrivedAt: now } },
+    { new: true }
+  );
+  if (!order) throw new AppError("Order is not being delivered by this shipper", 409);
+  await recordAudit({ actor: user, action: "shipper.order_arrived_at_delivery", targetType: "order", targetId: order._id });
+  return { success: true, data: order };
+};
+
 export const completeOrder = async (user, orderId) => {
   const result = await orderService.updateStatus(user, { orderId, status: "delivered" });
+  await Order.updateOne({ _id: orderId }, { $unset: { liveShipperRoute: 1 } });
   await ShipperProfile.findOneAndUpdate({ user: user._id, currentOrder: orderId }, { $set: { status: "available", currentOrder: null } });
   await recordAudit({ actor: user, action: "shipper.order_completed", targetType: "order", targetId: orderId });
   return result;

@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
 import {
   FlatList,
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -12,13 +11,14 @@ import { Badge } from "../../components/common/Badge";
 import { Button } from "../../components/common/Button";
 import { Header } from "../../components/common/Header";
 import { OrderReviewModal } from "../../components/orders/OrderReviewModal";
-import type { Order } from "../../types";
+import type { Order, ReviewFlow } from "../../types";
 
 interface OrdersScreenProps {
   orders: Order[];
   loading: boolean;
   onRefresh: () => void;
   onTrackOrder: (order: Order) => void;
+  onReviewFlowChanged: (orderId: string, updatedFlow: ReviewFlow) => void;
 }
 
 export const OrdersScreen: React.FC<OrdersScreenProps> = ({
@@ -26,6 +26,7 @@ export const OrdersScreen: React.FC<OrdersScreenProps> = ({
   loading,
   onRefresh,
   onTrackOrder,
+  onReviewFlowChanged,
 }) => {
   const [selectedReviewOrder, setSelectedReviewOrder] = useState<Order | null>(null);
 
@@ -58,7 +59,7 @@ export const OrdersScreen: React.FC<OrdersScreenProps> = ({
           </View>
         }
         renderItem={({ item }) => {
-          const isActive = ["pending", "preparing", "delivering"].includes(
+          const isActive = ["pending", "preparing", "delivering", "arrived_at_delivery"].includes(
             item.orderStatus
           );
           const isDrone = item.deliveryMethod === "drone";
@@ -107,35 +108,14 @@ export const OrdersScreen: React.FC<OrdersScreenProps> = ({
                 ))}
               </View>
 
-              {item.orderStatus === "delivered" && (
-                <View style={styles.reviewBanner}>
-                  {item.reviewFlow?.complete ? (
-                    <View style={styles.reviewCompleteRow}>
-                      <Text style={styles.reviewCompleteCheck}>✓</Text>
-                      <Text style={styles.reviewCompleteText}>
-                        Đã gửi đánh giá đơn hàng
-                      </Text>
-                    </View>
-                  ) : item.reviewFlow?.nextTarget ? (
-                    <View style={styles.reviewPromptRow}>
-                      <View style={styles.reviewPromptTextCol}>
-                        <Text style={styles.reviewPromptTitle}>
-                          Đã giao thành công
-                        </Text>
-                        <Text style={styles.reviewPromptSub} numberOfLines={1}>
-                          Đánh giá {item.reviewFlow.nextTarget.targetType === "shipper" ? "tài xế" : "món ăn"}: {item.reviewFlow.nextTarget.name}
-                        </Text>
-                      </View>
-                      <Pressable
-                        style={styles.reviewPromptBtn}
-                        onPress={() => setSelectedReviewOrder(item)}
-                      >
-                        <Text style={styles.reviewPromptBtnText}>Đánh giá ⭐</Text>
-                      </Pressable>
-                    </View>
-                  ) : null}
+              {item.orderStatus === "delivered" && item.reviewFlow?.complete ? (
+                <View style={styles.reviewCompleteRow}>
+                  <Text style={styles.reviewCompleteCheck}>✓</Text>
+                  <Text style={styles.reviewCompleteText}>
+                    Đã gửi đánh giá đơn hàng
+                  </Text>
                 </View>
-              )}
+              ) : null}
 
               <View style={styles.orderCardFooter}>
                 <View>
@@ -155,6 +135,23 @@ export const OrdersScreen: React.FC<OrdersScreenProps> = ({
                     style={styles.actionBtn}
                     onPress={() => onTrackOrder(item)}
                   />
+                ) : item.orderStatus === "delivered" ? (
+                  <View style={styles.deliveredActions}>
+                    {item.reviewFlow?.nextTarget ? (
+                      <Button
+                        label="Đánh giá"
+                        variant="secondary"
+                        style={styles.reviewActionBtn}
+                        onPress={() => setSelectedReviewOrder(item)}
+                      />
+                    ) : null}
+                    <Button
+                      label="Chi tiết đơn"
+                      variant="outline"
+                      style={styles.actionBtn}
+                      onPress={() => onTrackOrder(item)}
+                    />
+                  </View>
                 ) : (
                   <Button
                     label="Chi tiết đơn"
@@ -177,6 +174,7 @@ export const OrdersScreen: React.FC<OrdersScreenProps> = ({
           if (selectedReviewOrder && selectedReviewOrder._id === orderId) {
             setSelectedReviewOrder({ ...selectedReviewOrder, reviewFlow: updatedFlow });
           }
+          onReviewFlowChanged(orderId, updatedFlow);
           onRefresh();
         }}
       />
@@ -291,6 +289,17 @@ const styles = StyleSheet.create({
     minHeight: 38,
     paddingHorizontal: spacing.md,
   },
+  deliveredActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    flexShrink: 1,
+  },
+  reviewActionBtn: {
+    minWidth: 88,
+    minHeight: 38,
+    paddingHorizontal: spacing.sm,
+  },
   emptyContainer: {
     padding: spacing.xxl,
     alignItems: "center",
@@ -308,18 +317,11 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: "center",
   },
-  reviewBanner: {
-    marginVertical: spacing.xs,
-    padding: spacing.sm,
-    backgroundColor: "#FEF3C7",
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: "#FDE68A",
-  },
   reviewCompleteRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    marginVertical: spacing.xxs,
   },
   reviewCompleteCheck: {
     color: "#16A34A",
@@ -330,40 +332,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#15803D",
-  },
-  reviewPromptRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-  },
-  reviewPromptTextCol: {
-    flex: 1,
-  },
-  reviewPromptTitle: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#92400E",
-  },
-  reviewPromptSub: {
-    fontSize: 12,
-    color: "#B45309",
-    marginTop: 1,
-  },
-  reviewPromptBtn: {
-    backgroundColor: "#D97706",
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-    shadowColor: "#D97706",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  reviewPromptBtnText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "800",
   },
 });

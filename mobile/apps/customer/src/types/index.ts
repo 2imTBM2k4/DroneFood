@@ -94,6 +94,7 @@ export type OrderStatus =
   | "pending"
   | "preparing"
   | "delivering"
+  | "arrived_at_delivery"
   | "delivered"
   | "cancelled";
 
@@ -115,6 +116,21 @@ export type DroneTelemetry = {
   batteryPercent?: number;
   etaMinutes?: number;
   cargoState?: "locked" | "unlocked" | "open";
+};
+
+export type Coordinates = { lat: number; lng: number };
+
+export type LiveShipperRoute = {
+  origin: Coordinates;
+  geometry: [number, number][];
+  durationSeconds: number;
+  generatedAt: string;
+};
+
+export type ShipperTracking = {
+  location: Coordinates;
+  updatedAt: string;
+  route?: LiveShipperRoute;
 };
 
 export type Order = {
@@ -149,6 +165,8 @@ export type Order = {
     image?: string;
   };
   droneTelemetry?: DroneTelemetry;
+  tracking?: ShipperTracking;
+  shipperId?: { _id?: string; name?: string; phone?: string };
   reviewFlow?: ReviewFlow;
 };
 

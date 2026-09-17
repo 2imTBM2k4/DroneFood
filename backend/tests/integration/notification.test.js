@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import request from "supertest";
 import app from "../../app.js";
-import { Notification } from "../../models/index.cjs";
+import { ExpoPushToken, Notification } from "../../models/index.cjs";
 import { createAdmin, createUser, generateToken } from "../helpers.js";
 import { createAndEmit } from "../../services/notificationService.js";
 
@@ -62,5 +62,33 @@ describe("notification inbox", () => {
     const response = await request(app).get("/api/notifications").set("Authorization", `Bearer ${generateToken(admin._id)}`);
     expect(response.status).toBe(200);
     expect(response.body.data.data[0].role).toBe("admin");
+  });
+
+  it("registers a device token only for the authenticated account and removes it at logout", async () => {
+    const user = await createUser();
+    const other = await createUser();
+    const token = "ExpoPushToken[device-token-for-test]";
+
+    const registered = await request(app)
+      .post("/api/push-tokens/register")
+      .set("Authorization", `Bearer ${generateToken(user._id)}`)
+      .send({ token, platform: "android" });
+    expect(registered.status).toBe(200);
+    expect(await ExpoPushToken.countDocuments({ user: user._id, token })).toBe(1);
+
+    const reassigned = await request(app)
+      .post("/api/push-tokens/register")
+      .set("Authorization", `Bearer ${generateToken(other._id)}`)
+      .send({ token, platform: "android" });
+    expect(reassigned.status).toBe(200);
+    expect(await ExpoPushToken.countDocuments({ user: user._id, token })).toBe(0);
+    expect(await ExpoPushToken.countDocuments({ user: other._id, token })).toBe(1);
+
+    const removed = await request(app)
+      .post("/api/push-tokens/unregister")
+      .set("Authorization", `Bearer ${generateToken(other._id)}`)
+      .send({ token });
+    expect(removed.status).toBe(200);
+    expect(await ExpoPushToken.countDocuments({ token })).toBe(0);
   });
 });

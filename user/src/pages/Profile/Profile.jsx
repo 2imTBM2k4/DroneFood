@@ -1,5 +1,4 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
-import axios from "axios";
 import { toast } from "react-toastify";
 import { User, MapPin, Shield, Camera, LogIn, Loader2 } from "lucide-react";
 import { StoreContext } from "../../context/StoreContext";
@@ -15,7 +14,7 @@ const TABS = [
 ];
 
 const Profile = () => {
-  const { url, token, user, setUser, setShowLogin } = useContext(StoreContext);
+  const { token, customerApi, user, setUser, setShowLogin } = useContext(StoreContext);
   const [activeTab, setActiveTab] = useState("info");
   const fileInputRef = useRef(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -42,7 +41,6 @@ const Profile = () => {
     });
   }, [user]);
 
-  const authConfig = { headers: { token } };
   const handleAddressBookChange = useCallback((addressBook) => {
     setUser((current) => current ? { ...current, addressBook } : current);
   }, [setUser]);
@@ -65,7 +63,7 @@ const Profile = () => {
     formData.append("avatar", file);
     try {
       setUploadingAvatar(true);
-      const res = await axios.put(`${url}/api/user/avatar`, formData, authConfig);
+      const res = await customerApi.put("/api/user/avatar", formData);
       if (res.data.success) {
         setUser(res.data.data);
         toast.success("Avatar updated");
@@ -83,7 +81,7 @@ const Profile = () => {
     e.preventDefault();
     try {
       setSavingInfo(true);
-      const res = await axios.put(`${url}/api/user/profile`, info, authConfig);
+      const res = await customerApi.put("/api/user/profile", info);
       if (res.data.success) {
         setUser(res.data.data);
         toast.success("Profile updated");
@@ -109,14 +107,10 @@ const Profile = () => {
     }
     try {
       setSavingPassword(true);
-      const res = await axios.put(
-        `${url}/api/user/change-password`,
-        {
-          currentPassword: password.currentPassword,
-          newPassword: password.newPassword,
-        },
-        authConfig
-      );
+      const res = await customerApi.put("/api/user/change-password", {
+        currentPassword: password.currentPassword,
+        newPassword: password.newPassword,
+      });
       if (res.data.success) {
         toast.success(res.data.message || "Password changed");
         setPassword({
@@ -238,7 +232,7 @@ const Profile = () => {
         )}
 
         {activeTab === "address" && (
-          <AddressBookManager url={url} token={token} fullName={user?.name} onChange={handleAddressBookChange} />
+          <AddressBookManager fullName={user?.name} onChange={handleAddressBookChange} />
         )}
 
         {activeTab === "security" && (

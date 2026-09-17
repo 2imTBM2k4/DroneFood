@@ -204,6 +204,7 @@ export const settleDeliveredOrder = async (orderId, deliveredFields = {}) => run
   }
   order.restaurantSettlementTransaction = restaurantTransaction._id;
   order.shipperSettlementTransaction = shipperTransaction?._id || null;
+  if (order.deliveryMethod === "shipper") order.liveShipperRoute = undefined;
   await order.save({ session });
   return { alreadySettled: false, order, restaurantTransaction, shipperTransaction };
 });
@@ -371,7 +372,7 @@ export const handleShipperWalletPayosWebhook = async (payload) => {
   if (Math.round(Number(data.amount)) !== Math.round(payment.amount)) throw new AppError("PayOS shipper wallet amount does not match", 400);
   if (String(data.code) !== "00") return { newlyPaid: false, ignored: true };
   const settled = await settleDepositPayment(payment._id, data.reference || data.paymentLinkId, "PAYOS");
-  return { newlyPaid: !settled.alreadySettled, paymentId: payment._id, purpose: payment.purpose, ignored: false };
+  return { newlyPaid: !settled.alreadySettled, paymentId: payment._id, purpose: payment.purpose, transaction: settled.transaction || null, ignored: false };
 };
 
 // Kept for existing callers and legacy webhook tests.
@@ -392,8 +393,8 @@ export const handleDepositVnpayIpn = async (query) => {
     if (payment.status === "pending") { payment.status = "failed"; await payment.save(); }
     return { RspCode: "00", Message: "Confirm Success" };
   }
-  await settleDepositPayment(payment._id, query.vnp_TransactionNo || null);
-  return { RspCode: "00", Message: "Confirm Success" };
+  const settled = await settleDepositPayment(payment._id, query.vnp_TransactionNo || null);
+  return { RspCode: "00", Message: "Confirm Success", settlement: settled };
 };
 
 export const listShipperTransactions = async (shipperId) => walletRepo.listTransactions({ ownerId: shipperId });

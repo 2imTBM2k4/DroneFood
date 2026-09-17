@@ -11,7 +11,7 @@ import {
 import { colors, radius, spacing, typography } from "../../theme/tokens";
 import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
-import { apiError, authApi, setStoredToken } from "../../api/client";
+import { apiError, authApi, removeStoredRefreshToken, resetSessionExpiryNotification, setStoredRefreshToken, setStoredToken } from "../../api/client";
 
 interface AuthScreenProps {
   onSuccess: (token: string) => void;
@@ -42,10 +42,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
       if (mode === "login") {
         const res = await authApi.login(email, password);
         await setStoredToken(res.token);
+        if (res.refreshToken) await setStoredRefreshToken(res.refreshToken);
+        else await removeStoredRefreshToken();
+        resetSessionExpiryNotification();
         onSuccess(res.token);
       } else {
         const res = await authApi.register(name, email, password, phone);
         await setStoredToken(res.token);
+        if (res.refreshToken) await setStoredRefreshToken(res.refreshToken);
+        else await removeStoredRefreshToken();
+        resetSessionExpiryNotification();
         onSuccess(res.token);
       }
     } catch (cause) {
