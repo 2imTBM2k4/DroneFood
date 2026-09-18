@@ -6,7 +6,6 @@ import {
   Package,
   LogIn,
   Clock,
-  MapPin,
   Bike,
   Navigation,
   ChevronRight,
@@ -514,7 +513,6 @@ const MyOrders = () => {
 
                       {isCancellationLockedByShipper(order) && (
                         <div className="order-alert-banner alert-neutral cancellation-lock-banner" role="status">
-                          <Bike size={16} aria-hidden="true" />
                           <div>
                             <strong>Đơn đã có tài xế nhận</strong>
                             <p>Bạn không thể hủy đơn hoặc gửi yêu cầu hoàn tiền ở thời điểm này.</p>
@@ -541,7 +539,6 @@ const MyOrders = () => {
                       <div className="order-card-footer">
                         <div className="order-footer-details">
                           <div className="footer-address">
-                            <MapPin size={14} className="address-icon" />
                             <span className="address-text">
                               {[
                                 order.shippingAddress?.fullName,
@@ -575,7 +572,6 @@ const MyOrders = () => {
                                   disabled={retryingPaymentId === order._id}
                                   aria-busy={retryingPaymentId === order._id}
                                 >
-                                  <RotateCcw size={14} aria-hidden="true" className={retryingPaymentId === order._id ? "spin-icon" : ""} />
                                   <span>{retryingPaymentId === order._id ? "Đang tạo link…" : "Thanh toán lại"}</span>
                                 </button>
                               )}

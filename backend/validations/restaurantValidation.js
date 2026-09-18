@@ -15,6 +15,14 @@ export const createRestaurantSchema = Joi.object({
     }),
   email: Joi.string().trim().email().allow("", null),
   description: Joi.string().trim().max(500).allow("", null),
+  openingHours: Joi.alternatives().try(
+    Joi.object({
+      openTime: Joi.string().pattern(/^([01]\d|2[0-3]):[0-5]\d$/).default("07:00"),
+      closeTime: Joi.string().pattern(/^([01]\d|2[0-3]):[0-5]\d$/).default("22:00"),
+    }),
+    Joi.string()
+  ).optional().allow(null),
+  isOpen: Joi.boolean().optional(),
 });
 
 export const updateRestaurantSchema = Joi.object({
@@ -26,6 +34,14 @@ export const updateRestaurantSchema = Joi.object({
     .allow("", null),
   email: Joi.string().trim().email().allow("", null),
   description: Joi.string().trim().max(500).allow("", null),
+  openingHours: Joi.alternatives().try(
+    Joi.object({
+      openTime: Joi.string().pattern(/^([01]\d|2[0-3]):[0-5]\d$/),
+      closeTime: Joi.string().pattern(/^([01]\d|2[0-3]):[0-5]\d$/),
+    }),
+    Joi.string()
+  ).optional().allow(null),
+  isOpen: Joi.boolean().optional(),
 });
 
 export const deleteRestaurantSchema = Joi.object({

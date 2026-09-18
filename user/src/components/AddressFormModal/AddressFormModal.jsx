@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MapPin, X } from "lucide-react";
+import { X } from "lucide-react";
 import LocationPicker from "../LocationPicker/LocationPicker";
 import { emptyDeliveryAddress } from "./addressFormModel";
 import "./AddressFormModal.css";
@@ -43,7 +43,7 @@ const AddressFormModal = ({ open, title, description, initial, fullName, submitL
 
   return <div className="address-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}>
     <section className="address-modal" role="dialog" aria-modal="true" aria-labelledby="address-modal-title">
-      <header><div><p className="address-modal-kicker"><MapPin size={14} aria-hidden="true" /> Delivery address</p><h2 id="address-modal-title">{title}</h2>{description && <p>{description}</p>}</div><button ref={closeRef} type="button" className="address-modal-close" onClick={onClose} disabled={saving} aria-label="Close address form"><X size={18} /></button></header>
+      <header><div><p className="address-modal-kicker">Delivery address</p><h2 id="address-modal-title">{title}</h2>{description && <p>{description}</p>}</div><button ref={closeRef} type="button" className="address-modal-close" onClick={onClose} disabled={saving} aria-label="Close address form"><X size={18} /></button></header>
       <form onSubmit={submit}>
         {submitLabel.toLowerCase().includes("save") && <label>Address label<input required name="label" value={form.label} onChange={change} placeholder="Home, office…" /></label>}
         <label>Fullname<input value={fullName || ""} readOnly aria-readonly="true" /></label>
@@ -54,8 +54,8 @@ const AddressFormModal = ({ open, title, description, initial, fullName, submitL
         <label>Province / state<input required name="state" value={form.state} onChange={change} autoComplete="address-level1" /></label>
         <label>Country<input required name="country" value={form.country} onChange={change} autoComplete="country-name" /></label>
         <label>Postal code<input name="zipCode" value={form.zipCode} onChange={change} autoComplete="postal-code" /></label>
-        <label>Latitude<input required type="number" step="any" name="lat" value={form.lat ?? ""} onChange={change} /></label>
-        <label>Longitude<input required type="number" step="any" name="lng" value={form.lng ?? ""} onChange={change} /></label>
+        <input type="hidden" name="lat" value={form.lat ?? ""} />
+        <input type="hidden" name="lng" value={form.lng ?? ""} />
         <footer><button type="button" onClick={onClose} disabled={saving}>Cancel</button><button type="submit" disabled={saving}>{saving ? "Saving…" : submitLabel}</button></footer>
       </form>
     </section>

@@ -3,7 +3,7 @@ import "./Cart.css";
 import { StoreContext } from "../../context/StoreContext";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-import { ShoppingCart, Store, Trash2, Plus, Minus } from "lucide-react";
+import { ShoppingCart, Trash2, Plus, Minus } from "lucide-react";
 import { EmptyState } from "../../../../shared/components/StateBlock";
 import ItemOptionsSheet from "../../components/ItemOptionsSheet/ItemOptionsSheet";
 import { formatVND } from "../../../../shared/utils/money";
@@ -149,7 +149,6 @@ const Cart = () => {
                   className="cart-restaurant"
                   onClick={() => navigate(`/restaurant/${restaurant._id}`)}
                 >
-                  <Store size={15} />
                   <span>{restaurant.name}</span>
                 </button>
               )}
@@ -235,7 +234,7 @@ const Cart = () => {
                 navigate(restaurant ? `/restaurant/${restaurant._id}` : "/restaurants")
               }
             >
-              + Add more items
+              Add more items
             </button>
           </div>
 

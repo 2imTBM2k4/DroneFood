@@ -17,6 +17,7 @@ import { attachReviewFlows } from "./orderReviewService.js";
 import { Order, ShipperProfile } from "../models/index.cjs";
 import { isCustomerTrackableShipperOrder, serialiseLiveShipperRoute } from "../utils/orderRealtime.js";
 import { logger } from "../utils/logger.js";
+import { isRestaurantOpenNow } from "../utils/openingHours.js";
 
 const VNPAY_DEFAULT_URL = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
 const SHIPPER_ASSIGNMENT_WINDOW_MS = 10 * 60 * 1000;
@@ -100,7 +101,7 @@ const resolveShippingAddress = async (userId, { address, addressEntryId }) => {
   throw new AppError("Shipping address is required.", 400);
 };
 
-export const quoteDelivery = async (user, { address, addressEntryId, deliveryMethod, voucherCode }) => {
+export const quoteDelivery = async (user, { address, addressEntryId, deliveryMethod, voucherCode, voucherCodes }) => {
   const shippingAddress = await resolveShippingAddress(user._id, { address, addressEntryId });
   const cart = await cartRepo.findByUserId(user._id);
   const firstLine = (cart?.items || []).find((line) => line.foodId);
@@ -116,15 +117,18 @@ export const quoteDelivery = async (user, { address, addressEntryId, deliveryMet
     origin: { lat: restaurant.lat, lng: restaurant.lng },
     destination: { lat: shippingAddress.lat, lng: shippingAddress.lng },
   });
-  if (!voucherCode) return deliveryQuote;
+
+  const rawCodes = Array.isArray(voucherCodes) ? voucherCodes : (voucherCode ? [voucherCode] : []);
+  const codes = rawCodes.map((c) => String(c).trim()).filter(Boolean);
+  if (codes.length === 0) return deliveryQuote;
 
   const itemsPrice = (cart.items || []).reduce((sum, line) => {
     const food = line.foodId;
     return sum + (food ? computeUnitPrice(food, line.selectedOptions || []) * line.quantity : 0);
   }, 0);
   const totals = computeOrderTotals(itemsPrice, deliveryQuote.shippingPrice);
-  const voucherApplication = await voucherService.validateVoucherForOrder({
-    code: voucherCode,
+  const multiVoucherResult = await voucherService.validateVouchersForOrder({
+    codes,
     userId: user._id,
     itemsPrice: totals.subtotal,
     shippingPrice: totals.deliveryFee,
@@ -133,9 +137,10 @@ export const quoteDelivery = async (user, { address, addressEntryId, deliveryMet
     ...deliveryQuote,
     itemsPrice: totals.subtotal,
     serviceFee: totals.serviceFee,
-    discountAmount: voucherApplication.discountAmount,
-    voucher: voucherApplication.snapshot,
-    totalPrice: totals.total - voucherApplication.discountAmount,
+    discountAmount: multiVoucherResult.totalDiscountAmount,
+    voucher: multiVoucherResult.snapshots[0] || null,
+    vouchers: multiVoucherResult.snapshots,
+    totalPrice: Math.max(0, totals.total - multiVoucherResult.totalDiscountAmount),
   };
 };
 
@@ -194,9 +199,12 @@ export const placeOrder = async (user, orderData, clientIp) => {
   if (!restaurant) {
     throw new AppError("Restaurant not found.", 404);
   }
-  if (restaurant.isOpen === false) {
+  if (!isRestaurantOpenNow(restaurant)) {
+    const hoursText = restaurant.openingHours?.openTime && restaurant.openingHours?.closeTime
+      ? ` (Giờ mở cửa: ${restaurant.openingHours.openTime} - ${restaurant.openingHours.closeTime})`
+      : "";
     throw new AppError(
-      "This restaurant is currently closed and is not taking orders.",
+      `Nhà hàng hiện đang đóng cửa và tạm ngưng nhận đơn${hoursText}. Quý khách vui lòng quay lại sau.`,
       409
     );
   }
@@ -207,16 +215,19 @@ export const placeOrder = async (user, orderData, clientIp) => {
     destination: { lat: shippingAddress.lat, lng: shippingAddress.lng },
   });
   const totals = computeOrderTotals(subtotal, deliveryQuote.shippingPrice);
-  const voucherApplication = voucherCode
-    ? await voucherService.validateVoucherForOrder({
-      code: voucherCode,
+
+  const rawCodes = Array.isArray(orderData.voucherCodes) ? orderData.voucherCodes : (orderData.voucherCode ? [orderData.voucherCode] : []);
+  const codes = rawCodes.map((c) => String(c).trim()).filter(Boolean);
+  const multiVoucherResult = codes.length > 0
+    ? await voucherService.validateVouchersForOrder({
+      codes,
       userId: user._id,
       itemsPrice: totals.subtotal,
       shippingPrice: totals.deliveryFee,
     })
     : null;
-  const discountAmount = voucherApplication?.discountAmount || 0;
-  const payableTotal = totals.total - discountAmount;
+  const discountAmount = multiVoucherResult?.totalDiscountAmount || 0;
+  const payableTotal = Math.max(0, totals.total - discountAmount);
   const financialSnapshot = {
     restaurantSharePercent: 80,
     platformFoodCommissionPercent: 20,
@@ -260,10 +271,11 @@ export const placeOrder = async (user, orderData, clientIp) => {
     totalPrice: payableTotal,
     shippingPrice: totals.deliveryFee,
     serviceFee: totals.serviceFee,
-    ...(voucherApplication && {
-      voucherSnapshot: voucherApplication.snapshot,
+    ...(multiVoucherResult && multiVoucherResult.applications.length > 0 && {
+      voucherSnapshot: multiVoucherResult.snapshots[0],
+      voucherSnapshots: multiVoucherResult.snapshots,
       discountAmount,
-      discountTargetAmount: voucherApplication.targetAmount,
+      discountTargetAmount: multiVoucherResult.applications.reduce((s, a) => s + a.targetAmount, 0),
     }),
     restaurantId: restaurantId,
     isPaid: false,
@@ -271,17 +283,19 @@ export const placeOrder = async (user, orderData, clientIp) => {
     orderStatus: isOnlinePayment(paymentMethod) ? "pending_payment" : "pending",
   };
   let newOrder;
-  if (voucherApplication) {
+  if (multiVoucherResult && multiVoucherResult.applications.length > 0) {
     const session = await mongoose.startSession();
     try {
       await session.withTransaction(async () => {
         newOrder = await orderRepo.create(newOrderData, { session });
-        await voucherRepo.reserveForOrder({
-          voucher: voucherApplication.voucher,
-          userId: user._id,
-          orderId: newOrder._id,
-          discountAmount,
-        }, session);
+        for (const app of multiVoucherResult.applications) {
+          await voucherRepo.reserveForOrder({
+            voucher: app.voucher,
+            userId: user._id,
+            orderId: newOrder._id,
+            discountAmount: app.discountAmount,
+          }, session);
+        }
       });
     } finally {
       await session.endSession();

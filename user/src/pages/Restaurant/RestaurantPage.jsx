@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback, useContext } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { MapPin, Phone, Star, Clock, Bike, Navigation, UtensilsCrossed, Store } from "lucide-react";
+import { Star, Store, UtensilsCrossed } from "lucide-react";
 import "./RestaurantPage.css";
 import { StoreContext } from "../../context/StoreContext";
 import FoodDisplay from "../../components/FoodDisplay/FoodDisplay";
@@ -267,44 +267,40 @@ const RestaurantPage = () => {
 
             <div className="restaurant-hero-meta">
               <span className="restaurant-hero-meta-item">
-                <MapPin size={14} />
                 {restaurant.address}
               </span>
               {restaurant.phone && (
                 <span className="restaurant-hero-meta-item">
-                  <Phone size={14} />
                   {restaurant.phone}
                 </span>
               )}
               {typeof distanceKm === "number" && (
                 <span className="restaurant-hero-meta-item">
-                  <Navigation size={14} />
                   {formatDistance(distanceKm)}
                 </span>
               )}
               <span className="restaurant-hero-meta-item">
-                <Clock size={14} />
-                {etaMin ? `${etaMin} min` : "15–25 min"}
+                Giờ mở cửa: {restaurant.openingHours?.openTime || "07:00"} - {restaurant.openingHours?.closeTime || "22:00"}
               </span>
               <span className="restaurant-hero-meta-item">
-                <Bike size={14} />
+                {etaMin ? `${etaMin} phút` : "15–25 phút"}
+              </span>
+              <span className="restaurant-hero-meta-item">
                 {typeof deliveryFee === "number"
-                  ? `${formatVND(deliveryFee)} delivery`
-                  : "Delivery calculated at checkout"}
+                  ? `${formatVND(deliveryFee)} giao hàng`
+                  : "Phí giao tính lúc checkout"}
               </span>
             </div>
 
-            {restaurant.isOpen === false && (
+            {(restaurant.isOpen === false || restaurant.isOpenNow === false) && (
               <p className="restaurant-hero-closed">
-                Closed right now — this restaurant isn&apos;t taking orders at the
-                moment. Please check back later.
+                Nhà hàng hiện đang đóng cửa (Giờ hoạt động: {restaurant.openingHours?.openTime || "07:00"} - {restaurant.openingHours?.closeTime || "22:00"}). Quý khách vui lòng quay lại trong giờ mở cửa.
               </p>
             )}
 
             {restaurant.isLocked && (
               <p className="restaurant-hero-closed">
-                Temporarily unavailable — this restaurant is not accepting orders
-                right now.
+                Nhà hàng tạm thời ngưng hoạt động — không nhận đơn hàng vào lúc này.
               </p>
             )}
           </div>

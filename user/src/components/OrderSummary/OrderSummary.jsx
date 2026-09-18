@@ -92,7 +92,13 @@ const OrderSummary = ({ collapsible = true, deliveryQuote = null }) => {
           )}
           {discountAmount > 0 && (
             <div className="order-summary-row order-summary-discount" aria-live="polite">
-              <span>{voucherCode ? `Voucher ${voucherCode}` : "Voucher"}</span>
+              <span>
+                {deliveryQuote?.vouchers?.length > 1
+                  ? `Voucher (${deliveryQuote.vouchers.map((v) => v.code).join(" + ")})`
+                  : voucherCode
+                  ? `Voucher ${voucherCode}`
+                  : "Voucher"}
+              </span>
               <span className="ds-num">-{formatVND(discountAmount)}</span>
             </div>
           )}

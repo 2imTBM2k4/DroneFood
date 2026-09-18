@@ -7,7 +7,7 @@ import { StoreContext } from "../../context/StoreContext";
 import ItemOptionsSheet from "../ItemOptionsSheet/ItemOptionsSheet";
 import { formatVND } from "../../../../shared/utils/money";
 
-function FoodItem({ id, name, price, description, image, optionGroups = [] }) {
+function FoodItem({ id, name, price, description, image, optionGroups = [], isBestSeller, salesCount }) {
   const { url, food_list, fetchSingleFood } = useContext(StoreContext);
   const navigate = useNavigate();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -61,6 +61,8 @@ function FoodItem({ id, name, price, description, image, optionGroups = [] }) {
     description,
     image,
     optionGroups: currentOptionGroups || [],
+    isBestSeller,
+    salesCount,
   };
 
   const hasOptions = (currentOptionGroups || []).length > 0;
@@ -95,6 +97,9 @@ function FoodItem({ id, name, price, description, image, optionGroups = [] }) {
               e.target.src = assets.sample_food || assets.logo;
             }}
           />
+          {(isBestSeller || (typeof salesCount === "number" && salesCount >= 10)) && (
+            <span className="food-item-bestseller-badge">Bán chạy</span>
+          )}
           <button
             type="button"
             className="apple-card-add-btn button-icon-circular"

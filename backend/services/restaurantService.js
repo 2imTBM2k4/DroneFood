@@ -6,16 +6,21 @@ import AppError from "../utils/AppError.js";
 import { geocodeAddress } from "../utils/geocode.js";
 import { recordAudit } from "../utils/auditLog.js";
 import { getRestaurantRatingSummaries } from "./orderReviewService.js";
+import { isRestaurantOpenNow } from "../utils/openingHours.js";
 
 export const listRestaurants = async ({ page, limit } = {}) => {
   const result = await restaurantRepo.findAll({ page, limit });
   const ratingSummaries = await getRestaurantRatingSummaries(
     result.data.map((restaurant) => restaurant._id)
   );
-  const data = result.data.map((restaurant) => ({
-    ...restaurant.toObject(),
-    ...(ratingSummaries.get(String(restaurant._id)) || {}),
-  }));
+  const data = result.data.map((restaurant) => {
+    const obj = typeof restaurant.toObject === "function" ? restaurant.toObject() : restaurant;
+    return {
+      ...obj,
+      isOpenNow: isRestaurantOpenNow(restaurant),
+      ...(ratingSummaries.get(String(restaurant._id)) || {}),
+    };
+  });
   return { success: true, data, ...(result.pagination && { pagination: result.pagination }) };
 };
 
@@ -63,6 +68,14 @@ export const updateRestaurant = async (user, id, updates, file) => {
     }
   }
 
+  if (typeof updates.openingHours === "string") {
+    try {
+      updates.openingHours = JSON.parse(updates.openingHours);
+    } catch {
+      // Keep as is if parsing fails
+    }
+  }
+
   const restaurant = await restaurantRepo.updateById(id, updates);
   if (!restaurant) {
     throw new AppError("Restaurant not found", 404);
@@ -70,7 +83,10 @@ export const updateRestaurant = async (user, id, updates, file) => {
   return {
     success: true,
     message: "Restaurant updated successfully",
-    data: restaurant,
+    data: {
+      ...(typeof restaurant.toObject === "function" ? restaurant.toObject() : restaurant),
+      isOpenNow: isRestaurantOpenNow(restaurant),
+    },
   };
 };
 
@@ -91,6 +107,13 @@ export const createRestaurant = async (user, data, file) => {
     fs.unlinkSync(file.path);
   }
   const restaurantData = { ...data, image: imageUrl, owner: user._id };
+  if (typeof restaurantData.openingHours === "string") {
+    try {
+      restaurantData.openingHours = JSON.parse(restaurantData.openingHours);
+    } catch {
+      // Keep as is
+    }
+  }
 
   // Geocode the address so the storefront can rank this restaurant by distance.
   if (restaurantData.address) {
@@ -108,7 +131,10 @@ export const createRestaurant = async (user, data, file) => {
   return {
     success: true,
     message: "Restaurant created successfully",
-    data: newRestaurant,
+    data: {
+      ...(typeof newRestaurant.toObject === "function" ? newRestaurant.toObject() : newRestaurant),
+      isOpenNow: isRestaurantOpenNow(newRestaurant),
+    },
   };
 };
 
@@ -159,6 +185,7 @@ export const getRestaurantById = async (id) => {
     success: true,
     data: {
       ...(typeof restaurant.toObject === "function" ? restaurant.toObject() : restaurant),
+      isOpenNow: isRestaurantOpenNow(restaurant),
       ...ratingData,
     },
   };

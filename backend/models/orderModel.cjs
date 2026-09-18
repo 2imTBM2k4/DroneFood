@@ -141,6 +141,18 @@ const orderSchema = new mongoose.Schema(
       minOrderAmount: { type: Number, default: 0, min: 0 },
       maxDiscountAmount: { type: Number, default: null, min: 0 },
     },
+    voucherSnapshots: [
+      {
+        voucherId: { type: mongoose.Schema.Types.ObjectId, ref: "Voucher", default: null },
+        code: { type: String, default: "" },
+        kind: { type: String, enum: ["fixed", "percent", ""], default: "" },
+        value: { type: Number, default: 0, min: 0 },
+        appliesTo: { type: String, enum: ["items_subtotal", "shipping_fee", ""], default: "" },
+        minOrderAmount: { type: Number, default: 0, min: 0 },
+        maxDiscountAmount: { type: Number, default: null, min: 0 },
+        discountAmount: { type: Number, default: 0, min: 0 },
+      },
+    ],
     discountAmount: { type: Number, default: 0, min: 0 },
     discountTargetAmount: { type: Number, default: 0, min: 0 },
     // A reservation is exposure, not a wallet balance. It is released once

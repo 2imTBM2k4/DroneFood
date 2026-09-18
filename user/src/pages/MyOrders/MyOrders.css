@@ -261,8 +261,9 @@
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  background: rgba(0, 102, 204, 0.08);
-  color: var(--apple-primary, #0066cc);
+  background: #f4f4f5;
+  color: #18181b;
+  border: 1px solid rgba(0, 0, 0, 0.06);
   flex-shrink: 0;
 }
 

@@ -346,26 +346,17 @@
   height: 40px;
   border-radius: 12px;
   flex-shrink: 0;
+  background: #f4f4f5;
+  color: #18181b;
+  border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-.card-header-icon.drone-bg {
-  background: rgba(0, 102, 204, 0.1);
-  color: var(--apple-primary, #0066cc);
-}
-
-.card-header-icon.shipper-bg {
-  background: rgba(255, 149, 0, 0.1);
-  color: #b26a00;
-}
-
-.card-header-icon.timeline-bg {
-  background: rgba(90, 93, 237, 0.1);
-  color: #4c4ff5;
-}
-
+.card-header-icon.drone-bg,
+.card-header-icon.shipper-bg,
+.card-header-icon.timeline-bg,
 .card-header-icon.items-bg {
-  background: rgba(52, 199, 89, 0.1);
-  color: #248a3d;
+  background: #f4f4f5;
+  color: #18181b;
 }
 
 .card-header-line h2 {
@@ -808,16 +799,15 @@
   height: 32px;
   border-radius: 10px;
   flex-shrink: 0;
+  background: #f4f4f5;
+  color: #18181b;
+  border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-.endpoint-icon-box.store-color {
-  background: rgba(0, 102, 204, 0.1);
-  color: var(--apple-primary, #0066cc);
-}
-
+.endpoint-icon-box.store-color,
 .endpoint-icon-box.dropoff-color {
-  background: rgba(52, 199, 89, 0.12);
-  color: #248a3d;
+  background: #f4f4f5;
+  color: #18181b;
 }
 
 .endpoint-details {
@@ -861,13 +851,13 @@
   margin-top: 18px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: rgba(255, 149, 0, 0.06);
-  border: 1px solid rgba(255, 149, 0, 0.2);
+  background: #fafafa;
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .assigned-delivery-box.drone-box {
-  background: rgba(0, 102, 204, 0.05);
-  border-color: rgba(0, 102, 204, 0.18);
+  background: #fafafa;
+  border-color: rgba(0, 0, 0, 0.08);
 }
 
 .assigned-icon {
@@ -877,14 +867,14 @@
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: #ffffff;
-  color: #b26a00;
+  background: #f4f4f5;
+  color: #18181b;
   flex-shrink: 0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .assigned-icon.drone-color {
-  color: var(--apple-primary, #0066cc);
+  color: #18181b;
 }
 
 .assigned-meta {

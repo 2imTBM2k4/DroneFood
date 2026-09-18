@@ -1,6 +1,6 @@
 import { useContext, useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Plus, Star, ArrowLeft } from "lucide-react";
+import { Star, ArrowLeft } from "lucide-react";
 import "./ProductDetail.css";
 import { StoreContext } from "../../context/StoreContext";
 import { ErrorState } from "../../../../shared/components/StateBlock";
@@ -129,6 +129,9 @@ const ProductDetail = () => {
               e.target.src = assets.sample_food || assets.logo;
             }}
           />
+          {(item.isBestSeller || (typeof item.salesCount === "number" && item.salesCount >= 10)) && (
+            <span className="food-item-bestseller-badge">Bán chạy</span>
+          )}
         </div>
         <div className="product-detail-info">
           <div className="product-detail-name-rating">
@@ -158,31 +161,11 @@ const ProductDetail = () => {
 
           <div className="product-detail-cart">
             <button className="add-detail" onClick={() => setSheetOpen(true)}>
-              <Plus size={18} strokeWidth={2.5} />
               {optionGroups.length > 0 ? "Choose options" : "Add to cart"}
             </button>
           </div>
         </div>
       </div>
-
-      <section className="product-detail-reviews" aria-labelledby="food-reviews-title">
-        <h3 id="food-reviews-title">Đánh giá món ăn</h3>
-        {reviewSummary.reviews.length === 0 ? (
-          <p>Chưa có đánh giá nào cho món này.</p>
-        ) : (
-          <ul>
-            {reviewSummary.reviews.map((review) => (
-              <li key={review._id}>
-                <div className="product-review-head">
-                  <strong>{review.reviewerName}</strong>
-                  <span><Star size={14} fill="currentColor" aria-hidden="true" /> {review.rating}</span>
-                </div>
-                {review.comment && <p>{review.comment}</p>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
 
       {sheetOpen && (
         <ItemOptionsSheet item={item} onClose={() => setSheetOpen(false)} />

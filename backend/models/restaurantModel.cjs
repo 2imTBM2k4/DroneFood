@@ -36,6 +36,11 @@ const restaurantSchema = new mongoose.Schema(
     // The owner's own open/closed switch. Closed hides the restaurant from
     // customers and refuses new orders, but the owner keeps full access.
     isOpen: { type: Boolean, default: true },
+    // Scheduled daily opening hours in HH:mm 24h format (e.g. 07:00 to 22:00).
+    openingHours: {
+      openTime: { type: String, default: "07:00" },
+      closeTime: { type: String, default: "22:00" },
+    },
   },
   { timestamps: true }
 );

@@ -10,12 +10,8 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowLeft,
-  Phone,
   ShieldCheck,
   UtensilsCrossed,
-  Receipt,
-  CreditCard,
-  RotateCcw,
   Sparkles,
 } from "lucide-react";
 import { MapContainer, Marker, Polyline, TileLayer, Popup, useMap } from "react-leaflet";
@@ -396,8 +392,8 @@ const OrderDetail = () => {
                 className="btn-retry-payos"
                 onClick={retryPayosPayment}
                 disabled={retryingPayment}
+                aria-busy={retryingPayment}
               >
-                <RotateCcw size={14} className={retryingPayment ? "spin-icon" : ""} />
                 <span>{retryingPayment ? "Đang tạo link…" : "Thanh toán lại"}</span>
               </button>
             )}
@@ -414,7 +410,6 @@ const OrderDetail = () => {
             )}
             {isCancellationLockedByShipper && (
               <p className="cancellation-locked-notice" role="status">
-                <Bike size={15} aria-hidden="true" />
                 <span>Tài xế đã nhận đơn — không thể hủy hoặc hoàn tiền.</span>
               </p>
             )}
@@ -424,7 +419,6 @@ const OrderDetail = () => {
               onClick={load}
               title="Làm mới trạng thái"
             >
-              <RotateCcw size={15} />
               <span>Cập nhật</span>
             </button>
           </div>
@@ -743,7 +737,6 @@ const OrderDetail = () => {
             {/* Route & Delivery Info Card */}
             <section className="detail-card route-info-card" aria-label="Thông tin lộ trình">
               <div className="side-card-title">
-                <MapPin size={16} />
                 <h3>Lộ trình giao hàng</h3>
               </div>
 
@@ -798,7 +791,6 @@ const OrderDetail = () => {
                     </strong>
                     {order.shipperId?.phone && (
                       <a href={`tel:${order.shipperId.phone}`} className="assigned-phone-link">
-                        <Phone size={13} />
                         <span>{order.shipperId.phone}</span>
                       </a>
                     )}
@@ -828,7 +820,6 @@ const OrderDetail = () => {
             {/* Payment & Price Summary Card */}
             <section className="detail-card payment-summary-card" aria-label="Tóm tắt thanh toán">
               <div className="side-card-title">
-                <Receipt size={16} />
                 <h3>Chi tiết thanh toán</h3>
               </div>
 
@@ -871,7 +862,6 @@ const OrderDetail = () => {
               {/* Payment Method Details */}
               <div className="summary-payment-method">
                 <div className="method-label-group">
-                  <CreditCard size={15} />
                   <span>Phương thức thanh toán</span>
                 </div>
                 <div className="method-value-group">
@@ -899,7 +889,6 @@ const OrderDetail = () => {
                       disabled={retryingPayment}
                       aria-busy={retryingPayment}
                     >
-                      <RotateCcw size={15} aria-hidden="true" className={retryingPayment ? "spin-icon" : ""} />
                       <span>{retryingPayment ? "Đang tạo link…" : "Thanh toán lại"}</span>
                     </button>
                   </div>

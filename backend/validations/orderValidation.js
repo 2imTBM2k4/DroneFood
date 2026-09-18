@@ -34,6 +34,9 @@ export const placeOrderSchema = Joi.object({
     "any.required": "Phương thức giao hàng là bắt buộc",
   }),
   voucherCode: Joi.string().trim().uppercase().pattern(/^[A-Z0-9_-]+$/).min(3).max(32).allow("", null),
+  voucherCodes: Joi.array().items(
+    Joi.string().trim().uppercase().pattern(/^[A-Z0-9_-]+$/).min(3).max(32)
+  ).max(5).optional(),
   restaurantId: Joi.alternatives()
     .try(Joi.string().trim(), Joi.object())
     .optional(),
@@ -46,6 +49,9 @@ export const deliveryQuoteSchema = Joi.object({
   addressEntryId: Joi.string().trim().hex().length(24),
   deliveryMethod: placeOrderSchema.extract("deliveryMethod"),
   voucherCode: placeOrderSchema.extract("voucherCode"),
+  voucherCodes: Joi.array().items(
+    Joi.string().trim().uppercase().pattern(/^[A-Z0-9_-]+$/).min(3).max(32)
+  ).max(5).optional(),
 }).or("address", "addressEntryId").messages({
   "object.missing": "Địa chỉ giao hàng là bắt buộc",
 });

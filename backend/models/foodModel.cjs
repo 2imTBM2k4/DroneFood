@@ -40,10 +40,12 @@ const foodSchema = new mongoose.Schema({
     },
     image:{type:String,required:true},
     category:{type:String,required:true},
-    restaurantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Restaurant', required: true },  // Mới: Liên kết với restaurant
+    restaurantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Restaurant', required: true },
     // Owners can temporarily hide an out-of-stock dish without deleting its
     // menu record or breaking historical order snapshots.
     isAvailable: { type: Boolean, default: true, index: true },
+    isBestSeller: { type: Boolean, default: false, index: true },
+    salesCount: { type: Number, default: 0, min: 0, index: true },
     // Dishes created before options existed simply have an empty array.
     optionGroups: { type: [optionGroupSchema], default: [] }
 });

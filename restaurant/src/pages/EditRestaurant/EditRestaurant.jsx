@@ -15,6 +15,9 @@ const EditRestaurant = ({ url }) => {
     email: "",
     phone: "",
     description: "",
+    openTime: "07:00",
+    closeTime: "22:00",
+    isOpen: true,
   });
   const [loading, setLoading] = useState(true);
 
@@ -53,6 +56,9 @@ const EditRestaurant = ({ url }) => {
             email: myRestaurant.email || "",
             phone: myRestaurant.phone || "",
             description: myRestaurant.description || "",
+            openTime: myRestaurant.openingHours?.openTime || "07:00",
+            closeTime: myRestaurant.openingHours?.closeTime || "22:00",
+            isOpen: myRestaurant.isOpen !== false,
           });
 
           // Cloudinary trả về URL đầy đủ, không cần ghép nối
@@ -100,6 +106,14 @@ const EditRestaurant = ({ url }) => {
     formData.append("email", data.email);
     formData.append("phone", data.phone);
     formData.append("description", data.description);
+    formData.append(
+      "openingHours",
+      JSON.stringify({
+        openTime: data.openTime || "07:00",
+        closeTime: data.closeTime || "22:00",
+      })
+    );
+    formData.append("isOpen", Boolean(data.isOpen));
 
     if (image && image instanceof File) {
       formData.append("image", image);
@@ -218,8 +232,63 @@ const EditRestaurant = ({ url }) => {
             value={data.phone}
             type="tel"
             name="phone"
-            placeholder="+1-234-567-890"
+            placeholder="+84..."
           />
+        </div>
+
+        {/* Cấu hình Giờ mở cửa - Đóng cửa */}
+        <div className="add-product-name flex-col">
+          <p>Giờ hoạt động (Opening Hours)</p>
+          <div className="edit-hours-grid">
+            <div className="edit-hour-item">
+              <label htmlFor="openTime">Giờ mở cửa</label>
+              <input
+                id="openTime"
+                type="time"
+                name="openTime"
+                value={data.openTime}
+                onChange={onChangeHandler}
+                required
+              />
+            </div>
+            <div className="edit-hour-item">
+              <label htmlFor="closeTime">Giờ đóng cửa</label>
+              <input
+                id="closeTime"
+                type="time"
+                name="closeTime"
+                value={data.closeTime}
+                onChange={onChangeHandler}
+                required
+              />
+            </div>
+          </div>
+          <small className="field-hint">
+            Hệ thống tự động hiển thị trạng thái và chặn khách đặt đơn ngoài khung giờ này.
+          </small>
+        </div>
+
+        {/* Trạng thái nhận đơn bật / tắt thủ công */}
+        <div className="edit-open-toggle flex-col">
+          <p>Trạng thái nhận đơn</p>
+          <label className="toggle-switch-label">
+            <input
+              type="checkbox"
+              name="isOpen"
+              checked={data.isOpen}
+              onChange={(e) =>
+                setData((prev) => ({ ...prev, isOpen: e.target.checked }))
+              }
+            />
+            <span className={data.isOpen ? "status-open" : "status-closed"}>
+              {data.isOpen
+                ? "🟢 Đang mở cửa nhận đơn"
+                : "🔴 Tạm ngưng nhận đơn (Đóng cửa)"}
+            </span>
+          </label>
+          <small className="field-hint">
+            Bật/tắt nếu nhà hàng muốn tạm nghỉ đột xuất dù đang trong khung giờ mở cửa.
+          </small>
         </div>
 
         <div className="add-product-description flex-col">
@@ -237,7 +306,6 @@ const EditRestaurant = ({ url }) => {
           UPDATE
         </button>
       </form>
-
     </div>
   );
 };

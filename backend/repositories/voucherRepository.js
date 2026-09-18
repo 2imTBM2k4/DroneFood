@@ -61,20 +61,23 @@ export const reserveForOrder = async ({ voucher, userId, orderId, discountAmount
 };
 
 export const releaseForOrder = async (orderId, reason, session) => {
-  const redemption = await VoucherRedemption.findOneAndUpdate(
-    { order: orderId, status: "reserved" },
-    { $set: { status: "released", releasedAt: new Date(), releaseReason: reason } },
-    { new: true, session }
-  );
-  if (!redemption) return false;
+  const redemptions = await VoucherRedemption.find({ order: orderId, status: "reserved" }).session(session || null);
+  if (!redemptions || redemptions.length === 0) return false;
 
-  await Promise.all([
-    Voucher.updateOne({ _id: redemption.voucher, usageCount: { $gt: 0 } }, { $inc: { usageCount: -1 } }, { session }),
-    VoucherUserUsage.updateOne(
-      { voucher: redemption.voucher, user: redemption.user, activeCount: { $gt: 0 } },
-      { $inc: { activeCount: -1 } },
-      { session }
-    ),
-  ]);
+  for (const redemption of redemptions) {
+    redemption.status = "released";
+    redemption.releasedAt = new Date();
+    redemption.releaseReason = reason;
+    await redemption.save({ session });
+
+    await Promise.all([
+      Voucher.updateOne({ _id: redemption.voucher, usageCount: { $gt: 0 } }, { $inc: { usageCount: -1 } }, { session }),
+      VoucherUserUsage.updateOne(
+        { voucher: redemption.voucher, user: redemption.user, activeCount: { $gt: 0 } },
+        { $inc: { activeCount: -1 } },
+        { session }
+      ),
+    ]);
+  }
   return true;
 };

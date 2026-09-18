@@ -70,6 +70,8 @@ const FoodDisplay = ({
               price={item.price}
               image={item.image}
               optionGroups={item.optionGroups || []}
+              isBestSeller={item.isBestSeller}
+              salesCount={item.salesCount}
             />
           </Reveal>
         ))}

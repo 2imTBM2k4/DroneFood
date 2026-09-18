@@ -109,7 +109,6 @@ const Navbar = ({ setShowLogin }) => {
 
             {deliveryAddress && (
               <label className="apple-nav-location" title={deliveryAddress}>
-                <MapPin size={12} className="apple-location-icon" />
                 {savedAddresses.length > 0 ? <select className="apple-location-select" value={activeAddressId} onChange={(event) => setActiveAddressId(event.target.value)} aria-label="Delivery address">
                   {savedAddresses.map((entry) => <option key={entry.id || entry._id} value={entry.id || entry._id}>{entry.label}: {entry.address}, {entry.city}</option>)}
                 </select> : <span className="apple-location-text">{deliveryAddress}</span>}
