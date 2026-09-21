@@ -619,12 +619,20 @@ function DeliveryScreen({ order, loading, working, onAdvance }: { order: Order |
   const destination = order.shippingAddress;
   const navigatingToCustomer = ["delivering", "arrived_at_delivery"].includes(order.orderStatus);
   const openNavigation = async () => {
+    const destLat = destination?.lat;
+    const destLng = destination?.lng;
+    const hasDestCoords = typeof destLat === "number" && Number.isFinite(destLat) && typeof destLng === "number" && Number.isFinite(destLng);
+
+    const restLat = restaurant?.lat;
+    const restLng = restaurant?.lng;
+    const hasRestCoords = typeof restLat === "number" && Number.isFinite(restLat) && typeof restLng === "number" && Number.isFinite(restLng);
+
     const target = navigatingToCustomer
-      ? (Number.isFinite(destination.lat) && Number.isFinite(destination.lng)
-        ? `${destination.lat},${destination.lng}`
-        : [destination.address, destination.city, destination.state].filter(Boolean).join(", "))
-      : (Number.isFinite(restaurant?.lat) && Number.isFinite(restaurant?.lng)
-        ? `${restaurant.lat},${restaurant.lng}`
+      ? (hasDestCoords
+        ? `${destLat},${destLng}`
+        : [destination?.address, destination?.city, destination?.state].filter(Boolean).join(", "))
+      : (hasRestCoords
+        ? `${restLat},${restLng}`
         : restaurant?.address);
     if (!target) return Alert.alert("Thiếu vị trí", navigatingToCustomer ? "Khách hàng chưa có địa chỉ để chỉ đường." : "Nhà hàng chưa có địa chỉ để chỉ đường.");
     const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(target)}&travelmode=driving`;
