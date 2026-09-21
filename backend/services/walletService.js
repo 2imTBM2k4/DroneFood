@@ -2,9 +2,11 @@ import mongoose from "mongoose";
 import crypto from "crypto";
 import { PayOS } from "@payos/node";
 import AppError from "../utils/AppError.js";
-import { Order, User, WalletPayment } from "../models/index.cjs";
+import { Order, User, WalletPayment, PlatformVoucherFundingLedger } from "../models/index.cjs";
 import * as walletRepo from "../repositories/walletRepository.js";
 import { logger } from "../utils/logger.js";
+import { recordAudit } from "../utils/auditLog.js";
+import { isZeroPayableVoucherOrder } from "../utils/zeroPayableVoucher.js";
 
 export const MIN_INITIAL_DEPOSIT = 350000;
 export const EARLY_WARNING_RATIO = 0.5;
@@ -138,9 +140,13 @@ const addLedgerEntry = async ({ walletType, ownerType, ownerId, amount, balanceA
   );
 
 /** Settles order money exactly once when delivery succeeds. */
-export const settleDeliveredOrder = async (orderId, deliveredFields = {}) => runInTransaction(async (session) => {
+export const settleDeliveredOrder = async (orderId, deliveredFields = {}) => {
+  const result = await runInTransaction(async (session) => {
   const order = await Order.findById(orderId).session(session);
   if (!order) throw new AppError("Order not found", 404);
+  if (order.orderStatus === "cancelled") {
+    throw new AppError("Cancelled orders cannot be settled", 409);
+  }
 
   const restaurantEventKey = `order:${order._id}:restaurant-settlement`;
   const existingRestaurantTransaction = await walletRepo.findTransactionByEventKey(restaurantEventKey).session(session);
@@ -211,6 +217,32 @@ export const settleDeliveredOrder = async (orderId, deliveredFields = {}) => run
     }
   }
 
+  let platformVoucherFundingLedger = null;
+  if (isZeroPayableVoucherOrder(order)) {
+    const fundingAmount = Math.round(order.discountAmount || 0);
+    if (fundingAmount <= 0) throw new AppError("A zero-payable voucher order is missing its voucher funding amount", 409);
+    platformVoucherFundingLedger = await PlatformVoucherFundingLedger.create([{
+      order: order._id,
+      eventKey: `order:${order._id}:platform-voucher-funding`,
+      amount: fundingAmount,
+      counterparty: {
+        restaurant: order.restaurantId,
+        restaurantPayoutAmount: restaurantAmount,
+        shipper: order.deliveryMethod === "shipper" ? order.shipperId : null,
+        shipperPayoutAmount: order.deliveryMethod === "shipper" ? onlineEarningsAmount : 0,
+      },
+      metadata: {
+        settlement: "voucher_zero_payable",
+        grossItemsPrice: itemsSubtotal,
+        grossShippingPrice: order.shippingPrice || 0,
+        grossServiceFee: order.serviceFee || 0,
+        customerPayable: order.totalPrice,
+        discountAmount: order.discountAmount,
+        voucherCodes: (order.voucherSnapshots || []).map((snapshot) => snapshot.code),
+      },
+    }], { session }).then(([ledger]) => ledger);
+  }
+
   order.orderStatus = "delivered";
   order.isDelivered = true;
   order.deliveredAt = deliveredFields.deliveredAt || new Date();
@@ -224,6 +256,7 @@ export const settleDeliveredOrder = async (orderId, deliveredFields = {}) => run
   }
   order.restaurantSettlementTransaction = restaurantTransaction._id;
   order.shipperSettlementTransaction = shipperTransaction?._id || null;
+  order.platformVoucherFundingLedger = platformVoucherFundingLedger?._id || null;
   if (order.deliveryMethod === "shipper") order.liveShipperRoute = undefined;
   await order.save({ session });
 
@@ -236,10 +269,28 @@ export const settleDeliveredOrder = async (orderId, deliveredFields = {}) => run
     shipperId: order.shipperId,
     onlineEarningsAmount: order.deliveryMethod === "shipper" && ["VNPAY", "PAYOS"].includes(order.paymentMethod) ? onlineEarningsAmount : undefined,
     codLiabilityAmount: order.deliveryMethod === "shipper" && order.paymentMethod === "COD" ? codLiabilityAmount : undefined,
+    platformVoucherFundingAmount: platformVoucherFundingLedger?.amount,
   }, `Quyết toán đơn hàng [${order._id}]: Nhà hàng +${restaurantAmount} VND${order.shipperId ? (order.paymentMethod === "COD" ? `, Shipper thu COD (-${codLiabilityAmount} VND)` : `, Shipper nhận ship (+${onlineEarningsAmount} VND)`) : ""}`);
 
-  return { alreadySettled: false, order, restaurantTransaction, shipperTransaction };
-});
+    return { alreadySettled: false, order, restaurantTransaction, shipperTransaction, platformVoucherFundingLedger };
+  });
+  if (!result.alreadySettled && result.platformVoucherFundingLedger) {
+    await recordAudit({
+      actor: { role: "system" },
+      action: "order.platform_voucher_funding_settled",
+      targetType: "order",
+      targetId: result.order._id,
+      category: "money",
+      metadata: {
+        ledgerId: result.platformVoucherFundingLedger._id,
+        amount: result.platformVoucherFundingLedger.amount,
+        eventKey: result.platformVoucherFundingLedger.eventKey,
+        counterparty: result.platformVoucherFundingLedger.counterparty,
+      },
+    });
+  }
+  return result;
+};
 
 /** Credits a verified PayOS payment to either shipper wallet exactly once. */
 export const settleDepositPayment = async (paymentId, transactionNo = null, provider = "VNPAY") => runInTransaction(async (session) => {

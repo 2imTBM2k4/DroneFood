@@ -95,6 +95,7 @@ describe("Shipper dispatch", () => {
       geometry: [[106.7012, 10.7784], [106.705, 10.78]],
       durationSeconds: 480,
     });
+    expect(saved.liveShipperRouteStatus).toBe("available");
   });
 
   it("keeps GPS updates available when route calculation fails", async () => {
@@ -123,6 +124,7 @@ describe("Shipper dispatch", () => {
 
     expect(result.data.currentLocation.coordinates).toEqual([106.7012, 10.7784]);
     expect(saved.liveShipperRoute.geometry).toEqual(priorRoute.geometry);
+    expect(saved.liveShipperRouteStatus).toBe("unavailable");
   });
 
   it("blocks pickup outside the restaurant geofence and allows it within 200 metres", async () => {

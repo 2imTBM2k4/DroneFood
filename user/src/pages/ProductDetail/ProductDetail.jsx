@@ -146,19 +146,6 @@ const ProductDetail = () => {
           <p className="product-detail-desc">{item.description}</p>
           <p className="product-detail-price">{formatVND(item.price)}</p>
 
-          {optionGroups.length > 0 && (
-            <ul className="product-detail-options">
-              {optionGroups.map((group) => (
-                <li key={group.name}>
-                  <span className="ds-label">{group.name}</span>
-                  <span className="product-detail-option-names">
-                    {group.options.map((option) => option.name).join(" · ")}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-
           <div className="product-detail-cart">
             <button className="add-detail" onClick={() => setSheetOpen(true)}>
               {optionGroups.length > 0 ? "Choose options" : "Add to cart"}

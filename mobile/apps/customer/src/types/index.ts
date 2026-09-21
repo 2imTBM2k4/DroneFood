@@ -62,6 +62,17 @@ export type Cart = {
 export type DeliveryMethod = "drone" | "shipper";
 export type PaymentMethod = "COD" | "PAYOS";
 
+export type AppliedVoucher = {
+  voucherId?: string;
+  code: string;
+  kind?: "fixed" | "percent";
+  value?: number;
+  appliesTo?: "items_subtotal" | "shipping_fee";
+  minOrderAmount?: number;
+  maxDiscountAmount?: number | null;
+  discountAmount: number;
+};
+
 export type Quote = {
   deliveryMethod: DeliveryMethod;
   billedDistanceKm: number;
@@ -71,11 +82,7 @@ export type Quote = {
   itemsPrice?: number;
   serviceFee?: number;
   discountAmount?: number;
-  voucher?: {
-    code: string;
-    title?: string;
-    description?: string;
-  };
+  vouchers?: AppliedVoucher[];
   totalPrice?: number;
 };
 
@@ -127,17 +134,26 @@ export type LiveShipperRoute = {
   generatedAt: string;
 };
 
+export type LiveShipperRouteStatus = "available" | "unavailable";
+
 export type ShipperTracking = {
   location: Coordinates;
   updatedAt: string;
   route?: LiveShipperRoute;
+  // This is deliberately provider-safe: it never carries diagnostics,
+  // credentials, or raw coordinates beyond the live location already allowed.
+  routeStatus?: LiveShipperRouteStatus;
 };
 
 export type Order = {
   _id: string;
   orderStatus: OrderStatus;
   totalPrice: number;
+  itemsPrice?: number;
   shippingPrice: number;
+  serviceFee?: number;
+  discountAmount?: number;
+  vouchers?: AppliedVoucher[];
   deliveryMethod: DeliveryMethod;
   paymentMethod?: string;
   createdAt: string;

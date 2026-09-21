@@ -87,4 +87,27 @@ describe("mobile history APIs", () => {
     expect(response.body.data.map((item) => item._id)).toEqual([String(delivered._id)]);
     expect(response.body.data[0].user).toMatchObject({ name: customer.name, phone: customer.phone });
   });
+
+  it("labels a zero-payable voucher settlement as a zero-cash voucher payment, not a PayOS payment", async () => {
+    const customer = await createUser({ email: "voucher-history-customer@test.com" });
+    const { restaurant } = await createRestaurantOwner();
+    const order = await createOrder(customer._id, restaurant._id, {
+      totalPrice: 0,
+      discountAmount: 60000,
+      paymentResult: { id: "voucher_zero_payable", status: "ZERO_PAYABLE_VOUCHER", update_time: new Date().toISOString() },
+    });
+
+    const response = await request(app)
+      .get("/api/user/transactions")
+      .set("Authorization", `Bearer ${generateToken(customer._id)}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.transactions).toContainEqual(expect.objectContaining({
+      _id: `order_${order._id}`,
+      transactionType: "voucher_payment",
+      paymentMethod: "VOUCHER",
+      amount: 0,
+      title: `Thanh toán bằng voucher - Đơn #${order._id.toString().slice(-6).toUpperCase()}`,
+    }));
+  });
 });

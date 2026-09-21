@@ -48,6 +48,12 @@ const hasShipperAcceptedOrder = (order) =>
 const isCancellationLockedByShipper = (order) =>
   hasShipperAcceptedOrder(order) && ["pending", "preparing", "delivering", "arrived_at_delivery"].includes(order.orderStatus);
 
+const isZeroPayableVoucherOrder = (order) =>
+  order?.paymentMethod === "PAYOS" &&
+  order?.isPaid === true &&
+  Number(order.totalPrice) === 0 &&
+  order?.paymentResult?.status === "ZERO_PAYABLE_VOUCHER";
+
 const canShowCancellationAction = (order) =>
   !isCancellationLockedByShipper(order) &&
   (order.orderStatus === "pending" ||
@@ -73,7 +79,7 @@ const MyOrders = () => {
   const [retryingPaymentId, setRetryingPaymentId] = useState(null);
 
   const cancellationOrder = orders.find((item) => item._id === showCancelModal);
-  const needsManualRefund = cancellationOrder?.paymentMethod === "PAYOS" && cancellationOrder.isPaid;
+  const needsManualRefund = cancellationOrder?.paymentMethod === "PAYOS" && cancellationOrder.isPaid && !isZeroPayableVoucherOrder(cancellationOrder);
 
   const fetchOrders = useCallback(async ({ background = false } = {}) => {
     if (!token) {
@@ -110,7 +116,7 @@ const MyOrders = () => {
     }
     try {
       const order = orders.find((item) => item._id === showCancelModal);
-      const needsManualRefund = order?.paymentMethod === "PAYOS" && order.isPaid;
+      const needsManualRefund = order?.paymentMethod === "PAYOS" && order.isPaid && !isZeroPayableVoucherOrder(order);
       const response = await customerApi.post(
         needsManualRefund ? "/api/refunds/request" : "/api/order/status",
         needsManualRefund
@@ -607,6 +613,7 @@ const MyOrders = () => {
                               order.deliveryMethod === "shipper" &&
                               order.paymentMethod === "PAYOS" &&
                               order.isPaid &&
+                              !isZeroPayableVoucherOrder(order) &&
                               order.cancellationCode === "NO_SHIPPER_AVAILABLE" &&
                               !["requested", "paid"].includes(order.refundStatus) && (
                                 <button

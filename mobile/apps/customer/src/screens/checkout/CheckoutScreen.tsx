@@ -14,6 +14,7 @@ import { formatVnd } from "../../api/client";
 import { Button } from "../../components/common/Button";
 import { Header } from "../../components/common/Header";
 import { Input } from "../../components/common/Input";
+import { Icon } from "../../components/common/Icon";
 import { AddressEditorModal } from "../../components/address/AddressEditorModal";
 import type {
   Address,
@@ -46,9 +47,9 @@ interface CheckoutScreenProps {
   onSelectSavedAddress?: (entry: AddressBookEntry) => void;
   onSaveNewAddress?: (entry: AddressBookInput) => Promise<void>;
   userProfile?: UserProfile | null;
-  voucherCode?: string;
+  voucherCodes?: string[];
   onApplyVoucher?: (code: string) => Promise<void>;
-  onRemoveVoucher?: () => void;
+  onRemoveVoucher?: (code: string) => Promise<void>;
 }
 
 export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
@@ -71,33 +72,35 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   onSelectSavedAddress,
   onSaveNewAddress,
   userProfile,
-  voucherCode = "",
+  voucherCodes = [],
   onApplyVoucher,
   onRemoveVoucher,
 }) => {
   const [useCustomAddress, setUseCustomAddress] = React.useState(false);
-  const [voucherInput, setVoucherInput] = React.useState(voucherCode);
+  const [voucherInput, setVoucherInput] = React.useState("");
   const [applyingVoucher, setApplyingVoucher] = React.useState(false);
   const [voucherErrorMsg, setVoucherErrorMsg] = React.useState("");
   const [showAddAddressModal, setShowAddAddressModal] = React.useState(false);
   const [savingNewAddress, setSavingNewAddress] = React.useState(false);
 
-  React.useEffect(() => {
-    setVoucherInput(voucherCode);
-  }, [voucherCode]);
-
   const currentQuote = quotes[deliveryMethod];
   const subtotal = cart?.subtotal || 0;
   const shippingFee = currentQuote?.shippingPrice || 0;
   const discountAmount = currentQuote?.discountAmount || 0;
-  const total = Math.max(0, subtotal + shippingFee - discountAmount);
+  const total = currentQuote?.totalPrice ?? Math.max(0, subtotal + shippingFee - discountAmount);
+  const appliedVouchers = currentQuote?.vouchers || [];
 
   const handleApplyVoucher = async () => {
     if (!voucherInput.trim()) return;
+    if (voucherCodes.includes(voucherInput.trim().toUpperCase())) {
+      setVoucherErrorMsg("Mã voucher này đã được áp dụng.");
+      return;
+    }
     try {
       setApplyingVoucher(true);
       setVoucherErrorMsg("");
       await onApplyVoucher?.(voucherInput.trim().toUpperCase());
+      setVoucherInput("");
     } catch (err: any) {
       setVoucherErrorMsg(err?.message || "Mã voucher không hợp lệ hoặc đã hết hạn.");
     } finally {
@@ -105,10 +108,16 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     }
   };
 
-  const handleRemoveVoucher = () => {
-    setVoucherInput("");
-    setVoucherErrorMsg("");
-    onRemoveVoucher?.();
+  const handleRemoveVoucher = async (code: string) => {
+    try {
+      setApplyingVoucher(true);
+      setVoucherErrorMsg("");
+      await onRemoveVoucher?.(code);
+    } catch (err: any) {
+      setVoucherErrorMsg(err?.message || "Không thể bỏ mã voucher này.");
+    } finally {
+      setApplyingVoucher(false);
+    }
   };
 
   const hasCoords =
@@ -133,7 +142,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         {/* Delivery Address Section */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>📍 Địa chỉ giao hàng</Text>
+            <View style={styles.sectionTitleRow}><Icon name="map-pin" size={19} color={colors.textPrimary} /><Text style={styles.sectionTitle}>Địa chỉ giao hàng</Text></View>
             {hasCoords ? (
               <View style={styles.coordBadge}>
                 <Text style={styles.coordText}>Tọa độ GPS ✓</Text>
@@ -259,14 +268,16 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
               <View style={styles.locButtonsRow}>
                 <Button
-                  label="🎯 Dùng GPS hiện tại"
+                  label="Dùng GPS hiện tại"
+                  icon={<Icon name="crosshair" size={17} color={colors.primary} />}
                   variant="secondary"
                   loading={working}
                   style={styles.halfBtn}
                   onPress={onUseGps}
                 />
                 <Button
-                  label="🔍 Tìm tọa độ từ địa chỉ"
+                  label="Tìm tọa độ từ địa chỉ"
+                  icon={<Icon name="search" size={17} color={colors.textPrimary} />}
                   variant="outline"
                   loading={working}
                   style={styles.halfBtn}
@@ -279,7 +290,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
         {/* Delivery Method Selector */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>🛸 Phương thức giao hàng</Text>
+          <View style={styles.sectionTitleRow}><Icon name="drone" size={20} color={colors.textPrimary} /><Text style={styles.sectionTitle}>Phương thức giao hàng</Text></View>
 
           <Pressable
             style={[
@@ -289,7 +300,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             onPress={() => handleSelectDeliveryMethod("drone")}
           >
             <View style={styles.methodIconWrapper}>
-              <Text style={styles.methodIcon}>🛸</Text>
+              <Icon name="drone" size={26} color={colors.primary} />
             </View>
             <View style={styles.methodBody}>
               <View style={styles.methodTitleRow}>
@@ -315,7 +326,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             onPress={() => handleSelectDeliveryMethod("shipper")}
           >
             <View style={styles.methodIconWrapper}>
-              <Text style={styles.methodIcon}>🛵</Text>
+              <Icon name="motorcycle" size={26} color={colors.primary} />
             </View>
             <View style={styles.methodBody}>
               <View style={styles.methodTitleRow}>
@@ -336,7 +347,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
         {/* Payment Method Selector */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>💳 Hình thức thanh toán</Text>
+          <View style={styles.sectionTitleRow}><Icon name="credit-card" size={20} color={colors.textPrimary} /><Text style={styles.sectionTitle}>Hình thức thanh toán</Text></View>
 
           <Pressable
             style={[
@@ -345,7 +356,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             ]}
             onPress={() => onPaymentMethodChange("PAYOS")}
           >
-            <Text style={styles.paymentIcon}>💳</Text>
+            <Icon name="credit-card" size={27} color={colors.primary} />
             <View style={styles.paymentInfo}>
               <Text style={styles.paymentName}>
                 PayOS (Chuyển khoản VietQR / Thẻ ATM)
@@ -375,7 +386,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             disabled={deliveryMethod === "drone"}
             onPress={() => onPaymentMethodChange("COD")}
           >
-            <Text style={styles.paymentIcon}>💵</Text>
+            <Icon name="banknote" size={27} color={colors.primary} />
             <View style={styles.paymentInfo}>
               <Text style={styles.paymentName}>Tiền mặt khi nhận hàng (COD)</Text>
               <Text style={styles.paymentDesc}>
@@ -399,7 +410,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
         {/* Voucher Section */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>🎟️ Mã ưu đãi / Voucher</Text>
+          <View style={styles.sectionTitleRow}><Icon name="ticket" size={20} color={colors.textPrimary} /><Text style={styles.sectionTitle}>Mã ưu đãi / Voucher</Text></View>
           <View style={styles.voucherInputRow}>
             <Input
               containerStyle={styles.voucherInput}
@@ -421,17 +432,27 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             />
           </View>
 
-          {discountAmount > 0 && voucherCode ? (
-            <View style={styles.appliedVoucherBox}>
-              <View style={styles.appliedVoucherLeft}>
-                <Text style={styles.appliedVoucherBadge}>MÃ: {voucherCode}</Text>
-                <Text style={styles.appliedVoucherDiscount}>
-                  Giảm: -{formatVnd(discountAmount)}
-                </Text>
-              </View>
-              <Pressable onPress={handleRemoveVoucher} style={styles.removeVoucherBtn}>
-                <Text style={styles.removeVoucherText}>Bỏ mã</Text>
-              </Pressable>
+          {appliedVouchers.length > 0 ? (
+            <View style={styles.appliedVoucherList}>
+              {appliedVouchers.map((voucher) => (
+                <View key={voucher.code} style={styles.appliedVoucherBox}>
+                  <View style={styles.appliedVoucherLeft}>
+                    <Text style={styles.appliedVoucherBadge}>MÃ: {voucher.code}</Text>
+                    <Text style={styles.appliedVoucherDiscount}>
+                      Giảm: -{formatVnd(voucher.discountAmount)}
+                    </Text>
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Bỏ voucher ${voucher.code}`}
+                    disabled={applyingVoucher || working}
+                    onPress={() => handleRemoveVoucher(voucher.code)}
+                    style={styles.removeVoucherBtn}
+                  >
+                    <Text style={styles.removeVoucherText}>Bỏ mã</Text>
+                  </Pressable>
+                </View>
+              ))}
             </View>
           ) : null}
 
@@ -458,7 +479,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           {discountAmount > 0 ? (
             <View style={styles.priceRow}>
               <Text style={[styles.priceLabel, { color: colors.success }]}>
-                Giảm giá Voucher ({voucherCode})
+                Giảm giá Voucher ({appliedVouchers.length} mã)
               </Text>
               <Text style={[styles.priceVal, { color: colors.success, fontWeight: "700" }]}>
                 -{formatVnd(discountAmount)}
@@ -530,6 +551,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     ...typography.subhead,
     color: colors.textPrimary,
+  },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
   },
   coordBadge: {
     backgroundColor: colors.statusDeliveredBg,
@@ -886,6 +912,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: spacing.sm,
     marginTop: spacing.xs,
+  },
+  appliedVoucherList: {
+    gap: spacing.xs,
   },
   appliedVoucherLeft: {
     flex: 1,

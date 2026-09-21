@@ -317,6 +317,48 @@ describe("Order API", () => {
       expect(res.body.data.tracking.route.durationSeconds).toBe(480);
     });
 
+    it("returns a provider-safe route-unavailable status while retaining the allowed GPS point", async () => {
+      const { restaurant } = await createRestaurantOwner();
+      const customer = await createUser({ email: "customer-route-unavailable@test.com" });
+      const shipper = await createUser({ role: "shipper", email: "shipper-route-unavailable@test.com" });
+      const order = await createOrder(customer._id, restaurant._id, {
+        deliveryMethod: "shipper",
+        shipperId: shipper._id,
+        shipperAssignmentStatus: "picked_up",
+        shipperPickedUpAt: new Date(),
+        orderStatus: "delivering",
+        // This old provider route remains in storage for refresh decisions but
+        // must not be presented as current after a failed refresh.
+        liveShipperRoute: {
+          origin: { lat: 10.7784, lng: 106.7012 },
+          geometry: [[106.7012, 10.7784], [106.702, 10.779]],
+          durationSeconds: 480,
+          generatedAt: new Date("2026-09-16T08:00:00.000Z"),
+        },
+        liveShipperRouteStatus: "unavailable",
+      });
+      await ShipperProfile.create({
+        user: shipper._id,
+        status: "delivering",
+        approvalStatus: "approved",
+        currentOrder: order._id,
+        currentLocation: { type: "Point", coordinates: [106.7012, 10.7784] },
+        locationUpdatedAt: new Date("2026-09-16T08:00:00.000Z"),
+      });
+
+      const res = await request(app)
+        .get(`/api/order/${order._id}/customer-detail`)
+        .set("Authorization", `Bearer ${generateToken(customer._id)}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.tracking).toEqual({
+        location: { lat: 10.7784, lng: 106.7012 },
+        updatedAt: "2026-09-16T08:00:00.000Z",
+        routeStatus: "unavailable",
+      });
+      expect(JSON.stringify(res.body.data.tracking)).not.toContain("TRACKASIA_KEY");
+    });
+
     it("does not return a shipper GPS point before pickup or after delivery", async () => {
       const { restaurant } = await createRestaurantOwner();
       const customer = await createUser({ email: "customer-private-tracking@test.com" });
@@ -393,6 +435,51 @@ describe("Order API", () => {
       await Order.findByIdAndUpdate(order._id, { $set: { orderStatus: "delivered" } });
       await emitCustomerShipperLocation(io, shipper._id, profile);
       expect(emissions).toHaveLength(1);
+    });
+
+    it("emits a location-only provider-safe route failure update", async () => {
+      const { restaurant } = await createRestaurantOwner();
+      const customer = await createUser({ email: "customer-route-failure-event@test.com" });
+      const shipper = await createUser({ role: "shipper", email: "shipper-route-failure-event@test.com" });
+      const order = await createOrder(customer._id, restaurant._id, {
+        deliveryMethod: "shipper",
+        shipperId: shipper._id,
+        shipperAssignmentStatus: "picked_up",
+        shipperPickedUpAt: new Date(),
+        orderStatus: "delivering",
+        liveShipperRoute: {
+          origin: { lat: 10.7784, lng: 106.7012 },
+          geometry: [[106.7012, 10.7784], [106.702, 10.779]],
+          durationSeconds: 480,
+          generatedAt: new Date("2026-09-16T08:00:00.000Z"),
+        },
+        liveShipperRouteStatus: "unavailable",
+      });
+      const profile = await ShipperProfile.create({
+        user: shipper._id,
+        status: "delivering",
+        approvalStatus: "approved",
+        currentOrder: order._id,
+        currentLocation: { type: "Point", coordinates: [106.7012, 10.7784] },
+        locationUpdatedAt: new Date("2026-09-16T08:00:00.000Z"),
+      });
+      const emissions = [];
+      const io = { to: (room) => ({ emit: (event, payload) => emissions.push({ room, event, payload }) }) };
+
+      await emitCustomerShipperLocation(io, shipper._id, profile);
+
+      expect(emissions).toEqual([{
+        room: `customer_${customer._id}`,
+        event: "shipperLocationUpdated",
+        payload: {
+          orderId: order._id.toString(),
+          location: { lat: 10.7784, lng: 106.7012 },
+          updatedAt: "2026-09-16T08:00:00.000Z",
+          routeStatus: "unavailable",
+        },
+      }]);
+      expect(JSON.stringify(emissions)).not.toContain("TRACKASIA_KEY");
+      expect(JSON.stringify(emissions)).not.toContain("106.702");
     });
 
     it("should return not found for an invalid order id", async () => {

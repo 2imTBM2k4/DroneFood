@@ -6,6 +6,7 @@ import Drone from "../models/droneModel.cjs";
 import DroneDeliveryHistory from "../models/droneDeliveryHistoryModel.cjs";
 import AppError from "../utils/AppError.js";
 import { recordAudit } from "../utils/auditLog.js";
+import { isZeroPayableVoucherOrder } from "../utils/zeroPayableVoucher.js";
 
 /**
  * Lấy thông tin địa chỉ đầy đủ cho drone delivery
@@ -480,10 +481,17 @@ export const handleCustomerFallbackConsent = async (user, { orderId, consent }) 
 
   const isExpired = order.droneFallbackDeadlineAt && new Date() > new Date(order.droneFallbackDeadlineAt);
   const accepted = consent === "accept_shipper" && !isExpired;
+  const zeroPayableVoucherOrder = isZeroPayableVoucherOrder(order);
 
   order.orderStatus = "cancelled";
   order.dronePhase = "cancelled";
-  order.reason = accepted
+  order.reason = zeroPayableVoucherOrder
+    ? accepted
+      ? "Khách hàng đồng ý chuyển sang giao bằng Shipper; đơn Drone được thanh toán đủ bằng voucher đã hủy, không có khoản PayOS để hoàn."
+      : isExpired
+      ? "Hết thời gian 10 phút chờ khách hàng xác nhận; đơn Drone được thanh toán đủ bằng voucher đã hủy, không có khoản PayOS để hoàn."
+      : "Khách hàng từ chối phương án chuyển sang giao bằng Shipper; đơn Drone được thanh toán đủ bằng voucher đã hủy, không có khoản PayOS để hoàn."
+    : accepted
     ? "Khách hàng đồng ý chuyển sang giao bằng Shipper; đơn Drone cũ đã được hủy tự động để hoàn tiền và khách đặt lại đơn mới."
     : isExpired
     ? "Hết thời gian 10 phút chờ khách hàng xác nhận; đơn hàng đã tự động hủy."
@@ -502,7 +510,7 @@ export const handleCustomerFallbackConsent = async (user, { orderId, consent }) 
         order.refundStatus = "requested";
         order.refundRequestedAt = new Date();
       }
-    } else if (order.paymentMethod === "PAYOS") {
+    } else if (order.paymentMethod === "PAYOS" && !zeroPayableVoucherOrder) {
       order.refundStatus = "requested";
       order.refundRequestedAt = new Date();
     }

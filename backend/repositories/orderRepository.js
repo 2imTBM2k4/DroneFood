@@ -2,8 +2,12 @@
 import { Order } from "../models/index.cjs";
 
 export const create = async (orderData, { session } = {}) => {
-  const { totalPrice, paymentMethod, restaurantId } = orderData;
-  if (totalPrice <= 0 || !paymentMethod || !restaurantId) {
+  const { totalPrice, paymentMethod, restaurantId, isPaid, paymentResult } = orderData;
+  const isZeroPayableVoucherOrder = Number(totalPrice) === 0 &&
+    paymentMethod === "PAYOS" &&
+    isPaid === true &&
+    paymentResult?.status === "ZERO_PAYABLE_VOUCHER";
+  if (!Number.isFinite(totalPrice) || (totalPrice <= 0 && !isZeroPayableVoucherOrder) || !paymentMethod || !restaurantId) {
     throw new Error("Invalid order data");
   }
   const order = new Order(orderData);
@@ -76,6 +80,29 @@ export const updateById = async (id, updates, { session } = {}) => {
     session,
   }).populate("orderItems.product");
 };
+
+// A conditional transition is the cancellation claim: only the request that
+// still sees the expected active state may pair cancellation with releasing
+// its voucher reservations inside the same transaction.
+export const claimZeroPayableVoucherCancellation = async ({ orderId, expectedStatus, reason, isDrone }, { session } = {}) =>
+  Order.findOneAndUpdate(
+    {
+      _id: orderId,
+      paymentMethod: "PAYOS",
+      isPaid: true,
+      totalPrice: 0,
+      "paymentResult.status": "ZERO_PAYABLE_VOUCHER",
+      orderStatus: expectedStatus,
+    },
+    {
+      $set: {
+        orderStatus: "cancelled",
+        reason,
+        ...(isDrone && { dronePhase: "cancelled" }),
+      },
+    },
+    { new: true, session, runValidators: true }
+  );
 
 // The sentinel makes retry creation an atomic claim: two browser tabs cannot
 // both replace one unpaid link with separate active PayOS links.

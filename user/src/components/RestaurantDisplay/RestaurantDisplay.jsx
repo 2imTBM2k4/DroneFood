@@ -48,7 +48,6 @@ const RestaurantDisplay = () => {
               image={item.image}
               distanceKm={item.distanceKm}
               etaMin={item.etaMin}
-              estimatedDeliveryFee={item.estimatedDeliveryFee}
               rating={item.rating}
             />
           </Reveal>

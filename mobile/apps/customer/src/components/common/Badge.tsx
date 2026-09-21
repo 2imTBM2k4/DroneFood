@@ -43,12 +43,12 @@ const statusConfig: Record<string, { bg: string; text: string; label: string }> 
   drone: {
     bg: "#E0F2FE",
     text: "#0284C7",
-    label: "🛸 Drone Bay",
+    label: "Drone Bay",
   },
   shipper: {
     bg: "#FEF3C7",
     text: "#D97706",
-    label: "🛵 Shipper",
+    label: "Shipper",
   },
   open: {
     bg: colors.statusDeliveredBg,

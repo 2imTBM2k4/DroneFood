@@ -18,10 +18,10 @@ import { Order, ShipperProfile } from "../models/index.cjs";
 import { isCustomerTrackableShipperOrder, serialiseLiveShipperRoute } from "../utils/orderRealtime.js";
 import { logger } from "../utils/logger.js";
 import { isRestaurantOpenNow } from "../utils/openingHours.js";
+import { ZERO_PAYABLE_VOUCHER_STATUS, isZeroPayableVoucherOrder } from "../utils/zeroPayableVoucher.js";
 
 const VNPAY_DEFAULT_URL = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
 const SHIPPER_ASSIGNMENT_WINDOW_MS = 10 * 60 * 1000;
-
 const vnpayDate = (date) => {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
     timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit",
@@ -153,7 +153,6 @@ export const placeOrder = async (user, orderData, clientIp) => {
   // Fail before creating an order or changing the cart when credentials are
   // absent. Otherwise a customer could lose their cart without a payment URL.
   const vnpay = paymentMethod === "VNPAY" ? vnpayConfig() : null;
-  const payos = paymentMethod === "PAYOS" ? payosConfig() : null;
 
   // The server's cart is the only source of truth for what is being bought
   // and what it costs. Whatever `items`, `amount` or `restaurantId` the client
@@ -228,6 +227,15 @@ export const placeOrder = async (user, orderData, clientIp) => {
     : null;
   const discountAmount = multiVoucherResult?.totalDiscountAmount || 0;
   const payableTotal = Math.max(0, totals.total - discountAmount);
+  // A fully-voucher-covered PayOS selection is settled internally: PayOS
+  // accepts only positive payment requests, and no provider confirmation took
+  // place. Keep this deliberately limited to an actual voucher application.
+  const isZeroPayableVoucherCheckout = paymentMethod === "PAYOS" &&
+    payableTotal === 0 &&
+    (multiVoucherResult?.applications.length || 0) > 0;
+  // Keep the existing pre-create configuration failure for positive PayOS
+  // payments, while a zero-voucher order must not touch PayOS at all.
+  const payos = paymentMethod === "PAYOS" && !isZeroPayableVoucherCheckout ? payosConfig() : null;
   const financialSnapshot = {
     restaurantSharePercent: 80,
     platformFoodCommissionPercent: 20,
@@ -278,9 +286,16 @@ export const placeOrder = async (user, orderData, clientIp) => {
       discountTargetAmount: multiVoucherResult.applications.reduce((s, a) => s + a.targetAmount, 0),
     }),
     restaurantId: restaurantId,
-    isPaid: false,
-    paidAt: null,
-    orderStatus: isOnlinePayment(paymentMethod) ? "pending_payment" : "pending",
+    isPaid: isZeroPayableVoucherCheckout,
+    paidAt: isZeroPayableVoucherCheckout ? new Date() : null,
+    orderStatus: isZeroPayableVoucherCheckout || !isOnlinePayment(paymentMethod) ? "pending" : "pending_payment",
+    ...(isZeroPayableVoucherCheckout && {
+      paymentResult: {
+        id: "voucher_zero_payable",
+        status: ZERO_PAYABLE_VOUCHER_STATUS,
+        update_time: new Date().toISOString(),
+      },
+    }),
   };
   let newOrder;
   if (multiVoucherResult && multiVoucherResult.applications.length > 0) {
@@ -305,7 +320,32 @@ export const placeOrder = async (user, orderData, clientIp) => {
   }
 
   let paymentUrl = null;
-  if (paymentMethod === "VNPAY") {
+  if (isZeroPayableVoucherCheckout) {
+    await cartRepo.deleteByUserId(user._id);
+    await userRepo.updateById(user._id, { cart: [] });
+    await recordAudit({
+      actor: user,
+      action: "order.zero_payable_voucher_settled",
+      targetType: "order",
+      targetId: newOrder._id,
+      category: "money",
+      metadata: {
+        settlement: "voucher_zero_payable",
+        paymentMethodSelected: paymentMethod,
+        payableTotal,
+        discountAmount,
+        voucherCodes: multiVoucherResult.snapshots.map((snapshot) => snapshot.code),
+      },
+    });
+    if (deliveryMethod === "drone") {
+      try {
+        const { dispatchPaidDroneOrder } = await import("./droneService.js");
+        await dispatchPaidDroneOrder(newOrder._id);
+      } catch (dispatchErr) {
+        logger.error({ err: dispatchErr, orderId: newOrder._id }, "Lỗi khi tự động điều phối drone cho đơn đã được thanh toán bằng voucher");
+      }
+    }
+  } else if (paymentMethod === "VNPAY") {
     const { tmnCode, hashSecret, returnUrl, paymentUrl: gatewayUrl } = vnpay;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 15 * 60 * 1000);
@@ -385,8 +425,12 @@ export const placeOrder = async (user, orderData, clientIp) => {
     deliveryMethod,
     paymentMethod,
     totalPrice: payableTotal,
+    zeroPayableVoucherCheckout: isZeroPayableVoucherCheckout,
+    newlyPaid: isZeroPayableVoucherCheckout,
     message:
-      paymentMethod === "COD"
+      isZeroPayableVoucherCheckout
+        ? "Order paid in full by voucher."
+        : paymentMethod === "COD"
         ? "Order placed with COD"
         : paymentMethod === "VNPAY"
         ? "Order created. Redirecting to VNPay."
@@ -585,16 +629,82 @@ const customerShipperTracking = async (order) => {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
   const route = serialiseLiveShipperRoute(order.liveShipperRoute);
+  const routeStatus = order.liveShipperRouteStatus === "available" || order.liveShipperRouteStatus === "unavailable"
+    ? order.liveShipperRouteStatus
+    : null;
   return {
     location: { lat, lng },
     updatedAt: profile.locationUpdatedAt?.toISOString?.() || null,
-    ...(route && { route }),
+    ...(route && routeStatus !== "unavailable" && { route }),
+    ...(routeStatus && { routeStatus }),
   };
 };
 
 const hasShipperAcceptedOrder = (order) =>
   order.deliveryMethod === "shipper" &&
   (Boolean(order.shipperId) || ["accepted", "picked_up", "completed"].includes(order.shipperAssignmentStatus));
+
+const releaseCancelledDrone = async (order) => {
+  if (!order.droneId) return;
+  const droneRepo = await import("../repositories/droneRepository.js");
+  const drone = await droneRepo.findById(order.droneId);
+  if (drone) {
+    if (drone.status !== "maintenance") drone.status = "available";
+    drone.currentOrder = null;
+    drone.cargoWeight = 0;
+    drone.cargoLidStatus = "closed";
+    await drone.save();
+  }
+  try {
+    const DroneDeliveryHistory = (await import("../models/droneDeliveryHistoryModel.cjs")).default;
+    await DroneDeliveryHistory.findOneAndUpdate(
+      { orderId: order._id, droneId: order.droneId },
+      { status: "cancelled", endTime: new Date() }
+    );
+  } catch (err) {}
+};
+
+const cancelZeroPayableVoucherOrder = async (user, order, reason) => {
+  const session = await mongoose.startSession();
+  let cancelledOrder;
+  try {
+    await session.withTransaction(async () => {
+      cancelledOrder = await orderRepo.claimZeroPayableVoucherCancellation({
+        orderId: order._id,
+        expectedStatus: order.orderStatus,
+        reason: reason.trim(),
+        isDrone: order.deliveryMethod === "drone",
+      }, { session });
+      if (!cancelledOrder) {
+        throw new AppError("Order cancellation was already processed or its state changed", 409);
+      }
+      await voucherRepo.releaseForOrder(order._id, "order_cancelled", session);
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  await Order.updateOne({ _id: order._id }, { $unset: { liveShipperRoute: 1 } });
+  await releaseCancelledDrone(order);
+  await recordAudit({
+    actor: user,
+    action: user.role === "admin" ? "order.status_overridden_by_admin" : "order.status_changed",
+    targetType: "order",
+    targetId: order._id,
+    reason,
+    metadata: { from: order.orderStatus, to: "cancelled", settlement: "voucher_zero_payable" },
+  });
+  logger.info({
+    event: "order.status_updated",
+    orderId: order._id,
+    actorId: user._id,
+    actorRole: user.role,
+    previousStatus: order.orderStatus,
+    newStatus: "cancelled",
+    settlement: "voucher_zero_payable",
+  }, `Trạng thái đơn hàng voucher 0 đồng [${order._id}] đã được hủy bởi [${user.role}:${user._id}]`);
+  return { success: true, message: "Status Updated", data: cancelledOrder };
+};
 
 export const listOrders = async (user, { page, limit } = {}) => {
   let filter = {};
@@ -770,6 +880,10 @@ export const updateStatus = async (user, updateData) => {
     };
   }
 
+  if (status === "cancelled" && isZeroPayableVoucherOrder(order)) {
+    return cancelZeroPayableVoucherOrder(user, order, reason);
+  }
+
   const previousStatus = order.orderStatus;
   const updateDataObj = { orderStatus: status };
   if (status === "cancelled" && reason) {
@@ -778,7 +892,7 @@ export const updateStatus = async (user, updateData) => {
       updateDataObj.dronePhase = "cancelled";
     }
 
-    if (order.paymentMethod === "PAYOS" && order.isPaid) {
+    if (order.paymentMethod === "PAYOS" && order.isPaid && !isZeroPayableVoucherOrder(order)) {
       throw new AppError("Automatic PayOS refunds are not configured. Refund the customer before cancelling this paid order.", 409);
     }
 
@@ -805,28 +919,7 @@ export const updateStatus = async (user, updateData) => {
       updateDataObj.refundRequestedAt = new Date();
     }
     
-    // Giải phóng drone khi đơn hàng bị hủy
-    if (order.droneId) {
-      const droneRepo = await import("../repositories/droneRepository.js");
-      const drone = await droneRepo.findById(order.droneId);
-      if (drone) {
-        // Không giải phóng drone lỗi/maintenance về available
-        if (drone.status !== "maintenance") {
-          drone.status = "available";
-        }
-        drone.currentOrder = null;
-        drone.cargoWeight = 0;
-        drone.cargoLidStatus = "closed";
-        await drone.save();
-      }
-      try {
-        const DroneDeliveryHistory = (await import("../models/droneDeliveryHistoryModel.cjs")).default;
-        await DroneDeliveryHistory.findOneAndUpdate(
-          { orderId: order._id, droneId: order.droneId },
-          { status: "cancelled", endTime: new Date() }
-        );
-      } catch (err) {}
-    }
+    await releaseCancelledDrone(order);
   }
 
   if (status === "delivered") {

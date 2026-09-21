@@ -79,6 +79,12 @@ const hasShipperAcceptedOrder = (order) =>
   order.deliveryMethod === "shipper" &&
   (Boolean(order.shipperId) || ["accepted", "picked_up", "completed"].includes(order.shipperAssignmentStatus));
 
+const isZeroPayableVoucherOrder = (order) =>
+  order?.paymentMethod === "PAYOS" &&
+  order?.isPaid === true &&
+  Number(order.totalPrice) === 0 &&
+  order?.paymentResult?.status === "ZERO_PAYABLE_VOUCHER";
+
 const isLiveShipperDelivery = (order) =>
   order?.deliveryMethod === "shipper" &&
   ((order.orderStatus === "delivering" && (order.shipperAssignmentStatus === "picked_up" || Boolean(order.shipperPickedUpAt))) ||
@@ -161,6 +167,9 @@ const OrderDetail = () => {
             location: payload.location,
             updatedAt: payload.updatedAt,
             ...(payload.route && { route: payload.route }),
+            ...(payload.routeStatus === "available" || payload.routeStatus === "unavailable"
+              ? { routeStatus: payload.routeStatus }
+              : {}),
           },
         }
         : current);
@@ -222,7 +231,7 @@ const OrderDetail = () => {
   const [cancellingOrder, setCancellingOrder] = useState(false);
   const handleCancelOrder = async () => {
     if (!order || cancellingOrder) return;
-    if (order.paymentMethod === "PAYOS" && order.isPaid) {
+    if (order.paymentMethod === "PAYOS" && order.isPaid && !isZeroPayableVoucherOrder(order)) {
       toast.info(
         "Đơn hàng đã thanh toán qua PayOS. Vui lòng chuyển sang trang Danh sách đơn hàng để gửi yêu cầu hoàn tiền kèm số tài khoản ngân hàng."
       );
@@ -320,8 +329,9 @@ const OrderDetail = () => {
     ? [order.tracking.location.lat, order.tracking.location.lng]
     : null;
   const center = shipper || dropoff || pickup || [10.7769, 106.7008];
-  const liveRoutePositions = routePositions(order.tracking?.route);
-  const remainingMinutes = etaMinutes(order.tracking?.route);
+  const routeUnavailable = order.tracking?.routeStatus === "unavailable";
+  const liveRoutePositions = routeUnavailable ? [] : routePositions(order.tracking?.route);
+  const remainingMinutes = routeUnavailable ? null : etaMinutes(order.tracking?.route);
 
   const orderCode = order._id.slice(-8).toUpperCase();
   const isDrone = order.deliveryMethod === "drone";
@@ -524,6 +534,8 @@ const OrderDetail = () => {
                 )}
                 {order.orderStatus === "arrived_at_delivery" ? (
                   <p className="shipper-arrival-guidance" role="status">Tài xế đã tới điểm giao. Bạn vẫn có thể xem vị trí trực tiếp của tài xế trên bản đồ.</p>
+                ) : shipper && routeUnavailable ? (
+                  <p className="shipper-route-pending" role="status">Không thể cập nhật lộ trình lúc này. Vị trí GPS của tài xế vẫn đang được cập nhật.</p>
                 ) : shipper && remainingMinutes !== null ? (
                   <p className="shipper-route-eta" role="status">Còn khoảng {remainingMinutes} phút</p>
                 ) : shipper ? (

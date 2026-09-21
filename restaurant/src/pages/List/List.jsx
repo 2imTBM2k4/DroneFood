@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useContext } from "react";
+import { createPortal } from "react-dom";
 import { AuthContext } from "../../context/AuthContext";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import "./List.css";
@@ -120,6 +121,16 @@ const List = ({ url }) => {
 
   const closeEditModal = () => {
     setEditingProduct(null);
+  };
+
+  const closeAddModal = () => {
+    setAddOpen(false);
+    setSearchParams({});
+  };
+
+  const handleProductAdded = async () => {
+    closeAddModal();
+    await fetchList();
   };
 
   const getImgSrc = (img) => {
@@ -296,7 +307,26 @@ const List = ({ url }) => {
           onUpdate={fetchList}
         />
       )}
-      {addOpen && <div className="edit-modal" role="dialog" aria-modal="true" aria-label="Add menu item" onMouseDown={(event) => { if (event.target === event.currentTarget) { setAddOpen(false); setSearchParams({}); fetchList(); } }}><div className="modal-content list-add-modal" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><h3>Add menu item</h3><button type="button" className="close" aria-label="Close add item form" onClick={() => { setAddOpen(false); setSearchParams({}); fetchList(); }}>×</button></div><Add url={url} /></div></div>}
+      {addOpen && createPortal(
+        <div
+          className="edit-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Add menu item"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeAddModal();
+          }}
+        >
+          <div className="modal-content list-add-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-header list-add-modal-header">
+              <h3>Add menu item</h3>
+              <button type="button" className="close" aria-label="Close add item form" onClick={closeAddModal}>×</button>
+            </div>
+            <Add url={url} onSuccess={handleProductAdded} />
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

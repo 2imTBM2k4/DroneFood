@@ -28,7 +28,9 @@ export const placeOrder = async (req, res) => {
     const result = await orderService.placeOrder(req.user, req.body, req.ip);
 
     const restaurantId = result.restaurantId;
-    if (result.paymentMethod === "COD" && restaurantId) {
+    if (result.zeroPayableVoucherCheckout) {
+      await notifyPaidOrder(req, result);
+    } else if (result.paymentMethod === "COD" && restaurantId) {
       req.app.get("io")?.to(`restaurant_${restaurantId}`).emit("newOrder", result.orderId);
       await notifyRestaurantNewOrder(req.app.get("io"), result.orderId);
     }

@@ -7,6 +7,7 @@ import { v2 as cloudinary } from "cloudinary";
 import * as userRepo from "../repositories/userRepository.js";
 import * as restaurantRepo from "../repositories/restaurantRepository.js";
 import AppError from "../utils/AppError.js";
+import { isZeroPayableVoucherOrder } from "../utils/zeroPayableVoucher.js";
 import sendEmail from "../utils/sendEmail.js";
 import { geocodeAddress } from "../utils/geocode.js";
 import { recordAudit } from "../utils/auditLog.js";
@@ -467,13 +468,15 @@ export const getUserTransactions = async (userId) => {
 
   for (const o of orders) {
     if (o.isPaid || o.paidAt || ["preparing", "delivering", "delivered"].includes(o.orderStatus)) {
+      const voucherSettled = isZeroPayableVoucherOrder(o);
       events.push({
         _id: `order_${o._id}`,
-        transactionType: "payos_payment",
-        title: `Thanh toán PayOS - Đơn #${o._id.toString().slice(-6).toUpperCase()}`,
-        amount: -o.totalPrice,
+        transactionType: voucherSettled ? "voucher_payment" : "payos_payment",
+        title: `${voucherSettled ? "Thanh toán bằng voucher" : "Thanh toán PayOS"} - Đơn #${o._id.toString().slice(-6).toUpperCase()}`,
+        // This is the customer's cash movement, not the gross order value.
+        amount: voucherSettled ? 0 : -o.totalPrice,
         status: o.isPaid ? "paid" : o.orderStatus,
-        paymentMethod: "PAYOS",
+        paymentMethod: voucherSettled ? "VOUCHER" : "PAYOS",
         payosOrderCode: o.payosOrderCode,
         createdAt: o.paidAt || o.createdAt,
       });

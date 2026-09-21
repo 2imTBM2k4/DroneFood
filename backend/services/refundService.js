@@ -6,6 +6,7 @@ import * as voucherRepo from "../repositories/voucherRepository.js";
 import { RefundRequest } from "../models/index.cjs";
 import { recordAudit } from "../utils/auditLog.js";
 import { decryptBankAccountNumber, encryptBankAccountNumber } from "../utils/bankAccountCrypto.js";
+import { isZeroPayableVoucherOrder } from "../utils/zeroPayableVoucher.js";
 
 const hasShipperAcceptedOrder = (order) =>
   order.deliveryMethod === "shipper" &&
@@ -18,6 +19,12 @@ const canRequestManualRefund = (order) =>
     (order.deliveryMethod === "shipper" &&
       order.orderStatus === "preparing" &&
       order.shipperAssignmentStatus === "expired"));
+
+const assertProviderRefundEligible = (order) => {
+  if (isZeroPayableVoucherOrder(order)) {
+    throw new AppError("This order was paid in full by vouchers and has no PayOS payment to refund", 409);
+  }
+};
 
 const refundBankSnapshot = (bank) => {
   const accountNumber = String(bank.accountNumber || "").replace(/\s/g, "");
@@ -39,6 +46,7 @@ export const requestManualPayosRefund = async (customer, { orderId, reason, bank
   if (order.paymentMethod !== "PAYOS" || !order.isPaid) {
     throw new AppError("Only paid PayOS orders can use this refund workflow", 409);
   }
+  assertProviderRefundEligible(order);
   if (!canRequestManualRefund(order)) {
     throw new AppError("This order can no longer be cancelled", 409);
   }
@@ -147,6 +155,7 @@ export const markManualRefundPaid = async (admin, refundId, { transferReference,
   const refund = await refundRepo.findById(refundId);
   if (!refund) throw new AppError("Refund request not found", 404);
   if (refund.status !== "requested") throw new AppError("Refund request has already been processed", 409);
+  assertProviderRefundEligible(refund.order);
 
   const session = await mongoose.startSession();
   try {
@@ -177,6 +186,7 @@ export const rejectManualRefund = async (admin, refundId, { adminNote }) => {
   const refund = await refundRepo.findById(refundId);
   if (!refund) throw new AppError("Refund request not found", 404);
   if (refund.status !== "requested") throw new AppError("Refund request has already been processed", 409);
+  assertProviderRefundEligible(refund.order);
 
   const session = await mongoose.startSession();
   try {

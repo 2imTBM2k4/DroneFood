@@ -7,6 +7,8 @@ import * as orderService from "./orderService.js";
 import { getShipperWalletSummary, requireShipperCanAcceptOrders, reserveCodLiability } from "./walletService.js";
 import { fetchLiveShipperRoute, shouldRefreshLiveRoute } from "./shipperRouteService.js";
 import { requireShipperWithinMetres } from "./shipperLocationVerificationService.js";
+import { isZeroPayableVoucherOrder } from "../utils/zeroPayableVoucher.js";
+import { logger } from "../utils/logger.js";
 
 const LOCATION_STALE_MS = 90 * 1000;
 const OFFER_RADIUS_METRES = 5000;
@@ -84,19 +86,25 @@ export const updateLocation = async (userId, { lat, lng, pushToken }) => {
             origin,
             destination,
             now,
-            onFailure: ({ category, httpStatus }) => console.warn("Live shipper route refresh failed", {
+            onFailure: ({ category, httpStatus }) => logger.warn({
               orderId: String(activeOrder._id),
               category,
               ...(httpStatus && { httpStatus }),
-            }),
+            }, "Live shipper route refresh failed"),
           });
           trackingOrder = await Order.findByIdAndUpdate(
             activeOrder._id,
-            { $set: { liveShipperRoute } },
+            { $set: { liveShipperRoute, liveShipperRouteStatus: "available" } },
             { new: true }
-          ).select("_id shippingAddress liveShipperRoute");
+          ).select("_id shippingAddress liveShipperRoute liveShipperRouteStatus");
         } catch {
-          // GPS delivery remains available if the external routing provider is temporarily unavailable.
+          // GPS delivery remains available if the external routing provider is
+          // temporarily unavailable. Only a sanitized state is persisted; the
+          // provider key, coordinates, and raw error never reach the customer.
+          await Order.updateOne(
+            { _id: activeOrder._id },
+            { $set: { liveShipperRouteStatus: "unavailable" } }
+          );
         }
       }
     }
@@ -468,12 +476,15 @@ export const expireUnacceptedOrders = async () => {
       // the customer's money. It is held for support/manual refund until the
       // PayOS payout workflow is configured.
       if (order.paymentMethod === "PAYOS" && order.isPaid) {
+        const zeroPayableVoucherOrder = isZeroPayableVoucherOrder(order);
         const result = await Order.updateOne(
           { _id: order._id, shipperAssignmentStatus: "unassigned", orderStatus: { $in: DISPATCHABLE_ORDER_STATUSES } },
           { $set: {
             shipperAssignmentStatus: "expired",
             cancellationCode: "NO_SHIPPER_AVAILABLE",
-            reason: "No shipper accepted this paid online order within 10 minutes. The customer can continue searching or request a manual refund.",
+            reason: zeroPayableVoucherOrder
+              ? "No shipper accepted this voucher-settled order within 10 minutes. The customer can continue searching or cancel the order; there is no PayOS payment to refund."
+              : "No shipper accepted this paid online order within 10 minutes. The customer can continue searching or request a manual refund.",
           } }
         );
         cancelledCount += result.modifiedCount;

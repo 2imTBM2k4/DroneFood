@@ -219,28 +219,6 @@
   }
 }
 
-/* Summary of what the sheet will offer — a preview, not a picker. */
-.product-detail-options {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 14px 0 0;
-  margin: 0;
-  border-top: 1px solid var(--border-light);
-}
-
-.product-detail-options li {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.product-detail-option-names {
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-
 .product-detail-reviews {
   margin-top: 24px;
   padding: 24px;

@@ -165,6 +165,7 @@ const orderSchema = new mongoose.Schema(
     codReservedLiability: { type: Number, default: 0, min: 0 },
     restaurantSettlementTransaction: { type: mongoose.Schema.Types.ObjectId, ref: "WalletTransaction", default: null },
     shipperSettlementTransaction: { type: mongoose.Schema.Types.ObjectId, ref: "WalletTransaction", default: null },
+    platformVoucherFundingLedger: { type: mongoose.Schema.Types.ObjectId, ref: "PlatformVoucherFundingLedger", default: null },
     pickupLocation: {
       type: { type: String, enum: ["Point"], default: undefined },
       coordinates: { type: [Number], default: undefined },
@@ -183,6 +184,13 @@ const orderSchema = new mongoose.Schema(
     // Current projected road route from the shipper's latest GPS point to the customer.
     // It is replaced on refresh; the platform intentionally does not retain GPS history.
     liveShipperRoute: { type: liveShipperRouteSchema, default: undefined },
+    // A customer-safe routing outcome. Detailed provider failures are kept out
+    // of the order payload so neither credentials nor coordinates leak.
+    liveShipperRouteStatus: {
+      type: String,
+      enum: ["available", "unavailable"],
+      default: undefined,
+    },
     cancellationCode: { type: String, default: "" },
     paymentMethod: {
       type: String,

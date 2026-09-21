@@ -75,6 +75,7 @@
 
 .add-category-price > div {
   flex: 1;
+  min-width: 0;
 }
 
 .add-category-price p {
@@ -143,4 +144,17 @@ label img[src*="assets/upload_area"] {
   margin: 5px 0 0;
   font-size: 14.5px;
   color: var(--text-secondary);
+}
+
+@media (max-width: 560px) {
+  .add-category-price {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .add-category-price select,
+  .add-category-price input,
+  .add-btn {
+    max-width: none;
+  }
 }

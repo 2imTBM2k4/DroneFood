@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { colors, radius, spacing, typography } from "../../theme/tokens";
 import { Button } from "../common/Button";
+import { Icon, type IconName } from "../common/Icon";
 import { AddressEditorModal } from "./AddressEditorModal";
 import type { AddressBookEntry, AddressBookInput, UserProfile } from "../../types";
 
@@ -124,11 +125,11 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
     }
   };
 
-  const getLabelIcon = (label: string) => {
+  const getLabelIcon = (label: string): IconName => {
     const l = label.toLowerCase();
-    if (l.includes("nhà")) return "🏠";
-    if (l.includes("công ty") || l.includes("văn phòng") || l.includes("work")) return "🏢";
-    return "📍";
+    if (l.includes("nhà")) return "home";
+    if (l.includes("công ty") || l.includes("văn phòng") || l.includes("work")) return "store";
+    return "map-pin";
   };
 
   return (
@@ -156,7 +157,7 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
               style={styles.closeBtn}
               onPress={onClose}
             >
-              <Text style={styles.closeBtnText}>✕</Text>
+              <Icon name="close" size={20} color={colors.textSecondary} />
             </Pressable>
           </View>
 
@@ -174,7 +175,7 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
                 }}
               >
                 <View style={styles.gpsOptionIcon}>
-                  <Text style={{ fontSize: 20 }}>🎯</Text>
+                  <Icon name="crosshair" size={20} color={colors.primary} />
                 </View>
                 <View style={styles.gpsOptionContent}>
                   <Text style={styles.gpsOptionTitle}>Định vị GPS vị trí hiện tại</Text>
@@ -189,7 +190,7 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
             {/* List of Saved Addresses */}
             {entries.length === 0 ? (
               <View style={styles.emptyCard}>
-                <Text style={styles.emptyIcon}>📮</Text>
+                <View style={styles.emptyIcon}><Icon name="map-pin" size={40} color={colors.primary} /></View>
                 <Text style={styles.emptyTitle}>Chưa có địa chỉ nào trong sổ</Text>
                 <Text style={styles.emptyText}>
                   Lưu sẵn địa chỉ nhà riêng, công ty để đặt món bằng Drone chỉ với 1 chạm!
@@ -216,13 +217,11 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
                   >
                     <View style={styles.cardHeader}>
                       <View style={styles.cardLabelRow}>
-                        <Text style={styles.cardLabelIcon}>
-                          {getLabelIcon(entry.label)}
-                        </Text>
+                        <Icon name={getLabelIcon(entry.label)} size={17} color={colors.textSecondary} />
                         <Text style={styles.cardLabelText}>{entry.label}</Text>
                         {entry.isDefault ? (
                           <View style={styles.defaultBadge}>
-                            <Text style={styles.defaultBadgeText}>⭐ Mặc định</Text>
+                            <Text style={styles.defaultBadgeText}>Mặc định</Text>
                           </View>
                         ) : null}
                       </View>
@@ -249,9 +248,7 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
                     </Text>
 
                     {Number.isFinite(entry.lat) && Number.isFinite(entry.lng) ? (
-                      <Text style={styles.coordsText}>
-                        🛸 Tọa độ Drone: {entry.lat.toFixed(4)}, {entry.lng.toFixed(4)}
-                      </Text>
+                      <View style={styles.coordsRow}><Icon name="drone" size={15} color={colors.primary} /><Text style={styles.coordsText}>Tọa độ Drone: {entry.lat.toFixed(4)}, {entry.lng.toFixed(4)}</Text></View>
                     ) : null}
 
                     {/* Actions Bar */}
@@ -260,7 +257,7 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
                         style={styles.actionBtn}
                         onPress={() => handleEdit(entry)}
                       >
-                        <Text style={styles.actionBtnText}>✎ Sửa</Text>
+                        <Text style={styles.actionBtnText}>Sửa</Text>
                       </Pressable>
 
                       {!entry.isDefault && onSetDefault && (
@@ -268,7 +265,7 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
                           style={styles.actionBtn}
                           onPress={() => handleConfirmSetDefault(entry)}
                         >
-                          <Text style={styles.actionBtnText}>⭐ Đặt mặc định</Text>
+                          <Text style={styles.actionBtnText}>Đặt mặc định</Text>
                         </Pressable>
                       )}
 
@@ -277,7 +274,7 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
                           style={[styles.actionBtn, styles.deleteBtn]}
                           onPress={() => handleConfirmDelete(entry)}
                         >
-                          <Text style={styles.deleteBtnText}>🗑 Xóa</Text>
+                          <View style={styles.deleteAction}><Icon name="trash" size={14} color={colors.accent} /><Text style={styles.deleteBtnText}>Xóa</Text></View>
                         </Pressable>
                       )}
                     </View>
@@ -415,7 +412,10 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   emptyIcon: {
-    fontSize: 40,
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 4,
   },
   emptyTitle: {
@@ -504,6 +504,11 @@ const styles = StyleSheet.create({
     color: colors.droneBlue,
     marginTop: 2,
   },
+  coordsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   actionsRow: {
     flexDirection: "row",
     gap: spacing.md,
@@ -526,6 +531,11 @@ const styles = StyleSheet.create({
   deleteBtnText: {
     ...typography.captionBold,
     color: "#EF4444",
+  },
+  deleteAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   addNewCardBtn: {
     flexDirection: "row",

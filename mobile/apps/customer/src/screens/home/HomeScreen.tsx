@@ -12,6 +12,7 @@ import { colors, radius, spacing, typography } from "../../theme/tokens";
 import { formatDistance } from "../../api/client";
 import { Badge } from "../../components/common/Badge";
 import { Input } from "../../components/common/Input";
+import { Icon, type IconName } from "../../components/common/Icon";
 import type { Restaurant, UserProfile } from "../../types";
 
 interface HomeScreenProps {
@@ -28,14 +29,14 @@ interface HomeScreenProps {
 }
 
 const CATEGORIES = [
-  { id: "all", name: "Tất cả", icon: "✨" },
-  { id: "milktea", name: "Trà sữa", icon: "🧋" },
-  { id: "rice", name: "Cơm", icon: "🍚" },
-  { id: "pizza", name: "Pizza", icon: "🍕" },
-  { id: "burger", name: "Burger", icon: "🍔" },
-  { id: "noodles", name: "Mì / Phở", icon: "🍜" },
-  { id: "dessert", name: "Tráng miệng", icon: "🍰" },
-  { id: "healthy", name: "Healthy", icon: "🥗" },
+  { id: "all", name: "Tất cả", icon: "sparkles" as IconName },
+  { id: "milktea", name: "Trà sữa", icon: "coffee" as IconName },
+  { id: "rice", name: "Cơm", icon: "utensils" as IconName },
+  { id: "pizza", name: "Pizza", icon: "pizza" as IconName },
+  { id: "burger", name: "Burger", icon: "utensils" as IconName },
+  { id: "noodles", name: "Mì / Phở", icon: "utensils" as IconName },
+  { id: "dessert", name: "Tráng miệng", icon: "cake" as IconName },
+  { id: "healthy", name: "Healthy", icon: "leaf" as IconName },
 ];
 
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
@@ -97,7 +98,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           disabled={!onOpenAddressBook}
         >
           <View style={styles.deliverLabelRow}>
-            <Text style={styles.deliverLabel}>📍 GIAO ĐẾN</Text>
+            <Icon name="map-pin" size={14} color={colors.primary} />
+            <Text style={styles.deliverLabel}>GIAO ĐẾN</Text>
           </View>
           <View style={styles.addressLineRow}>
             <Text numberOfLines={1} style={styles.addressText}>
@@ -127,11 +129,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 placeholder="Tìm nhà hàng, trà sữa, pizza, phở..."
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                leftIcon={<Text style={styles.searchIcon}>🔍</Text>}
+                leftIcon={<Icon name="search" size={19} color={colors.textSecondary} />}
                 rightIcon={
                   searchQuery ? (
-                    <Pressable onPress={() => setSearchQuery("")}>
-                      <Text style={styles.clearSearch}>✕</Text>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Xóa tìm kiếm" hitSlop={8} onPress={() => setSearchQuery("")}>
+                      <Icon name="close" size={18} color={colors.textSecondary} />
                     </Pressable>
                   ) : null
                 }
@@ -142,7 +144,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             <View style={styles.heroCard}>
               <View style={styles.heroTextContainer}>
                 <View style={styles.heroBadge}>
-                  <Text style={styles.heroBadgeText}>🔥 ƯU ĐÃI ĐẶC BIỆT</Text>
+                  <Text style={styles.heroBadgeText}>ƯU ĐÃI ĐẶC BIỆT</Text>
                 </View>
                 <Text style={styles.heroTitle}>
                   Khuyến Mãi Siêu Tiệc 50%
@@ -151,7 +153,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   Nhập mã voucher ngay khi đặt đơn để nhận giảm giá hấp dẫn!
                 </Text>
               </View>
-              <Text style={styles.heroDroneBig}>🎁</Text>
+              <View style={styles.heroDroneBig}><Icon name="gift" size={44} color={colors.primary} /></View>
             </View>
 
             {/* Category Pills Carousel */}
@@ -172,7 +174,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                       ]}
                       onPress={() => setSelectedCategory(cat.id)}
                     >
-                      <Text style={styles.catIcon}>{cat.icon}</Text>
+                      <Icon name={cat.icon} size={19} color={isSelected ? "#FFFFFF" : colors.textSecondary} />
                       <Text
                         style={[
                           styles.catName,
@@ -199,47 +201,53 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           <View style={styles.emptyContainer}>
             {loading ? (
               <>
-                <Text style={styles.emptyIcon}>⏳</Text>
+                <View style={styles.emptyIcon}><Icon name="refresh" size={48} color={colors.primary} /></View>
                 <Text style={styles.emptyTitle}>Đang tìm nhà hàng quanh bạn...</Text>
                 <Text style={styles.emptyText}>Vui lòng chờ trong giây lát...</Text>
               </>
             ) : !hasLocation ? (
               <>
-                <Text style={styles.emptyIcon}>🎯</Text>
+                <View style={styles.emptyIcon}><Icon name="crosshair" size={48} color={colors.primary} /></View>
                 <Text style={styles.emptyTitle}>Chưa định vị vị trí của bạn</Text>
                 <Text style={styles.emptyText}>
                   Hãy cho phép định vị GPS để DroneFood tìm kiếm các nhà hàng hoạt động trong bán kính 15km quanh bạn.
                 </Text>
                 <Pressable
                   style={styles.emptyButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Bật định vị GPS"
                   onPress={onLocateGps}
                   disabled={locating}
                 >
-                  <Text style={styles.emptyButtonText}>
-                    {locating ? "Đang định vị..." : "🎯 Bật định vị GPS ngay"}
-                  </Text>
+                  <View style={styles.emptyButtonContent}>
+                    {!locating && <Icon name="crosshair" size={17} color="#FFFFFF" />}
+                    <Text style={styles.emptyButtonText}>{locating ? "Đang định vị..." : "Bật định vị GPS ngay"}</Text>
+                  </View>
                 </Pressable>
               </>
             ) : restaurants.length === 0 ? (
               <>
-                <Text style={styles.emptyIcon}>🛸</Text>
+                <View style={styles.emptyIcon}><Icon name="drone" size={48} color={colors.primary} /></View>
                 <Text style={styles.emptyTitle}>Không có quán nào trong bán kính 15km</Text>
                 <Text style={styles.emptyText}>
                   Hiện tại không có nhà hàng đối tác nào hoạt động trong phạm vi giao hàng bằng Drone quanh vị trí này.
                 </Text>
                 <Pressable
                   style={styles.emptyButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cập nhật lại vị trí"
                   onPress={onLocateGps}
                   disabled={locating}
                 >
-                  <Text style={styles.emptyButtonText}>
-                    {locating ? "Đang định vị lại..." : "🔄 Cập nhật lại vị trí"}
-                  </Text>
+                  <View style={styles.emptyButtonContent}>
+                    {!locating && <Icon name="refresh" size={17} color="#FFFFFF" />}
+                    <Text style={styles.emptyButtonText}>{locating ? "Đang định vị lại..." : "Cập nhật lại vị trí"}</Text>
+                  </View>
                 </Pressable>
               </>
             ) : (
               <>
-                <Text style={styles.emptyIcon}>🔍</Text>
+                <View style={styles.emptyIcon}><Icon name="search" size={48} color={colors.primary} /></View>
                 <Text style={styles.emptyTitle}>Không tìm thấy quán phù hợp</Text>
                 <Text style={styles.emptyText}>
                   Không có quán nào phù hợp với bộ lọc &quot;{searchQuery || selectedCategory}&quot;. Hãy thử tìm từ khóa khác.
@@ -258,9 +266,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     setSelectedCategory("all");
                   }}
                 >
-                  <Text style={[styles.emptyButtonText, { color: colors.textPrimary }]}>
-                    🔄 Xóa bộ lọc
-                  </Text>
+                  <View style={styles.emptyButtonContent}>
+                    <Icon name="refresh" size={17} color={colors.textPrimary} />
+                    <Text style={[styles.emptyButtonText, { color: colors.textPrimary }]}>Xóa bộ lọc</Text>
+                  </View>
                 </Pressable>
               </>
             )}
@@ -282,7 +291,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               />
             ) : (
               <View style={styles.restaurantImageFallback}>
-                <Text style={styles.fallbackIcon}>🏪</Text>
+                <Icon name="store" size={40} color={colors.textSecondary} />
               </View>
             )}
 
@@ -296,7 +305,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
               <View style={styles.cardMetaRow}>
                 <View style={styles.ratingBadge}>
-                  <Text style={styles.starIcon}>★</Text>
+                  <Icon name="star" size={14} color="#B45309" />
                   <Text style={styles.ratingText}>
                     {item.averageRating != null
                       ? `${item.averageRating.toFixed(1)}${item.ratingCount ? ` (${item.ratingCount})` : ""}`
@@ -306,17 +315,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   </Text>
                 </View>
 
-                <Text style={styles.timeText}>⏱️ 15-20 phút</Text>
+                <View style={styles.distanceRow}>
+                  <Icon name="clock" size={13} color={colors.textSecondary} />
+                  <Text style={styles.timeText}>15-20 phút</Text>
+                </View>
 
                 {item.distanceKm !== null && item.distanceKm !== undefined ? (
-                  <Text style={styles.distanceText}>
-                    📍 {formatDistance(item.distanceKm)}
-                  </Text>
+                  <View style={styles.distanceRow}>
+                    <Icon name="map-pin" size={13} color={colors.textSecondary} />
+                    <Text style={styles.distanceText}>{formatDistance(item.distanceKm)}</Text>
+                  </View>
                 ) : null}
               </View>
 
               <View style={styles.cardFooterRow}>
-                <Badge status="drone" label="🛸 Drone Ready" />
+                <Badge status="drone" label="Drone Ready" />
               </View>
             </View>
           </Pressable>
@@ -458,7 +471,10 @@ const styles = StyleSheet.create({
     color: "#94A3B8",
   },
   heroDroneBig: {
-    fontSize: 48,
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
     marginLeft: spacing.sm,
   },
   categorySection: {
@@ -482,9 +498,6 @@ const styles = StyleSheet.create({
   categoryChipSelected: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
-  },
-  catIcon: {
-    fontSize: 16,
   },
   catName: {
     ...typography.caption,
@@ -536,9 +549,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  fallbackIcon: {
-    fontSize: 42,
-  },
   restaurantInfo: {
     padding: spacing.md,
     gap: spacing.xs,
@@ -569,10 +579,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 3,
   },
-  starIcon: {
-    color: "#F59E0B",
-    fontSize: 14,
-  },
   ratingText: {
     ...typography.captionBold,
     color: colors.textPrimary,
@@ -581,13 +587,21 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textSecondary,
   },
+  distanceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
   emptyContainer: {
     padding: spacing.xxl,
     alignItems: "center",
     gap: spacing.sm,
   },
   emptyIcon: {
-    fontSize: 48,
+    width: 56,
+    height: 56,
+    alignItems: "center",
+    justifyContent: "center",
   },
   emptyTitle: {
     ...typography.subhead,
@@ -610,5 +624,11 @@ const styles = StyleSheet.create({
     ...typography.subhead,
     color: "#fff",
     fontWeight: "700",
+  },
+  emptyButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
   },
 });

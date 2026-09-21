@@ -1,5 +1,6 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Icon, type IconName } from "../common/Icon";
 import { colors, spacing, typography } from "../../theme/tokens";
 import type { ScreenName } from "../../types";
 
@@ -14,11 +15,11 @@ export const TabBar: React.FC<TabBarProps> = ({
   onTabChange,
   cartCount = 0,
 }) => {
-  const tabs: { key: ScreenName; label: string; icon: string }[] = [
-    { key: "home", label: "Khám phá", icon: "🏠" },
-    { key: "orders", label: "Đơn hàng", icon: "📋" },
-    { key: "cart", label: "Giỏ hàng", icon: "🛒" },
-    { key: "profile", label: "Cá nhân", icon: "👤" },
+  const tabs: { key: ScreenName; label: string; icon: IconName }[] = [
+    { key: "home", label: "Khám phá", icon: "home" },
+    { key: "orders", label: "Đơn hàng", icon: "orders" },
+    { key: "cart", label: "Giỏ hàng", icon: "cart" },
+    { key: "profile", label: "Cá nhân", icon: "profile" },
   ];
 
   return (
@@ -35,12 +36,13 @@ export const TabBar: React.FC<TabBarProps> = ({
           <Pressable
             key={tab.key}
             accessibilityRole="tab"
+            accessibilityLabel={tab.label}
             accessibilityState={{ selected: isActive }}
             style={styles.tabItem}
             onPress={() => onTabChange(tab.key)}
           >
             <View style={styles.iconWrapper}>
-              <Text style={styles.icon}>{tab.icon}</Text>
+              <Icon name={tab.icon} size={21} color={isActive ? colors.primary : colors.textSecondary} />
               {tab.key === "cart" && cartCount > 0 ? (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>
@@ -81,9 +83,6 @@ const styles = StyleSheet.create({
   },
   iconWrapper: {
     position: "relative",
-  },
-  icon: {
-    fontSize: 20,
   },
   badge: {
     position: "absolute",

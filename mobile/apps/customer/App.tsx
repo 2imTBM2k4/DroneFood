@@ -35,8 +35,11 @@ import type {
   AddressBookEntry,
   AddressBookInput,
   CartLine,
+  Coordinates,
   DeliveryMethod,
   Food,
+  LiveShipperRoute,
+  LiveShipperRouteStatus,
   Order,
   PaymentMethod,
   Quote,
@@ -86,6 +89,30 @@ const defaultAddress: Address = {
   lng: "",
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object";
+
+const isCoordinates = (value: unknown): value is Coordinates =>
+  isRecord(value) && typeof value.lat === "number" && typeof value.lng === "number" &&
+  Number.isFinite(value.lat) && Number.isFinite(value.lng) &&
+  Math.abs(value.lat) <= 90 && Math.abs(value.lng) <= 180;
+
+const isRouteGeometry = (value: unknown): value is [number, number][] =>
+  Array.isArray(value) && value.length >= 2 && value.every((point): point is [number, number] =>
+    Array.isArray(point) && point.length === 2 &&
+    typeof point[0] === "number" && typeof point[1] === "number" &&
+    Number.isFinite(point[0]) && Number.isFinite(point[1]) &&
+    Math.abs(point[0]) <= 180 && Math.abs(point[1]) <= 90
+  );
+
+const isLiveShipperRoute = (value: unknown): value is LiveShipperRoute =>
+  isRecord(value) && isCoordinates(value.origin) && isRouteGeometry(value.geometry) &&
+  typeof value.durationSeconds === "number" && Number.isFinite(value.durationSeconds) && value.durationSeconds >= 0 &&
+  typeof value.generatedAt === "string";
+
+const isLiveShipperRouteStatus = (value: unknown): value is LiveShipperRouteStatus =>
+  value === "available" || value === "unavailable";
+
 function CustomerApp() {
   const [token, setToken] = useState<string | null>(null);
   const [screen, setScreen] = useState<ScreenName>("home");
@@ -95,7 +122,7 @@ function CustomerApp() {
 
   const [address, setAddress] = useState<Address>(defaultAddress);
   const [selectedAddressId, setSelectedAddressId] = useState<string | undefined>(undefined);
-  const [voucherCode, setVoucherCode] = useState<string>("");
+  const [voucherCodes, setVoucherCodes] = useState<string[]>([]);
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("drone");
   const [deliveryQuotes, setDeliveryQuotes] = useState<Partial<Record<DeliveryMethod, Quote>>>({});
   const [quoting, setQuoting] = useState(false);
@@ -327,30 +354,34 @@ function CustomerApp() {
     });
 
     socket.on("shipperLocationUpdated", (payload) => {
-      const orderId = typeof payload?.orderId === "string" ? payload.orderId : "";
-      const location = payload?.location;
-      if (!orderId || !Number.isFinite(location?.lat) || !Number.isFinite(location?.lng)) return;
+      if (!isRecord(payload) || typeof payload.orderId !== "string" || !isCoordinates(payload.location)) return;
 
-      const route = payload?.route;
-      const validRoute = route && Number.isFinite(route?.origin?.lat) && Number.isFinite(route?.origin?.lng) &&
-        Array.isArray(route?.geometry) && route.geometry.length >= 2 &&
-        route.geometry.every(([lng, lat]: [number, number]) => Number.isFinite(lat) && Number.isFinite(lng)) &&
-        Number.isFinite(route?.durationSeconds) && route.durationSeconds >= 0 && typeof route?.generatedAt === "string";
-      const mergeTracking = (order: Order | null | undefined) => {
-        if (!order || order._id !== orderId) return order;
+      const orderId = payload.orderId;
+      const location = payload.location;
+      const route = isLiveShipperRoute(payload.route) ? payload.route : undefined;
+      const routeStatus = isLiveShipperRouteStatus(payload.routeStatus) ? payload.routeStatus : undefined;
+      const updatedAt = typeof payload.updatedAt === "string" ? payload.updatedAt : new Date().toISOString();
+      const mergeTracking = (order: Order): Order => {
+        if (order._id !== orderId) return order;
         return {
           ...order,
           tracking: {
             ...order.tracking,
             location,
-            updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : new Date().toISOString(),
-            ...(validRoute ? { route } : {}),
+            updatedAt,
+            // A GPS-only event must not discard a route that was delivered by
+            // an earlier event. The server sends `unavailable` explicitly when
+            // the provider route should no longer be shown.
+            ...(route ? { route } : {}),
+            ...(routeStatus ? { routeStatus } : {}),
           },
         };
       };
+      const mergeDetailTracking = (order: Order | undefined): Order | undefined =>
+        order ? mergeTracking(order) : order;
 
-      queryClient.setQueryData<Order[]>(["orders", token], (orders) => orders?.map((order) => mergeTracking(order)) || orders);
-      queryClient.setQueryData<Order>(["customer-order-detail", token, orderId], mergeTracking);
+      queryClient.setQueryData<Order[]>(["orders", token], (orders) => orders?.map((order) => mergeTracking(order)));
+      queryClient.setQueryData<Order>(["customer-order-detail", token, orderId], mergeDetailTracking);
     });
 
     return () => {
@@ -379,7 +410,7 @@ function CustomerApp() {
             orderApi.getQuote(
               { ...address, lat, lng },
               method,
-              voucherCode.trim() || undefined,
+              voucherCodes,
               selectedAddressId
             )
           )
@@ -401,7 +432,7 @@ function CustomerApp() {
       active = false;
       clearTimeout(timer);
     };
-  }, [token, screen, address.address, address.lat, address.lng, cartQuery.data?.subtotal, voucherCode, selectedAddressId]);
+  }, [token, screen, address.address, address.lat, address.lng, cartQuery.data?.subtotal, voucherCodes, selectedAddressId]);
 
   // Actions
   const handleLogout = async () => {
@@ -526,6 +557,35 @@ function CustomerApp() {
   };
 
   const handleApplyVoucher = async (code: string) => {
+    const normalizedCode = code.trim().toUpperCase();
+    if (voucherCodes.includes(normalizedCode)) {
+      throw new Error("Mã voucher này đã được áp dụng.");
+    }
+
+    try {
+      setWorking(true);
+      const lat = Number(address.lat);
+      const lng = Number(address.lng);
+      const nextVoucherCodes = [...voucherCodes, normalizedCode];
+      const quote = await orderApi.getQuote(
+        { ...address, lat: Number.isFinite(lat) ? lat : 0, lng: Number.isFinite(lng) ? lng : 0 },
+        deliveryMethod,
+        nextVoucherCodes,
+        selectedAddressId
+      );
+      setVoucherCodes(nextVoucherCodes);
+      setDeliveryQuotes((prev) => ({ ...prev, [deliveryMethod]: quote }));
+      Alert.alert("Áp mã thành công", `Đã áp dụng voucher: ${normalizedCode}`);
+    } catch (cause) {
+      Alert.alert("Mã không hợp lệ", apiError(cause, "Không thể áp dụng mã voucher này."));
+      throw cause;
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const handleRemoveVoucher = async (code: string) => {
+    const nextVoucherCodes = voucherCodes.filter((voucherCode) => voucherCode !== code);
     try {
       setWorking(true);
       const lat = Number(address.lat);
@@ -533,21 +593,17 @@ function CustomerApp() {
       const quote = await orderApi.getQuote(
         { ...address, lat: Number.isFinite(lat) ? lat : 0, lng: Number.isFinite(lng) ? lng : 0 },
         deliveryMethod,
-        code.trim(),
+        nextVoucherCodes,
         selectedAddressId
       );
-      setVoucherCode(code.trim());
+      setVoucherCodes(nextVoucherCodes);
       setDeliveryQuotes((prev) => ({ ...prev, [deliveryMethod]: quote }));
-      Alert.alert("Áp mã thành công", `Đã áp dụng voucher: ${code.trim()}`);
     } catch (cause) {
-      Alert.alert("Mã không hợp lệ", apiError(cause, "Không thể áp dụng mã voucher này."));
+      Alert.alert("Không thể bỏ mã", apiError(cause, "Không thể cập nhật voucher."));
+      throw cause;
     } finally {
       setWorking(false);
     }
-  };
-
-  const handleRemoveVoucher = () => {
-    setVoucherCode("");
   };
 
   const handleAddToCart = async (
@@ -610,7 +666,7 @@ function CustomerApp() {
         addressEntryId: selectedAddressId,
         deliveryMethod,
         paymentMethod,
-        voucherCode: voucherCode.trim() || undefined,
+        voucherCodes: voucherCodes.length > 0 ? voucherCodes : undefined,
       });
 
       await queryClient.invalidateQueries({ queryKey: ["cart", token] });
@@ -619,7 +675,7 @@ function CustomerApp() {
       setTrackingOrderId(res.orderId);
       setScreen("track");
 
-      if (paymentMethod === "PAYOS" && (res.checkoutUrl || res.paymentUrl)) {
+      if (!res.zeroPayableVoucherCheckout && paymentMethod === "PAYOS" && (res.checkoutUrl || res.paymentUrl)) {
         const payUrl = res.checkoutUrl || res.paymentUrl;
         Alert.alert(
           "Đặt đơn thành công",
@@ -781,7 +837,7 @@ function CustomerApp() {
             onSelectSavedAddress={handleSelectAddressBookEntry}
             onSaveNewAddress={handleSaveAddressBookEntry}
             userProfile={profileQuery.data}
-            voucherCode={voucherCode}
+            voucherCodes={voucherCodes}
             onApplyVoucher={handleApplyVoucher}
             onRemoveVoucher={handleRemoveVoucher}
           />

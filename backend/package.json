@@ -12,6 +12,7 @@
     "migrate:usd-to-vnd": "node seeds/migrateUsdToVnd.cjs",
     "migrate:wallet-payos": "node seeds/migrateWalletPaymentPayosIndex.cjs",
     "migrate:order-review-indexes": "node seeds/migrateOrderReviewIndexes.cjs",
+    "migrate:voucher-redemption-index": "node seeds/migrateVoucherRedemptionIndexes.cjs",
     "migrate:refund-bank-accounts": "node seeds/migrateRefundBankAccounts.cjs",
     "jobs:expire-shipper-orders": "node jobs/expireShipperOrders.js",
     "lint": "eslint . --max-warnings 0",

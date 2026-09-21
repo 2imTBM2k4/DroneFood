@@ -319,13 +319,13 @@ export const orderApi = {
   getQuote: async (
     address: { lat: number; lng: number; [key: string]: unknown },
     deliveryMethod: DeliveryMethod,
-    voucherCode?: string,
+    voucherCodes?: string[],
     addressEntryId?: string
   ) => {
     const res = await api.post<{ data: Quote }>("/api/order/quote", {
       ...(addressEntryId ? { addressEntryId } : { address }),
       deliveryMethod,
-      voucherCode: voucherCode || undefined,
+      voucherCodes: voucherCodes?.filter(Boolean),
     });
     return res.data.data;
   },
@@ -334,7 +334,7 @@ export const orderApi = {
     addressEntryId?: string;
     deliveryMethod: DeliveryMethod;
     paymentMethod: PaymentMethod;
-    voucherCode?: string;
+    voucherCodes?: string[];
   }) => {
     const res = await api.post<{
       success: boolean;
@@ -342,6 +342,9 @@ export const orderApi = {
       checkoutUrl?: string;
       paymentUrl?: string;
       totalPrice: number;
+      zeroPayableVoucherCheckout?: boolean;
+      newlyPaid?: boolean;
+      message?: string;
     }>("/api/order/place", payload);
     return res.data;
   },

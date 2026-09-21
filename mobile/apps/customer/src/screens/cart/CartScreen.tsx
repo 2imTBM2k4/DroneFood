@@ -11,6 +11,7 @@ import { colors, radius, spacing, typography } from "../../theme/tokens";
 import { formatVnd } from "../../api/client";
 import { Button } from "../../components/common/Button";
 import { Header } from "../../components/common/Header";
+import { Icon } from "../../components/common/Icon";
 import type { Cart, CartLine } from "../../types";
 
 interface CartScreenProps {
@@ -53,7 +54,7 @@ export const CartScreen: React.FC<CartScreenProps> = ({
       <View style={styles.container}>
         <Header title="Giỏ hàng của bạn" />
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>🛒</Text>
+          <View style={styles.emptyIcon}><Icon name="cart" size={56} color={colors.primary} /></View>
           <Text style={styles.emptyTitle}>Giỏ hàng đang trống</Text>
           <Text style={styles.emptySubtitle}>
             Hãy khám phá các nhà hàng ngon xung quanh và chọn món ngay thôi!
@@ -116,15 +117,17 @@ export const CartScreen: React.FC<CartScreenProps> = ({
               <View style={styles.quantityControls}>
                 <Pressable
                   style={styles.qtyBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={line.quantity === 1 ? `Xóa ${line.name}` : `Giảm số lượng ${line.name}`}
                   onPress={() => onUpdateQuantity(line, line.quantity - 1)}
                 >
-                  <Text style={styles.qtyBtnText}>
-                    {line.quantity === 1 ? "🗑️" : "−"}
-                  </Text>
+                  {line.quantity === 1 ? <Icon name="trash" size={16} color={colors.textPrimary} /> : <Text style={styles.qtyBtnText}>−</Text>}
                 </Pressable>
                 <Text style={styles.qtyText}>{line.quantity}</Text>
                 <Pressable
                   style={styles.qtyBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Tăng số lượng ${line.name}`}
                   onPress={() => onUpdateQuantity(line, line.quantity + 1)}
                 >
                   <Text style={styles.qtyBtnText}>+</Text>
@@ -184,7 +187,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   emptyIcon: {
-    fontSize: 64,
+    width: 64,
+    height: 64,
+    alignItems: "center",
+    justifyContent: "center",
   },
   emptyTitle: {
     ...typography.title1,

@@ -49,6 +49,10 @@ export const serialiseLiveShipperRoute = (route) => {
   };
 };
 
+const serialiseLiveShipperRouteStatus = (status) => (
+  status === "available" || status === "unavailable" ? status : null
+);
+
 export const isCustomerTrackableShipperOrder = (order) => (
   order?.deliveryMethod === "shipper" &&
   ((order.orderStatus === "delivering" && order.shipperAssignmentStatus === "picked_up") ||
@@ -67,14 +71,18 @@ export const emitCustomerShipperLocation = async (io, shipperId, profile) => {
     _id: profile.currentOrder,
     shipperId,
     deliveryMethod: "shipper",
-  }).select("user deliveryMethod orderStatus shipperAssignmentStatus liveShipperRoute").lean();
+  }).select("user deliveryMethod orderStatus shipperAssignmentStatus liveShipperRoute liveShipperRouteStatus").lean();
 
   if (!order?.user || !isCustomerTrackableShipperOrder(order)) return;
-  const route = serialiseLiveShipperRoute(order.liveShipperRoute);
+  const routeStatus = serialiseLiveShipperRouteStatus(order.liveShipperRouteStatus);
+  // A provider failure invalidates the displayed route/ETA. Preserve the GPS
+  // event, but do not replay an older route as if it were current.
+  const route = routeStatus === "unavailable" ? null : serialiseLiveShipperRoute(order.liveShipperRoute);
   io.to(`customer_${order.user}`).emit("shipperLocationUpdated", {
     orderId: String(profile.currentOrder),
     location: { lat, lng },
     updatedAt: profile.locationUpdatedAt?.toISOString?.() || new Date().toISOString(),
     ...(route && { route }),
+    ...(routeStatus && { routeStatus }),
   });
 };

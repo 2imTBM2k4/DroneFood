@@ -4,7 +4,9 @@ const voucherRedemptionSchema = new mongoose.Schema(
   {
     voucher: { type: mongoose.Schema.Types.ObjectId, ref: "Voucher", required: true, index: true },
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    order: { type: mongoose.Schema.Types.ObjectId, ref: "Order", required: true, index: true },
+    // The compound unique index below is also prefix-searchable by order.
+    // Do not recreate the old order-only index: it prevented voucher stacking.
+    order: { type: mongoose.Schema.Types.ObjectId, ref: "Order", required: true },
     discountAmount: { type: Number, required: true, min: 1 },
     status: { type: String, enum: ["reserved", "released"], default: "reserved", index: true },
     releasedAt: { type: Date, default: null },

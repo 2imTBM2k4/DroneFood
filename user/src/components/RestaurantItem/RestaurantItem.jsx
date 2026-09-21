@@ -5,7 +5,6 @@ import './RestaurantItem.css';
 import { StoreContext } from '../../context/StoreContext';
 import { assets } from '../../assets/assets';
 import { formatDistance } from '../../lib/distance';
-import { formatVND } from '../../../../shared/utils/money';
 
 const RestaurantItem = ({
   id,
@@ -14,7 +13,6 @@ const RestaurantItem = ({
   image,
   distanceKm,
   etaMin,
-  estimatedDeliveryFee,
   rating,
 }) => {
   const { url } = useContext(StoreContext);
@@ -87,12 +85,6 @@ const RestaurantItem = ({
                 ? `${etaMin} min flight time`
                 : "Time at checkout"}
             </span>
-            {typeof estimatedDeliveryFee === "number" && (
-              <>
-                <span className="apple-meta-dot">·</span>
-                <span>{formatVND(estimatedDeliveryFee)} est. fee</span>
-              </>
-            )}
           </div>
         )}
 

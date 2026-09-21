@@ -10,6 +10,7 @@ import { formatVnd } from "../../api/client";
 import { Badge } from "../../components/common/Badge";
 import { Button } from "../../components/common/Button";
 import { Header } from "../../components/common/Header";
+import { Icon } from "../../components/common/Icon";
 import { OrderReviewModal } from "../../components/orders/OrderReviewModal";
 import type { Order, ReviewFlow } from "../../types";
 
@@ -49,7 +50,7 @@ export const OrdersScreen: React.FC<OrdersScreenProps> = ({
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>📦</Text>
+            <View style={styles.emptyIcon}><Icon name="package" size={52} color={colors.primary} /></View>
             <Text style={styles.emptyTitle}>
               {loading ? "Đang tải đơn hàng..." : "Chưa có đơn hàng nào"}
             </Text>
@@ -84,16 +85,17 @@ export const OrdersScreen: React.FC<OrdersScreenProps> = ({
               </View>
 
               <View style={styles.restaurantRow}>
-                <Text style={styles.storeIcon}>🏪</Text>
+                <Icon name="store" size={16} color={colors.textSecondary} />
                 <Text numberOfLines={1} style={styles.restaurantName}>
                   {item.restaurantId?.name || "Nhà hàng đối tác"}
                 </Text>
               </View>
 
               {item.shippingAddress ? (
-                <Text numberOfLines={1} style={styles.addressText}>
-                  📍 {item.shippingAddress.address}, {item.shippingAddress.city}
-                </Text>
+                <View style={styles.addressRow}>
+                  <Icon name="map-pin" size={14} color={colors.textSecondary} />
+                  <Text numberOfLines={1} style={styles.addressText}>{item.shippingAddress.address}, {item.shippingAddress.city}</Text>
+                </View>
               ) : null}
 
               <View style={styles.itemsSummary}>
@@ -110,7 +112,7 @@ export const OrdersScreen: React.FC<OrdersScreenProps> = ({
 
               {item.orderStatus === "delivered" && item.reviewFlow?.complete ? (
                 <View style={styles.reviewCompleteRow}>
-                  <Text style={styles.reviewCompleteCheck}>✓</Text>
+                  <Icon name="check" size={15} color="#15803D" />
                   <Text style={styles.reviewCompleteText}>
                     Đã gửi đánh giá đơn hàng
                   </Text>
@@ -130,7 +132,8 @@ export const OrdersScreen: React.FC<OrdersScreenProps> = ({
 
                 {isActive ? (
                   <Button
-                    label={isDrone ? "🛸 Theo dõi Drone" : "Xem chi tiết"}
+                    label={isDrone ? "Theo dõi Drone" : "Xem chi tiết"}
+                    icon={isDrone ? <Icon name="drone" size={16} color="#FFFFFF" /> : undefined}
                     variant={isDrone ? "primary" : "secondary"}
                     style={styles.actionBtn}
                     onPress={() => onTrackOrder(item)}
@@ -250,7 +253,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   storeIcon: {
-    fontSize: 14,
+    width: 16,
   },
   restaurantName: {
     ...typography.captionBold,
@@ -260,6 +263,11 @@ const styles = StyleSheet.create({
   addressText: {
     ...typography.caption,
     color: colors.textSecondary,
+  },
+  addressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   itemsSummary: {
     backgroundColor: colors.surfaceSubtle,
@@ -306,7 +314,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   emptyIcon: {
-    fontSize: 56,
+    width: 56,
+    height: 56,
+    alignItems: "center",
+    justifyContent: "center",
   },
   emptyTitle: {
     ...typography.subhead,
@@ -322,11 +333,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     marginVertical: spacing.xxs,
-  },
-  reviewCompleteCheck: {
-    color: "#16A34A",
-    fontWeight: "800",
-    fontSize: 14,
   },
   reviewCompleteText: {
     fontSize: 13,

@@ -13,6 +13,7 @@ import { formatVnd } from "../../api/client";
 import { Button } from "../../components/common/Button";
 import { Header } from "../../components/common/Header";
 import { Input } from "../../components/common/Input";
+import { Icon, type IconName } from "../../components/common/Icon";
 import { AddressEditorModal } from "../../components/address/AddressEditorModal";
 import type {
   Address,
@@ -176,12 +177,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     }
   };
 
-  const getLabelIcon = (label: string) => {
+  const getLabelIcon = (label: string): IconName => {
     const l = (label || "").toLowerCase();
-    if (l.includes("nhà")) return "🏠";
-    if (l.includes("công ty") || l.includes("văn phòng") || l.includes("work"))
-      return "🏢";
-    return "📍";
+    if (l.includes("nhà")) return "home";
+    if (l.includes("công ty") || l.includes("văn phòng") || l.includes("work")) return "store";
+    return "map-pin";
   };
 
   return (
@@ -195,9 +195,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         {/* User Profile Overview Card */}
         <View style={styles.userCard}>
           <View style={styles.avatarCircle}>
-            <Text style={styles.avatarText}>
-              {profile?.name ? profile.name.charAt(0).toUpperCase() : "👤"}
-            </Text>
+            {profile?.name ? <Text style={styles.avatarText}>{profile.name.charAt(0).toUpperCase()}</Text> : <Icon name="profile" size={27} color={colors.primary} />}
           </View>
           <View style={styles.userInfo}>
             <Text style={styles.userName}>
@@ -205,7 +203,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             </Text>
             <Text style={styles.userEmail}>{profile?.email}</Text>
             {profile?.phone ? (
-              <Text style={styles.userPhone}>📞 {profile.phone}</Text>
+              <View style={styles.phoneRow}><Icon name="phone" size={14} color={colors.textSecondary} /><Text style={styles.userPhone}>{profile.phone}</Text></View>
             ) : null}
           </View>
         </View>
@@ -219,7 +217,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           >
             <View style={styles.menuLeft}>
               <View style={[styles.menuIconBox, { backgroundColor: "#DBEAFE" }]}>
-                <Text style={styles.menuIconText}>👤</Text>
+                <Icon name="profile" size={20} color={colors.primary} />
               </View>
               <View>
                 <Text style={styles.menuTitle}>Hồ sơ cá nhân</Text>
@@ -228,7 +226,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 </Text>
               </View>
             </View>
-            <Text style={styles.chevron}>›</Text>
+            <Icon name="chevron-right" size={19} color={colors.textSecondary} />
           </Pressable>
 
           <View style={styles.menuDivider} />
@@ -240,7 +238,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           >
             <View style={styles.menuLeft}>
               <View style={[styles.menuIconBox, { backgroundColor: "#FEF3C7" }]}>
-                <Text style={styles.menuIconText}>📍</Text>
+                <Icon name="map-pin" size={20} color={colors.primary} />
               </View>
               <View>
                 <Text style={styles.menuTitle}>Địa chỉ đã lưu (sổ địa chỉ)</Text>
@@ -249,7 +247,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 </Text>
               </View>
             </View>
-            <Text style={styles.chevron}>›</Text>
+            <Icon name="chevron-right" size={19} color={colors.textSecondary} />
           </Pressable>
 
           <View style={styles.menuDivider} />
@@ -264,7 +262,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           >
             <View style={styles.menuLeft}>
               <View style={[styles.menuIconBox, { backgroundColor: "#DCFCE7" }]}>
-                <Text style={styles.menuIconText}>💳</Text>
+                <Icon name="credit-card" size={20} color={colors.primary} />
               </View>
               <View>
                 <Text style={styles.menuTitle}>Lịch sử giao dịch</Text>
@@ -273,7 +271,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 </Text>
               </View>
             </View>
-            <Text style={styles.chevron}>›</Text>
+            <Icon name="chevron-right" size={19} color={colors.textSecondary} />
           </Pressable>
 
           <View style={styles.menuDivider} />
@@ -285,7 +283,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           >
             <View style={styles.menuLeft}>
               <View style={[styles.menuIconBox, { backgroundColor: "#F3E8FF" }]}>
-                <Text style={styles.menuIconText}>⚙️</Text>
+                <Icon name="settings" size={20} color={colors.primary} />
               </View>
               <View>
                 <Text style={styles.menuTitle}>Cài đặt & Trợ giúp</Text>
@@ -294,7 +292,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 </Text>
               </View>
             </View>
-            <Text style={styles.chevron}>›</Text>
+            <Icon name="chevron-right" size={19} color={colors.textSecondary} />
           </Pressable>
         </View>
       </ScrollView>
@@ -367,7 +365,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
             {addressBook.length === 0 ? (
               <View style={styles.emptyAddressBox}>
-                <Text style={styles.emptyAddressIcon}>📮</Text>
+                <View style={styles.emptyAddressIcon}><Icon name="map-pin" size={40} color={colors.primary} /></View>
                 <Text style={styles.emptyAddressTitle}>
                   Chưa có địa chỉ nào trong sổ
                 </Text>
@@ -398,9 +396,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                     >
                       <View style={styles.addressItemHeader}>
                         <View style={styles.addressLabelRow}>
-                          <Text style={styles.addressItemIcon}>
-                            {getLabelIcon(entry.label)}
-                          </Text>
+                          <Icon name={getLabelIcon(entry.label)} size={17} color={colors.textSecondary} />
                           <Text style={styles.addressItemLabel}>
                             {entry.label}
                           </Text>
@@ -482,7 +478,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               <Text style={styles.emptyListText}>Đang tải giao dịch PayOS...</Text>
             ) : transactions.length === 0 ? (
               <View style={styles.emptyAddressBox}>
-                <Text style={styles.emptyAddressIcon}>💳</Text>
+                <View style={styles.emptyAddressIcon}><Icon name="credit-card" size={40} color={colors.primary} /></View>
                 <Text style={styles.emptyAddressTitle}>
                   Chưa có giao dịch PayOS nào
                 </Text>
@@ -634,6 +630,11 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 2,
   },
+  phoneRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   menuGroupCard: {
     backgroundColor: colors.surfaceCard,
     borderRadius: radius.lg,
@@ -723,7 +724,10 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   emptyAddressIcon: {
-    fontSize: 40,
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: spacing.xs,
   },
   emptyAddressTitle: {

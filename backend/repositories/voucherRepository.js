@@ -61,14 +61,23 @@ export const reserveForOrder = async ({ voucher, userId, orderId, discountAmount
 };
 
 export const releaseForOrder = async (orderId, reason, session) => {
-  const redemptions = await VoucherRedemption.find({ order: orderId, status: "reserved" }).session(session || null);
-  if (!redemptions || redemptions.length === 0) return false;
+  const redemptionIds = await VoucherRedemption.find({ order: orderId, status: "reserved" })
+    .select("_id")
+    .session(session || null);
+  if (!redemptionIds || redemptionIds.length === 0) return false;
 
-  for (const redemption of redemptions) {
-    redemption.status = "released";
-    redemption.releasedAt = new Date();
-    redemption.releaseReason = reason;
-    await redemption.save({ session });
+  let releasedAny = false;
+  for (const { _id } of redemptionIds) {
+    // Claim the redemption before decrementing either quota counter. Two
+    // overlapping cancellations may observe the same id, but only one can
+    // move it out of `reserved` and therefore release its quota.
+    const redemption = await VoucherRedemption.findOneAndUpdate(
+      { _id, status: "reserved" },
+      { $set: { status: "released", releasedAt: new Date(), releaseReason: reason } },
+      { new: true, session }
+    );
+    if (!redemption) continue;
+    releasedAny = true;
 
     await Promise.all([
       Voucher.updateOne({ _id: redemption.voucher, usageCount: { $gt: 0 } }, { $inc: { usageCount: -1 } }, { session }),
@@ -79,5 +88,5 @@ export const releaseForOrder = async (orderId, reason, session) => {
       ),
     ]);
   }
-  return true;
+  return releasedAny;
 };

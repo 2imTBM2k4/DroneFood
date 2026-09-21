@@ -8,7 +8,7 @@ import OptionGroupBuilder, {
   normaliseOptionGroups,
 } from "../../../../shared/components/OptionGroupBuilder";
 
-const Add = ({ url }) => {
+const Add = ({ url, onSuccess }) => {
   // Prop url từ App
 
   const [image, setImage] = useState(null);
@@ -122,6 +122,7 @@ const Add = ({ url }) => {
       if (response.data.success) {
         resetForm();
         toast.success(response.data.message);
+        onSuccess?.();
       } else {
         // Keep what they typed so they can fix it and resubmit.
         toast.error(response.data.message);
@@ -210,9 +211,9 @@ const Add = ({ url }) => {
               value={data.price}
               type="number"
               name="price"
-              min="0"
-              step="0.01"
-              placeholder="20.00"
+              min="1"
+              step="1"
+              placeholder="20000"
               required
             />
           </div>
