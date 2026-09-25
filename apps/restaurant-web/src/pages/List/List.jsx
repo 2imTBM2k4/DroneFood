@@ -8,7 +8,7 @@ import { toast } from "react-toastify";
 import EditProduct from "../Products/EditProduct";
 import { Pencil, Trash2, Search, X, Plus, Power } from "lucide-react";
 import Add from "../Add/Add";
-import { formatVND } from "../../../../shared/utils/money";
+import { formatVND } from "@drone-food/web-ui/utils/money";
 
 const List = ({ url }) => {
   const [list, setList] = useState([]);

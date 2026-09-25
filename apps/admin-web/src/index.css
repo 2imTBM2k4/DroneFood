@@ -1,4 +1,4 @@
-@import "../../shared/tokens.css";
+@import "@drone-food/web-ui/tokens.css";
 
 .app-content {
   display: flex;

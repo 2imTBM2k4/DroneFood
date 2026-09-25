@@ -3,15 +3,17 @@ name: Backend CI
 on:
   pull_request:
     paths:
-      - "backend/**"
-      - "shared/**"
+      - "apps/api/**"
+      - "packages/web-ui/**"
       - "package.json"
+      - ".nvmrc"
       - ".github/workflows/backend-ci.yml"
   push:
     paths:
-      - "backend/**"
-      - "shared/**"
+      - "apps/api/**"
+      - "packages/web-ui/**"
       - "package.json"
+      - ".nvmrc"
       - ".github/workflows/backend-ci.yml"
 
 permissions:
@@ -22,14 +24,14 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: backend
+        working-directory: apps/api
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22.13.0
           cache: npm
-          cache-dependency-path: backend/package-lock.json
+          cache-dependency-path: apps/api/package-lock.json
       - run: npm ci
       - run: npm run lint
       - run: npm test

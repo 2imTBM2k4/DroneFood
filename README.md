@@ -20,11 +20,18 @@ Full system architecture (27 sections, with diagrams):
 ## Architecture
 
 ```
-├── backend/          Express.js REST API (Node.js, ES Modules)
-├── user/             React app — Customer-facing
-├── admin/            React app — Admin dashboard
-├── restaurant/       React app — Restaurant owner panel
-└── shared/           Design tokens + shared components
+├── apps/
+│   ├── api/                 Express.js REST API (Node.js, ES Modules)
+│   ├── customer-web/        React app — Customer-facing
+│   ├── admin-web/           React app — Admin dashboard
+│   ├── restaurant-web/      React app — Restaurant owner panel
+│   ├── customer-mobile/     Expo customer app
+│   ├── restaurant-mobile/   Expo restaurant-owner app
+│   └── shipper-mobile/      Expo shipper app
+└── packages/
+    ├── web-ui/              Design tokens + shared web components
+    ├── contracts/           Shared API/domain contracts
+    └── api-client/          Shared typed API helpers
 ```
 
 ### Backend Architecture
@@ -36,7 +43,7 @@ The backend follows a layered **Controller → Service → Repository** pattern:
 - **Repositories** wrap Mongoose queries
 
 ```
-backend/
+apps/api/
 ├── server.js              # Entry point (HTTP server, Socket.io, Cloudinary)
 ├── app.js                 # Express app (routes, middleware) — separated for testing
 ├── config/                # DB connection, Cloudinary, Multer, fees
@@ -93,7 +100,7 @@ backend/
 
 ## Features
 
-### Customer (user/)
+### Customer (apps/customer-web/)
 - Browse restaurants (radius-based, sorted by distance)
 - Pick exact delivery location on map (Geolocation + TrackAsia)
 - View restaurant menu with food option groups (sizes, toppings)
@@ -107,7 +114,7 @@ backend/
 - Change password
 - Reset password via email
 
-### Restaurant Owner (restaurant/)
+### Restaurant Owner (apps/restaurant-web/)
 - Register restaurant (requires admin approval, with geocoding)
 - Manage food menu (add, edit, remove with images)
 - Configure food option groups (sizes, toppings with price deltas)
@@ -118,7 +125,7 @@ backend/
 - Edit restaurant details
 - View order history and dashboard
 
-### Admin (admin/)
+### Admin (apps/admin-web/)
 - Dashboard with statistics (users, orders, revenue)
 - Manage users (lock/unlock accounts, edit, delete)
 - Approve/reject restaurants (lock/unlock)
@@ -157,7 +164,7 @@ cancelled  cancelled
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 22.13.0 or newer
 - MongoDB (local or Atlas)
 - Cloudinary account
 - PayOS payment channel
@@ -172,11 +179,11 @@ cd DroneFood
 ### 2. Setup Backend
 
 ```bash
-cd backend
+cd apps/api
 npm install
 ```
 
-Create `backend/.env` (see `.env.example`):
+Create `apps/api/.env` (see `.env.example`):
 
 ```env
 PORT=4000
@@ -255,13 +262,13 @@ Then install and run:
 
 ```bash
 # Customer app (port 5173)
-cd user && npm install && npm run dev
+cd apps/customer-web && npm install && npm run dev
 
 # Admin dashboard (port 5174)
-cd admin && npm install && npm run dev
+cd apps/admin-web && npm install && npm run dev
 
 # Restaurant panel (port 5175)
-cd restaurant && npm install && npm run dev
+cd apps/restaurant-web && npm install && npm run dev
 ```
 
 ### 4. Docker (alternative)
@@ -270,14 +277,14 @@ cd restaurant && npm install && npm run dev
 docker compose up -d --build
 ```
 
-This starts all 4 services (backend on :4000, user on :5173, admin on :5174, restaurant on :5175).
+This starts all 4 services (API on :4000, customer web on :5173, admin web on :5174, restaurant web on :5175).
 
 ## Testing
 
 The backend has **106 automated tests** covering unit, integration, and end-to-end business flows.
 
 ```bash
-cd backend
+cd apps/api
 
 # Run all tests
 npm test

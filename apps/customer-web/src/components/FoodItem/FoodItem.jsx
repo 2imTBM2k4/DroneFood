@@ -5,7 +5,7 @@ import "./FoodItem.css";
 import { assets } from "../../assets/assets";
 import { StoreContext } from "../../context/StoreContext";
 import ItemOptionsSheet from "../ItemOptionsSheet/ItemOptionsSheet";
-import { formatVND } from "../../../../shared/utils/money";
+import { formatVND } from "@drone-food/web-ui/utils/money";
 
 function FoodItem({ id, name, price, description, image, optionGroups = [], isBestSeller, salesCount }) {
   const { url, food_list, fetchSingleFood } = useContext(StoreContext);

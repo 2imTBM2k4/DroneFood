@@ -5,7 +5,7 @@ Tạo một **Cron Job** riêng trong cùng Render project với backend:
 | Trường | Giá trị |
 |---|---|
 | Repository / Branch | Drone Food / `main` |
-| Root Directory | `backend` |
+| Root Directory | `apps/api` |
 | Build Command | `npm ci` |
 | Start Command | `npm run jobs:expire-shipper-orders` |
 | Schedule | `* * * * *` |

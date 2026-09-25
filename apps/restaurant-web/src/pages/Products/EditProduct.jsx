@@ -5,7 +5,7 @@ import "./EditProduct.css";
 import OptionGroupBuilder, {
   validateOptionGroups,
   normaliseOptionGroups,
-} from "../../../../shared/components/OptionGroupBuilder";
+} from "@drone-food/web-ui/components/OptionGroupBuilder";
 
 const EditProduct = ({ url, product, onClose, onUpdate }) => {
   const [image, setImage] = useState(null);

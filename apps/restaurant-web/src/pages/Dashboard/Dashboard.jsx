@@ -10,9 +10,9 @@ import {
 } from "lucide-react";
 import { toast } from "react-toastify";
 import { AuthContext } from "../../context/AuthContext";
-import { ErrorState } from "../../../../shared/components/StateBlock";
+import { ErrorState } from "@drone-food/web-ui/components/StateBlock";
 import "./Dashboard.css";
-import { formatVND } from "../../../../shared/utils/money";
+import { formatVND } from "@drone-food/web-ui/utils/money";
 
 const STATUS_LABELS = {
   pending: "Pending",

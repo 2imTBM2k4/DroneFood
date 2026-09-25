@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { ShoppingBag, ChevronRight } from "lucide-react";
 import "./FloatingCartBar.css";
 import { StoreContext } from "../../context/StoreContext";
-import { formatVND } from "../../../../shared/utils/money";
+import { formatVND } from "@drone-food/web-ui/utils/money";
 
 const HIDDEN_ROUTES = ["/cart", "/checkout", "/payment", "/placeorder", "/order"];
 

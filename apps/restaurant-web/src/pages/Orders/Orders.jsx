@@ -4,9 +4,9 @@ import { toast } from "react-toastify";
 import "./Orders.css";
 import { assets } from "../../assets/assets";
 import io from "socket.io-client";
-import { EmptyState, ErrorState } from "../../../../shared/components/StateBlock";
+import { EmptyState, ErrorState } from "@drone-food/web-ui/components/StateBlock";
 import { ClipboardList } from "lucide-react";
-import { formatVND } from "../../../../shared/utils/money";
+import { formatVND } from "@drone-food/web-ui/utils/money";
 
 const Orders = ({ url }) => {
   const [orders, setOrders] = useState([]);

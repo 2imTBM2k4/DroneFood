@@ -21,7 +21,7 @@ import { toast } from "react-toastify";
 import "leaflet/dist/leaflet.css";
 import { StoreContext } from "../../context/StoreContext";
 import DroneDelivery from "../../components/DroneDelivery/DroneDelivery";
-import { formatVND } from "../../../../shared/utils/money";
+import { formatVND } from "@drone-food/web-ui/utils/money";
 import "./OrderDetail.css";
 
 // Setup Leaflet default marker icons

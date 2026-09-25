@@ -18,9 +18,9 @@ import {
   Search,
 } from "lucide-react";
 import { SkeletonList } from "../../components/Skeleton/Skeleton";
-import { EmptyState, ErrorState } from "../../../../shared/components/StateBlock";
+import { EmptyState, ErrorState } from "@drone-food/web-ui/components/StateBlock";
 import "./MyOrders.css";
-import { formatVND } from "../../../../shared/utils/money";
+import { formatVND } from "@drone-food/web-ui/utils/money";
 import OrderReviewPrompt from "../../components/OrderReviewPrompt/OrderReviewPrompt";
 
 const STATUS_CONFIG = {

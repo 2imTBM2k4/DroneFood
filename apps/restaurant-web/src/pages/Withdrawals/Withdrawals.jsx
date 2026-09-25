@@ -3,7 +3,7 @@ import axios from "axios";
 import { HandCoins, Landmark, RefreshCw, WalletCards } from "lucide-react";
 import { toast } from "react-toastify";
 import { AuthContext } from "../../context/AuthContext";
-import { formatVND } from "../../../../shared/utils/money";
+import { formatVND } from "@drone-food/web-ui/utils/money";
 import "./Withdrawals.css";
 
 const statusLabel = { pending: "Chờ duyệt", approved: "Đã duyệt", paid: "Đã trả", rejected: "Từ chối" };

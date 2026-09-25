@@ -5,7 +5,7 @@ import "./RestaurantsPage.css";
 import useNearbyRestaurants from "../../hooks/useNearbyRestaurants";
 import RestaurantItem from "../../components/RestaurantItem/RestaurantItem";
 import Reveal from "../../components/Reveal/Reveal";
-import { EmptyState } from "../../../../shared/components/StateBlock";
+import { EmptyState } from "@drone-food/web-ui/components/StateBlock";
 import { NEARBY_RADIUS_KM } from "../../lib/distance";
 
 const getSearchParam = (params) =>

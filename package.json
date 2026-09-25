@@ -2,15 +2,20 @@
   "name": "drone-food",
   "private": true,
   "version": "1.0.0",
+  "packageManager": "npm@11.19.0",
   "workspaces": [
-    "mobile/packages/*",
-    "mobile/apps/*"
+    "packages/web-ui",
+    "packages/contracts",
+    "packages/api-client",
+    "apps/customer-mobile",
+    "apps/restaurant-mobile",
+    "apps/shipper-mobile"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13.0"
   },
   "scripts": {
-    "mobile:build": "npm run build --workspace=@drone-food/contracts && npm run build --workspace=@drone-food/api-client && npm run typecheck --workspace=customer && npm run typecheck --workspace=shipper && npm run typecheck --workspace=restaurant-mobile",
+    "mobile:build": "npm run build --workspace=@drone-food/contracts && npm run build --workspace=@drone-food/api-client && npm run typecheck --workspace=@drone-food/customer-mobile && npm run typecheck --workspace=@drone-food/shipper-mobile && npm run typecheck --workspace=@drone-food/restaurant-mobile",
     "mobile:typecheck": "npm run mobile:build"
   },
   "dependencies": {

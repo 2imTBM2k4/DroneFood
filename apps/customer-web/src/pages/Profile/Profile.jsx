@@ -3,7 +3,7 @@ import { toast } from "react-toastify";
 import { User, MapPin, Shield, Camera, LogIn, Loader2 } from "lucide-react";
 import { StoreContext } from "../../context/StoreContext";
 import Avatar from "../../components/Avatar/Avatar";
-import { EmptyState } from "../../../../shared/components/StateBlock";
+import { EmptyState } from "@drone-food/web-ui/components/StateBlock";
 import "./Profile.css";
 import AddressBookManager from "../../components/AddressBookManager/AddressBookManager";
 

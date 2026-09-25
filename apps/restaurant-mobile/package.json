@@ -1,5 +1,5 @@
 {
-  "name": "restaurant-mobile",
+  "name": "@drone-food/restaurant-mobile",
   "version": "1.0.0",
   "private": true,
   "main": "index.ts",
@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@drone-food/contracts": "0.1.0",
     "@expo/metro-runtime": "~57.0.15",
     "@tanstack/react-query": "^5.102.8",
     "axios": "^1.20.0",

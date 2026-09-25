@@ -6,7 +6,7 @@ import { toast } from "react-toastify";
 import OptionGroupBuilder, {
   validateOptionGroups,
   normaliseOptionGroups,
-} from "../../../../shared/components/OptionGroupBuilder";
+} from "@drone-food/web-ui/components/OptionGroupBuilder";
 
 const Add = ({ url, onSuccess }) => {
   // Prop url từ App

@@ -5,9 +5,9 @@ import "./RestaurantPage.css";
 import { StoreContext } from "../../context/StoreContext";
 import FoodDisplay from "../../components/FoodDisplay/FoodDisplay";
 import { SkeletonGrid } from "../../components/Skeleton/Skeleton";
-import { EmptyState, ErrorState } from "../../../../shared/components/StateBlock";
+import { EmptyState, ErrorState } from "@drone-food/web-ui/components/StateBlock";
 import { assets } from "../../assets/assets";
-import { formatVND } from "../../../../shared/utils/money";
+import { formatVND } from "@drone-food/web-ui/utils/money";
 import {
   haversineKm,
   estimateEtaMinutes,

@@ -7,7 +7,7 @@ import { StoreContext } from "../../context/StoreContext";
 import OrderSummary from "../../components/OrderSummary/OrderSummary";
 import AddressFormModal from "../../components/AddressFormModal/AddressFormModal";
 import { emptyDeliveryAddress } from "../../components/AddressFormModal/addressFormModel";
-import { formatVND } from "../../../../shared/utils/money";
+import { formatVND } from "@drone-food/web-ui/utils/money";
 
 const STEPS = ["Address", "Payment", "Review"];
 const toShippingAddress = (entry, fullName) => ({
@@ -659,4 +659,3 @@ const Checkout = () => {
 };
 
 export default Checkout;
-

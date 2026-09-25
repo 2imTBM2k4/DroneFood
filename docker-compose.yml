@@ -1,9 +1,9 @@
 services:
   backend:
-    build: ./backend
+    build: ./apps/api
     container_name: dronefood-backend
     env_file:
-      - ./backend/.env
+      - ./apps/api/.env
     ports:
       - "4000:4000"
     restart: unless-stopped
@@ -11,7 +11,7 @@ services:
   user:
     build:
       context: .
-      dockerfile: user/Dockerfile
+      dockerfile: apps/customer-web/Dockerfile
     container_name: dronefood-user
     ports:
       - "5173:80"
@@ -22,7 +22,7 @@ services:
   admin:
     build:
       context: .
-      dockerfile: admin/Dockerfile
+      dockerfile: apps/admin-web/Dockerfile
     container_name: dronefood-admin
     ports:
       - "5174:80"
@@ -33,7 +33,7 @@ services:
   restaurant:
     build:
       context: .
-      dockerfile: restaurant/Dockerfile
+      dockerfile: apps/restaurant-web/Dockerfile
     container_name: dronefood-restaurant
     ports:
       - "5175:80"

@@ -1,4 +1,4 @@
-import type { AddressBookEntry, ApiFailure, ApiResponse, DeliveryFees, FoodListQuery } from "@drone-food/contracts";
+import type { AddressBookEntry, ApiFailure, ApiSuccess, DeliveryFees, FoodListQuery } from "@drone-food/contracts";
 
 export interface DroneFoodApiClientOptions {
   baseUrl: string;
@@ -30,7 +30,15 @@ export class DroneFoodApiClient {
   }
 
   async getDeliveryFees(): Promise<DeliveryFees> {
-    return this.request<DeliveryFees>("/api/config/fees");
+    const payload = await this.requestPayload<DeliveryFees & { success: true }>(
+      "/api/config/fees",
+    );
+    return {
+      shipperRatePerKm: payload.shipperRatePerKm,
+      droneRatePerKm: payload.droneRatePerKm,
+      currency: payload.currency,
+      serviceFee: payload.serviceFee,
+    };
   }
 
   async listAddressBook(): Promise<AddressBookEntry[]> {
@@ -47,6 +55,14 @@ export class DroneFoodApiClient {
   }
 
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const payload = await this.requestPayload<ApiSuccess<T>>(path, init);
+    return payload.data;
+  }
+
+  private async requestPayload<T extends { success: boolean }>(
+    path: string,
+    init: RequestInit = {},
+  ): Promise<T> {
     const token = await this.accessToken?.();
     const headers = new Headers(init.headers);
 
@@ -62,7 +78,7 @@ export class DroneFoodApiClient {
       ...init,
       headers,
     });
-    const payload = (await response.json().catch(() => null)) as ApiResponse<T> | null;
+    const payload = (await response.json().catch(() => null)) as T | null;
 
     if (!response.ok || !payload || payload.success === false) {
       const failure = payload as ApiFailure | null;
@@ -73,6 +89,6 @@ export class DroneFoodApiClient {
       );
     }
 
-    return payload.data;
+    return payload;
   }
 }

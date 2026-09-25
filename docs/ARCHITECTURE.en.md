@@ -36,9 +36,9 @@ Conventional food delivery depends on a courier fleet: labour costs are high, de
 
 | Role | App | Primary goal |
 |---|---|---|
-| **Customer** (`user`) | `user/` — port 5173 | Find nearby restaurants, order, track the drone, scan a QR to collect |
-| **Restaurant owner** (`restaurant_owner`) | `restaurant/` — port 5175 | Manage the menu, accept and progress orders, open/close for trade |
-| **Administrator** (`admin`) | `admin/` — port 5174 | Approve restaurants, manage users, dispatch drones, read the audit trail |
+| **Customer** (`user`) | `apps/customer-web/` — port 5173 | Find nearby restaurants, order, track the drone, scan a QR to collect |
+| **Restaurant owner** (`restaurant_owner`) | `apps/restaurant-web/` — port 5175 | Manage the menu, accept and progress orders, open/close for trade |
+| **Administrator** (`admin`) | `apps/admin-web/` — port 5174 | Approve restaurants, manage users, dispatch drones, read the audit trail |
 
 ### Defining behaviours
 - **Radius-based delivery:** customers only see restaurants within **15 km**, sorted nearest first, each showing real distance and an estimated delivery time.
@@ -56,7 +56,7 @@ Conventional food delivery depends on a courier fleet: labour costs are high, de
 
 | Concern | Technology | Version |
 |---|---|---|
-| Runtime | Node.js (ES Modules, `"type": "module"`) | 20.x |
+| Runtime | Node.js (ES Modules, `"type": "module"`) | 22.13+ |
 | Web framework | Express | ^4.19.2 |
 | Database | MongoDB + Mongoose ODM | mongoose ^8.18.3 |
 | Auth | jsonwebtoken | ^9.0.2 |
@@ -102,35 +102,40 @@ Conventional food delivery depends on a courier fleet: labour costs are high, de
 
 ```
 CNPM/
-├── backend/                 Express API (Node.js, ES Modules)
-│   ├── server.js            Entry point: HTTP server, Socket.io, Cloudinary
-│   ├── app.js               Express app (middleware, routes) — split out for testing
-│   ├── config/              db.js, cloudinary.js, multer.js, fees.js
-│   ├── controllers/         HTTP layer: read req, call service, send res
-│   ├── services/            Business logic — every business rule lives here
-│   ├── repositories/        Mongoose queries (the only layer touching the DB)
-│   ├── models/              Mongoose schemas (`.cjs`)
-│   ├── routes/              Endpoint declarations + middleware wiring
-│   ├── validations/         Joi schemas, one per route
-│   ├── middleware/          auth.js (protect/optionalAuth/authorize), validate.js
-│   ├── utils/               AppError, auditLog, geocode, sendEmail, foodOptions
-│   ├── seeds/               Seed and backfill scripts
-│   └── tests/               unit/ · integration/ · flows/
-│
-├── user/                    React app — customer
-│   └── src/
-│       ├── pages/           One folder per route (Home, Cart, Checkout…)
-│       ├── components/      Reusable components (folder + matching CSS each)
-│       ├── context/         StoreContext — global state
-│       ├── hooks/           useGeolocation, useNearbyRestaurants
-│       ├── lib/             distance.js, trackasia.js — pure functions, no UI
-│       └── assets/
-│
-├── restaurant/              React app — restaurant owner (same shape)
-├── admin/                   React app — administrator (same shape)
-├── shared/                  Shared by all three frontends
-│   ├── tokens.css           Design tokens (colour, type, spacing)
-│   └── components/          OptionGroupBuilder, StateBlock
+├── apps/
+│   ├── api/                 Express API (Node.js, ES Modules)
+│   │   ├── server.js        Entry point: HTTP server, Socket.io, Cloudinary
+│   │   ├── app.js           Express app (middleware, routes) — split out for testing
+│   │   ├── config/          db.js, cloudinary.js, multer.js, fees.js
+│   │   ├── controllers/     HTTP layer: read req, call service, send res
+│   │   ├── services/        Business logic — every business rule lives here
+│   │   ├── repositories/    Mongoose queries (the only layer touching the DB)
+│   │   ├── models/          Mongoose schemas (`.cjs`)
+│   │   ├── routes/          Endpoint declarations + middleware wiring
+│   │   ├── validations/     Joi schemas, one per route
+│   │   ├── middleware/      auth.js (protect/optionalAuth/authorize), validate.js
+│   │   ├── utils/           AppError, auditLog, geocode, sendEmail, foodOptions
+│   │   ├── seeds/           Seed and backfill scripts
+│   │   └── tests/           unit/ · integration/ · flows/
+│   ├── customer-web/        React app — customer
+│   │   └── src/
+│   │       ├── pages/       One folder per route (Home, Cart, Checkout…)
+│   │       ├── components/  Reusable components (folder + matching CSS each)
+│   │       ├── context/     StoreContext — global state
+│   │       ├── hooks/       useGeolocation, useNearbyRestaurants
+│   │       ├── lib/         distance.js, trackasia.js — pure functions, no UI
+│   │       └── assets/
+│   ├── restaurant-web/      React app — restaurant owner (same shape)
+│   ├── admin-web/           React app — administrator (same shape)
+│   ├── customer-mobile/     Expo customer app
+│   ├── restaurant-mobile/   Expo restaurant-owner app
+│   └── shipper-mobile/      Expo shipper app
+├── packages/
+│   ├── web-ui/              Shared by the three web frontends
+│   │   ├── tokens.css       Design tokens (colour, type, spacing)
+│   │   └── components/      OptionGroupBuilder, StateBlock
+│   ├── contracts/           Shared domain contracts
+│   └── api-client/          Shared typed API helpers
 ├── docs/                    Documentation (this file)
 └── docker-compose.yml
 ```
@@ -727,7 +732,7 @@ graph TD
 | `models/*.cjs` | Every repository and service using that model |
 | `middleware/auth.js` | **Every route** with `protect` |
 | `config/fees.js` | Order placement and price display in all three frontends |
-| `shared/tokens.css` | **The look of all three apps** |
+| `packages/web-ui/tokens.css` | **The look of all three web apps** |
 | `utils/auditLog.js` | 8 logging call sites across user/restaurant/order/drone services |
 
 ---
@@ -759,7 +764,7 @@ The other integrations have **no retry or circuit breaker** — see [Technical d
 
 ## 14. Configuration
 
-### `backend/.env`
+### `apps/api/.env`
 
 | Variable | Required | Description |
 |---|:---:|---|
@@ -997,13 +1002,13 @@ graph TB
 ### Docker Compose — four services
 
 ```yaml
-backend    → build ./backend                        → port 4000
-user       → build context . / user/Dockerfile      → 5173:80
-admin      → build context . / admin/Dockerfile     → 5174:80
-restaurant → build context . / restaurant/Dockerfile → 5175:80
+backend    → build ./apps/api                                → port 4000
+user       → build context . / apps/customer-web/Dockerfile  → 5173:80
+admin      → build context . / apps/admin-web/Dockerfile     → 5174:80
+restaurant → build context . / apps/restaurant-web/Dockerfile → 5175:80
 ```
 
-The three frontends build with the **repository root as context** so they can reach `shared/` (design tokens and shared components).
+The three frontends build with the **repository root as context** so they can reach `packages/web-ui/` (design tokens and shared components).
 
 ```mermaid
 flowchart LR
@@ -1046,7 +1051,7 @@ flowchart LR
 ### Layout
 
 ```
-backend/tests/
+apps/api/tests/
 ├── setup.js          Boots the in-memory MongoDB, clears it between tests
 ├── helpers.js        createAdmin, createRestaurantOwner, generateToken, createOrder
 ├── unit/             cartService, userService, authMiddleware
@@ -1203,7 +1208,7 @@ No DI containers, event sourcing or CQRS without agreement. Consistency matters 
 
 **5. An audit trail.** Every privileged action is traceable — who, what, when, why — with its own admin screen. Many systems this size have nothing comparable.
 
-**6. A shared design system.** `shared/tokens.css` keeps all three apps visually coherent and makes system-wide dark mode a matter of CSS variables.
+**6. A shared design system.** `packages/web-ui/tokens.css` keeps the three web apps visually coherent and makes system-wide dark mode a matter of CSS variables.
 
 **7. The location feature is carried through end to end.** Geolocation API → map picker → coordinates stored on the order → drone flies to that point → restaurants filtered by real distance. No step falls back to fake data.
 
@@ -1231,7 +1236,7 @@ A customer can call the API and mark their own order **paid without paying**. `p
 
 **2. Hard delete for restaurants.** `DELETE /api/restaurant` removes the record permanently. It refuses when orders exist and **is now audit-logged**, but should become a **soft delete**.
 
-**3. Two half-built admin features.** `admin/src/pages/Restaurant/EditRestaurant.jsx` and `pages/Users/EditUser.jsx` are complete components that are **wired to nothing** (the list pages only offer lock/unlock, with no Edit button). `pages/Add/` is likewise unrouted.
+**3. Two half-built admin features.** `apps/admin-web/src/pages/Restaurant/EditRestaurant.jsx` and `pages/Users/EditUser.jsx` are complete components that are **wired to nothing** (the list pages only offer lock/unlock, with no Edit button). `pages/Add/` is likewise unrouted.
 
 **4. Missing indexes on relational fields.** `orders.restaurantId`, `orders.user`, `foods.restaurantId` — the most-filtered fields in the system.
 
@@ -1329,18 +1334,18 @@ The system is a **well-layered monolith**. **Do not split it into microservices*
 
 | Constant | Value | Location |
 |---|---|---|
-| Restaurant search radius | **15 km** | `user/src/lib/distance.js` → `NEARBY_RADIUS_KM` |
-| Minimum battery to fly | **30 %** | `backend/repositories/droneRepository.js` → `MIN_BATTERY_PERCENT` |
-| Shipper fee | **5,000 VND/km** by road route | `backend/config/fees.js` → `SHIPPER_RATE_PER_KM` |
-| Drone fee | **7,000 VND/km** by straight-line distance | `backend/config/fees.js` → `DRONE_RATE_PER_KM` |
-| Service fee | **0 VND** | `backend/config/fees.js` → `SERVICE_FEE` |
-| Revenue split | **80 / 20** on `itemsPrice` | `backend/services/orderService.js` |
-| Access token lifetime | **30 minutes** | `backend/services/userService.js` |
-| Refresh token lifetime | **7 days** | `backend/services/userService.js` |
-| Auth rate limit | **10 req / 15 min** | `backend/routes/userRoute.js` |
-| Upload cap | **5 MB** | `backend/config/multer.js` |
-| JSON body cap | **2 MB** | `backend/app.js` |
-| ETA estimate | 10 min + 2 min/km | `user/src/lib/distance.js` |
+| Restaurant search radius | **15 km** | `apps/customer-web/src/lib/distance.js` → `NEARBY_RADIUS_KM` |
+| Minimum battery to fly | **30 %** | `apps/api/repositories/droneRepository.js` → `MIN_BATTERY_PERCENT` |
+| Shipper fee | **5,000 VND/km** by road route | `apps/api/config/fees.js` → `SHIPPER_RATE_PER_KM` |
+| Drone fee | **7,000 VND/km** by straight-line distance | `apps/api/config/fees.js` → `DRONE_RATE_PER_KM` |
+| Service fee | **0 VND** | `apps/api/config/fees.js` → `SERVICE_FEE` |
+| Revenue split | **80 / 20** on `itemsPrice` | `apps/api/services/orderService.js` |
+| Access token lifetime | **30 minutes** | `apps/api/services/userService.js` |
+| Refresh token lifetime | **7 days** | `apps/api/services/userService.js` |
+| Auth rate limit | **10 req / 15 min** | `apps/api/routes/userRoute.js` |
+| Upload cap | **5 MB** | `apps/api/config/multer.js` |
+| JSON body cap | **2 MB** | `apps/api/app.js` |
+| ETA estimate | 10 min + 2 min/km | `apps/customer-web/src/lib/distance.js` |
 
 ### 27.3 Recorded architecture decisions
 
@@ -1365,13 +1370,13 @@ The system is a **well-layered monolith**. **Do not split it into microservices*
 docker compose up -d --build
 
 # Develop one app (code on the host, backend in Docker)
-cd backend    && npm run dev
-cd user       && npm run dev -- --port 5179 --strictPort
-cd admin      && npm run dev -- --port 5184 --strictPort
-cd restaurant && npm run dev -- --port 5185 --strictPort
+cd apps/api            && npm run dev
+cd apps/customer-web   && npm run dev -- --port 5179 --strictPort
+cd apps/admin-web      && npm run dev -- --port 5184 --strictPort
+cd apps/restaurant-web && npm run dev -- --port 5185 --strictPort
 
 # Tests
-cd backend && npm test
+cd apps/api && npm test
 
 # After backend changes (rebuild is MANDATORY)
 docker compose up -d --build backend

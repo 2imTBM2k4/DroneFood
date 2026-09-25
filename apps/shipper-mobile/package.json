@@ -1,5 +1,5 @@
 {
-  "name": "shipper",
+  "name": "@drone-food/shipper-mobile",
   "version": "1.0.0",
   "private": true,
   "main": "index.ts",

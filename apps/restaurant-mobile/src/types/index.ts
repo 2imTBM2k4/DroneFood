@@ -1,3 +1,4 @@
+import type { DeliveryMethod } from "@drone-food/contracts";
 import type * as ImagePicker from "expo-image-picker";
 
 export type Tab = "overview" | "orders" | "menu" | "wallet" | "account";
@@ -68,7 +69,7 @@ export type OrderItem = {
 export type Order = {
   _id: string;
   orderStatus: OrderStatus;
-  deliveryMethod: "drone" | "shipper";
+  deliveryMethod: DeliveryMethod;
   totalPrice: number;
   createdAt: string;
   shippingAddress: {

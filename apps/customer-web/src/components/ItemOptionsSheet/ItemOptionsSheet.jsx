@@ -5,7 +5,7 @@ import { toast } from "react-toastify";
 import "./ItemOptionsSheet.css";
 import { StoreContext } from "../../context/StoreContext";
 import { assets } from "../../assets/assets";
-import { formatVND } from "../../../../shared/utils/money";
+import { formatVND } from "@drone-food/web-ui/utils/money";
 
 /**
  * The dish sheet: options, quantity, kitchen note, live price.

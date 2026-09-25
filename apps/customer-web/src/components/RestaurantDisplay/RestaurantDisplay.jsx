@@ -5,7 +5,7 @@ import { StoreContext } from '../../context/StoreContext';
 import RestaurantItem from '../RestaurantItem/RestaurantItem';
 import Reveal from '../Reveal/Reveal';
 import { SkeletonGrid } from '../Skeleton/Skeleton';
-import { EmptyState, ErrorState } from '../../../../shared/components/StateBlock';
+import { EmptyState, ErrorState } from '@drone-food/web-ui/components/StateBlock';
 import { NEARBY_RADIUS_KM } from '../../lib/distance';
 import useNearbyRestaurants from '../../hooks/useNearbyRestaurants';
 

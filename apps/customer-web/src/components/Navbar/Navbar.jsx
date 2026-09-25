@@ -13,7 +13,7 @@ import {
 import { io } from "socket.io-client";
 import { StoreContext } from "../../context/StoreContext";
 import Avatar from "../Avatar/Avatar";
-import NotificationBell from "../../../../shared/components/NotificationBell";
+import NotificationBell from "@drone-food/web-ui/components/NotificationBell";
 
 const Navbar = ({ setShowLogin }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);

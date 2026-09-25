@@ -5,8 +5,8 @@ import { AuthContext } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { Wallet, ChevronDown, LogOut, Settings, Sun, Moon } from "lucide-react";
 import { io } from "socket.io-client";
-import { formatVND } from "../../../../shared/utils/money";
-import NotificationBell from "../../../../shared/components/NotificationBell";
+import { formatVND } from "@drone-food/web-ui/utils/money";
+import NotificationBell from "@drone-food/web-ui/components/NotificationBell";
 
 const Navbar = () => {
   const { user, logout } = useContext(AuthContext);

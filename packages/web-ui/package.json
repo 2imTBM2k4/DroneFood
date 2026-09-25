@@ -1,0 +1,24 @@
+{
+  "name": "@drone-food/web-ui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    "./components/NotificationBell": "./components/NotificationBell.jsx",
+    "./components/OptionGroupBuilder": "./components/OptionGroupBuilder.jsx",
+    "./components/StateBlock": "./components/StateBlock.jsx",
+    "./components/ToastNotification": "./components/ToastNotification.jsx",
+    "./utils/money": "./utils/money.js",
+    "./utils/toast": "./utils/toast.jsx",
+    "./tokens.css": "./tokens.css",
+    "./toast.css": "./toast.css",
+    "./favicon.svg": "./favicon.svg"
+  },
+  "peerDependencies": {
+    "react": ">=18.2.0 <20",
+    "react-toastify": "^10.0.0 || ^11.0.0"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

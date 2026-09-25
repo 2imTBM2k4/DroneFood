@@ -2,7 +2,7 @@ import { useContext, useState } from "react";
 import { ChevronUp } from "lucide-react";
 import "./OrderSummary.css";
 import { StoreContext } from "../../context/StoreContext";
-import { formatVND } from "../../../../shared/utils/money";
+import { formatVND } from "@drone-food/web-ui/utils/money";
 
 /**
  * The running cost of the order: lines, then every fee spelled out.

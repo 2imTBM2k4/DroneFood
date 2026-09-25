@@ -4,9 +4,9 @@ import { StoreContext } from "../../context/StoreContext";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { ShoppingCart, Trash2, Plus, Minus } from "lucide-react";
-import { EmptyState } from "../../../../shared/components/StateBlock";
+import { EmptyState } from "@drone-food/web-ui/components/StateBlock";
 import ItemOptionsSheet from "../../components/ItemOptionsSheet/ItemOptionsSheet";
-import { formatVND } from "../../../../shared/utils/money";
+import { formatVND } from "@drone-food/web-ui/utils/money";
 
 const Cart = () => {
   const {

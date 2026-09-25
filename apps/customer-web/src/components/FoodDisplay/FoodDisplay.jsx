@@ -6,7 +6,7 @@ import { StoreContext } from "../../context/StoreContext";
 import FoodItem from "../FoodItem/FoodItem";
 import Reveal from "../Reveal/Reveal";
 import { SkeletonGrid } from "../Skeleton/Skeleton";
-import { EmptyState } from "../../../../shared/components/StateBlock";
+import { EmptyState } from "@drone-food/web-ui/components/StateBlock";
 
 const FoodDisplay = ({
   category = "All",

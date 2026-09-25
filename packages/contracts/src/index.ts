@@ -8,8 +8,9 @@ export interface Coordinates {
 }
 
 export interface DeliveryFees {
-  shipper: number;
-  drone: number;
+  shipperRatePerKm: number;
+  droneRatePerKm: number;
+  currency: "VND";
   serviceFee: number;
 }
 

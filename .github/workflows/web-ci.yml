@@ -3,19 +3,21 @@ name: Web CI
 on:
   pull_request:
     paths:
-      - "user/**"
-      - "admin/**"
-      - "restaurant/**"
-      - "shared/**"
+      - "apps/customer-web/**"
+      - "apps/admin-web/**"
+      - "apps/restaurant-web/**"
+      - "packages/web-ui/**"
       - "package.json"
+      - ".nvmrc"
       - ".github/workflows/web-ci.yml"
   push:
     paths:
-      - "user/**"
-      - "admin/**"
-      - "restaurant/**"
-      - "shared/**"
+      - "apps/customer-web/**"
+      - "apps/admin-web/**"
+      - "apps/restaurant-web/**"
+      - "packages/web-ui/**"
       - "package.json"
+      - ".nvmrc"
       - ".github/workflows/web-ci.yml"
 
 permissions:
@@ -27,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [user, admin, restaurant]
+        app: [apps/customer-web, apps/admin-web, apps/restaurant-web]
     defaults:
       run:
         working-directory: ${{ matrix.app }}
@@ -35,7 +37,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22.13.0
           cache: npm
           cache-dependency-path: ${{ matrix.app }}/package-lock.json
       - run: npm ci

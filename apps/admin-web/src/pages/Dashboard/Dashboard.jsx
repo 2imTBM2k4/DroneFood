@@ -18,7 +18,7 @@ import {
   Line,
 } from "recharts";
 import "./Dashboard.css";
-import { formatVND } from "../../../../shared/utils/money";
+import { formatVND } from "@drone-food/web-ui/utils/money";
 
 const Dashboard = ({ url }) => {
   const [stats, setStats] = useState({});

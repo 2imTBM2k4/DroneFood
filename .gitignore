@@ -126,6 +126,10 @@ dist
 # Claude Code local config (dev-specific, không chia sẻ)
 .claude/
 
+# OS metadata
+.DS_Store
+**/.DS_Store
+
 # Agent skills & configs
 .agents/
 PLAN.md

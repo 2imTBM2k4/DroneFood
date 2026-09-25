@@ -36,9 +36,9 @@ Giao đồ ăn truyền thống phụ thuộc vào đội shipper: chi phí nhâ
 
 | Vai trò | App | Mục tiêu chính |
 |---|---|---|
-| **Khách hàng** (`user`) | `user/` — cổng 5173 | Tìm quán gần, đặt món, theo dõi drone, quét QR nhận hàng |
-| **Chủ nhà hàng** (`restaurant_owner`) | `restaurant/` — cổng 5175 | Quản lý thực đơn, nhận & xử lý đơn, bật/tắt trạng thái bán |
-| **Quản trị viên** (`admin`) | `admin/` — cổng 5174 | Duyệt nhà hàng, quản lý người dùng, điều phối drone, xem nhật ký |
+| **Khách hàng** (`user`) | `apps/customer-web/` — cổng 5173 | Tìm quán gần, đặt món, theo dõi drone, quét QR nhận hàng |
+| **Chủ nhà hàng** (`restaurant_owner`) | `apps/restaurant-web/` — cổng 5175 | Quản lý thực đơn, nhận & xử lý đơn, bật/tắt trạng thái bán |
+| **Quản trị viên** (`admin`) | `apps/admin-web/` — cổng 5174 | Duyệt nhà hàng, quản lý người dùng, điều phối drone, xem nhật ký |
 
 ### Đặc trưng nghiệp vụ
 - **Giao hàng theo bán kính:** khách chỉ thấy nhà hàng trong **15 km** quanh vị trí của mình, sắp xếp gần → xa, kèm khoảng cách và thời gian giao ước tính.
@@ -56,7 +56,7 @@ Giao đồ ăn truyền thống phụ thuộc vào đội shipper: chi phí nhâ
 
 | Thành phần | Công nghệ | Phiên bản |
 |---|---|---|
-| Runtime | Node.js (ES Modules, `"type": "module"`) | 20.x |
+| Runtime | Node.js (ES Modules, `"type": "module"`) | 22.13+ |
 | Web framework | Express | ^4.19.2 |
 | CSDL | MongoDB + Mongoose ODM | mongoose ^8.18.3 |
 | Xác thực | jsonwebtoken | ^9.0.2 |
@@ -102,35 +102,40 @@ Giao đồ ăn truyền thống phụ thuộc vào đội shipper: chi phí nhâ
 
 ```
 CNPM/
-├── backend/                 API Express (Node.js, ES Modules)
-│   ├── server.js            Điểm khởi động: HTTP server, Socket.io, Cloudinary
-│   ├── app.js               Express app (middleware, routes) — tách riêng để test
-│   ├── config/              db.js, cloudinary.js, multer.js, fees.js
-│   ├── controllers/         Tầng HTTP: đọc req, gọi service, trả res
-│   ├── services/            Nghiệp vụ — nơi chứa mọi quy tắc kinh doanh
-│   ├── repositories/        Truy vấn Mongoose (chỉ tầng này chạm DB)
-│   ├── models/              Schema Mongoose (`.cjs`)
-│   ├── routes/              Khai báo endpoint + gắn middleware
-│   ├── validations/         Schema Joi cho từng route
-│   ├── middleware/          auth.js (protect/optionalAuth/authorize), validate.js
-│   ├── utils/               AppError, auditLog, geocode, sendEmail, foodOptions
-│   ├── seeds/               Script seed & backfill dữ liệu
-│   └── tests/               unit/ · integration/ · flows/
-│
-├── user/                    React app — khách hàng
-│   └── src/
-│       ├── pages/           Mỗi route một thư mục (Home, Cart, Checkout…)
-│       ├── components/      Component tái dùng (mỗi cái 1 thư mục + CSS riêng)
-│       ├── context/         StoreContext — state toàn cục
-│       ├── hooks/           useGeolocation, useNearbyRestaurants
-│       ├── lib/             distance.js, trackasia.js — hàm thuần, không UI
-│       └── assets/
-│
-├── restaurant/              React app — chủ nhà hàng (cấu trúc tương tự)
-├── admin/                   React app — quản trị (cấu trúc tương tự)
-├── shared/                  Dùng chung cho cả 3 frontend
-│   ├── tokens.css           Design token (màu, font, spacing)
-│   └── components/          OptionGroupBuilder, StateBlock
+├── apps/
+│   ├── api/                 API Express (Node.js, ES Modules)
+│   │   ├── server.js        Điểm khởi động: HTTP server, Socket.io, Cloudinary
+│   │   ├── app.js           Express app (middleware, routes) — tách riêng để test
+│   │   ├── config/          db.js, cloudinary.js, multer.js, fees.js
+│   │   ├── controllers/     Tầng HTTP: đọc req, gọi service, trả res
+│   │   ├── services/        Nghiệp vụ — nơi chứa mọi quy tắc kinh doanh
+│   │   ├── repositories/    Truy vấn Mongoose (chỉ tầng này chạm DB)
+│   │   ├── models/          Schema Mongoose (`.cjs`)
+│   │   ├── routes/          Khai báo endpoint + gắn middleware
+│   │   ├── validations/     Schema Joi cho từng route
+│   │   ├── middleware/      auth.js (protect/optionalAuth/authorize), validate.js
+│   │   ├── utils/           AppError, auditLog, geocode, sendEmail, foodOptions
+│   │   ├── seeds/           Script seed & backfill dữ liệu
+│   │   └── tests/           unit/ · integration/ · flows/
+│   ├── customer-web/        React app — khách hàng
+│   │   └── src/
+│   │       ├── pages/       Mỗi route một thư mục (Home, Cart, Checkout…)
+│   │       ├── components/  Component tái dùng (mỗi cái 1 thư mục + CSS riêng)
+│   │       ├── context/     StoreContext — state toàn cục
+│   │       ├── hooks/       useGeolocation, useNearbyRestaurants
+│   │       ├── lib/         distance.js, trackasia.js — hàm thuần, không UI
+│   │       └── assets/
+│   ├── restaurant-web/      React app — chủ nhà hàng (cấu trúc tương tự)
+│   ├── admin-web/           React app — quản trị (cấu trúc tương tự)
+│   ├── customer-mobile/     Expo customer app
+│   ├── restaurant-mobile/   Expo chủ nhà hàng
+│   └── shipper-mobile/      Expo shipper
+├── packages/
+│   ├── web-ui/              Dùng chung cho 3 web frontend
+│   │   ├── tokens.css       Design token (màu, font, spacing)
+│   │   └── components/      OptionGroupBuilder, StateBlock
+│   ├── contracts/           Hợp đồng domain dùng chung
+│   └── api-client/          API helper có kiểu dùng chung
 ├── docs/                    Tài liệu (file này)
 └── docker-compose.yml
 ```
@@ -727,7 +732,7 @@ graph TD
 | `models/*.cjs` | Toàn bộ repository + service dùng model đó |
 | `middleware/auth.js` | **Mọi route** có `protect` |
 | `config/fees.js` | Đặt hàng, hiển thị giá ở cả 3 frontend |
-| `shared/tokens.css` | **Giao diện cả 3 app** |
+| `packages/web-ui/tokens.css` | **Giao diện cả 3 web app** |
 | `utils/auditLog.js` | 8 điểm ghi log trong user/restaurant/order/drone service |
 
 ---
@@ -759,7 +764,7 @@ Các dịch vụ còn lại **chưa có retry/circuit breaker** — xem [Nợ c�
 
 ## 14. Cấu hình
 
-### `backend/.env`
+### `apps/api/.env`
 
 | Biến | Bắt buộc | Mô tả |
 |---|:---:|---|
@@ -997,13 +1002,13 @@ graph TB
 ### Docker Compose — 4 service
 
 ```yaml
-backend    → build ./backend         → cổng 4000
-user       → build context . / user/Dockerfile      → 5173:80
-admin      → build context . / admin/Dockerfile     → 5174:80
-restaurant → build context . / restaurant/Dockerfile → 5175:80
+backend    → build ./apps/api                                → cổng 4000
+user       → build context . / apps/customer-web/Dockerfile  → 5173:80
+admin      → build context . / apps/admin-web/Dockerfile     → 5174:80
+restaurant → build context . / apps/restaurant-web/Dockerfile → 5175:80
 ```
 
-3 frontend build với **context là thư mục gốc** để truy cập được `shared/` (design token + component dùng chung).
+3 frontend build với **context là thư mục gốc** để truy cập được `packages/web-ui/` (design token + component dùng chung).
 
 ```mermaid
 flowchart LR
@@ -1046,7 +1051,7 @@ flowchart LR
 ### Cấu trúc
 
 ```
-backend/tests/
+apps/api/tests/
 ├── setup.js          Khởi động MongoDB in-memory, dọn DB giữa các test
 ├── helpers.js        createAdmin, createRestaurantOwner, generateToken, createOrder
 ├── unit/             cartService, userService, authMiddleware
@@ -1203,7 +1208,7 @@ Không thêm DI container, event sourcing, CQRS… khi chưa thống nhất. S�
 
 **5. Nhật ký kiểm toán.** Mọi hành động đặc quyền đều truy vết được (ai – làm gì – khi nào – lý do), có giao diện xem riêng. Đây là thứ nhiều hệ thống cùng quy mô không có.
 
-**6. Hệ thiết kế dùng chung.** `shared/tokens.css` giúp 3 app có giao diện đồng nhất, hỗ trợ dark mode toàn hệ thống chỉ bằng biến CSS.
+**6. Hệ thiết kế dùng chung.** `packages/web-ui/tokens.css` giúp 3 web app có giao diện đồng nhất, hỗ trợ dark mode toàn hệ thống chỉ bằng biến CSS.
 
 **7. Tính năng vị trí làm tới nơi.** Từ Geolocation API → chọn điểm trên bản đồ → lưu toạ độ vào đơn → drone bay đúng điểm đó → lọc nhà hàng theo bán kính thật. Toàn bộ chuỗi khép kín, không có khâu nào dùng dữ liệu giả.
 
@@ -1231,7 +1236,7 @@ Khách có thể tự gọi API đánh dấu đơn **đã thanh toán mà không
 
 **2. Xoá cứng nhà hàng.** `DELETE /api/restaurant` xoá vĩnh viễn. Hiện có chặn khi đã có đơn và **đã ghi audit log**, nhưng nên chuyển sang **soft-delete**.
 
-**3. Hai tính năng admin làm dở.** `admin/src/pages/Restaurant/EditRestaurant.jsx` và `pages/Users/EditUser.jsx` đã viết xong nhưng **chưa nối vào đâu** (trang danh sách chỉ có khoá/mở, không có nút Sửa). `pages/Add/` cũng không được route.
+**3. Hai tính năng admin làm dở.** `apps/admin-web/src/pages/Restaurant/EditRestaurant.jsx` và `pages/Users/EditUser.jsx` đã viết xong nhưng **chưa nối vào đâu** (trang danh sách chỉ có khoá/mở, không có nút Sửa). `pages/Add/` cũng không được route.
 
 **4. Thiếu index cho trường quan hệ.** `orders.restaurantId`, `orders.user`, `foods.restaurantId` — đây là các trường lọc nhiều nhất.
 
@@ -1329,18 +1334,18 @@ Hệ thống hiện là **một khối (monolith) phân tầng tốt**. **Không
 
 | Hằng số | Giá trị | Ở đâu |
 |---|---|---|
-| Bán kính tìm nhà hàng | **15 km** | `user/src/lib/distance.js` → `NEARBY_RADIUS_KM` |
-| Pin tối thiểu để bay | **30 %** | `backend/repositories/droneRepository.js` → `MIN_BATTERY_PERCENT` |
-| Phí shipper | **5.000đ/km** theo đường bộ | `backend/config/fees.js` → `SHIPPER_RATE_PER_KM` |
-| Phí drone | **7.000đ/km** theo đường chim bay | `backend/config/fees.js` → `DRONE_RATE_PER_KM` |
-| Phí dịch vụ | **0đ** | `backend/config/fees.js` → `SERVICE_FEE` |
-| Chia doanh thu | **80 / 20** trên `itemsPrice` | `backend/services/orderService.js` |
-| Hạn access token | **30 phút** | `backend/services/userService.js` |
-| Hạn refresh token | **7 ngày** | `backend/services/userService.js` |
-| Rate limit auth | **10 req / 15 phút** | `backend/routes/userRoute.js` |
-| Giới hạn upload | **5 MB** | `backend/config/multer.js` |
-| Giới hạn body JSON | **2 MB** | `backend/app.js` |
-| ETA ước tính | 10 phút + 2 phút/km | `user/src/lib/distance.js` |
+| Bán kính tìm nhà hàng | **15 km** | `apps/customer-web/src/lib/distance.js` → `NEARBY_RADIUS_KM` |
+| Pin tối thiểu để bay | **30 %** | `apps/api/repositories/droneRepository.js` → `MIN_BATTERY_PERCENT` |
+| Phí shipper | **5.000đ/km** theo đường bộ | `apps/api/config/fees.js` → `SHIPPER_RATE_PER_KM` |
+| Phí drone | **7.000đ/km** theo đường chim bay | `apps/api/config/fees.js` → `DRONE_RATE_PER_KM` |
+| Phí dịch vụ | **0đ** | `apps/api/config/fees.js` → `SERVICE_FEE` |
+| Chia doanh thu | **80 / 20** trên `itemsPrice` | `apps/api/services/orderService.js` |
+| Hạn access token | **30 phút** | `apps/api/services/userService.js` |
+| Hạn refresh token | **7 ngày** | `apps/api/services/userService.js` |
+| Rate limit auth | **10 req / 15 phút** | `apps/api/routes/userRoute.js` |
+| Giới hạn upload | **5 MB** | `apps/api/config/multer.js` |
+| Giới hạn body JSON | **2 MB** | `apps/api/app.js` |
+| ETA ước tính | 10 phút + 2 phút/km | `apps/customer-web/src/lib/distance.js` |
 
 ### 27.3 Các quyết định kiến trúc đã ghi nhận
 
@@ -1365,13 +1370,13 @@ Hệ thống hiện là **một khối (monolith) phân tầng tốt**. **Không
 docker compose up -d --build
 
 # Dev từng app (code trên host, backend chạy Docker)
-cd backend    && npm run dev
-cd user       && npm run dev -- --port 5179 --strictPort
-cd admin      && npm run dev -- --port 5184 --strictPort
-cd restaurant && npm run dev -- --port 5185 --strictPort
+cd apps/api            && npm run dev
+cd apps/customer-web   && npm run dev -- --port 5179 --strictPort
+cd apps/admin-web      && npm run dev -- --port 5184 --strictPort
+cd apps/restaurant-web && npm run dev -- --port 5185 --strictPort
 
 # Kiểm thử
-cd backend && npm test
+cd apps/api && npm test
 
 # Sau khi sửa backend (BẮT BUỘC rebuild)
 docker compose up -d --build backend
