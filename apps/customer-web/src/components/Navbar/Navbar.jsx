@@ -14,6 +14,7 @@ import { io } from "socket.io-client";
 import { StoreContext } from "../../context/StoreContext";
 import { API_URL } from "../../config/api";
 import Avatar from "../Avatar/Avatar";
+import RoundedSelect from "../RoundedSelect/RoundedSelect";
 import NotificationBell from "@drone-food/web-ui/components/NotificationBell";
 
 const Navbar = ({ setShowLogin }) => {
@@ -52,6 +53,10 @@ const Navbar = ({ setShowLogin }) => {
   }, [location.pathname]);
 
   const savedAddresses = user?.addressBook || [];
+  const addressOptions = savedAddresses.map((entry) => ({
+    value: entry.id || entry._id,
+    label: `${entry.label}: ${entry.address}, ${entry.city}`,
+  }));
   const selectedSavedAddress = savedAddresses.find((entry) => String(entry.id || entry._id) === activeAddressId);
   const addr = selectedSavedAddress || liveAddress || user?.address;
   const deliveryAddress = addr
@@ -108,11 +113,19 @@ const Navbar = ({ setShowLogin }) => {
             )}
 
             {deliveryAddress && (
-              <label className="apple-nav-location" title={deliveryAddress}>
-                {savedAddresses.length > 0 ? <select className="apple-location-select" value={activeAddressId} onChange={(event) => setActiveAddressId(event.target.value)} aria-label="Delivery address">
-                  {savedAddresses.map((entry) => <option key={entry.id || entry._id} value={entry.id || entry._id}>{entry.label}: {entry.address}, {entry.city}</option>)}
-                </select> : <span className="apple-location-text">{deliveryAddress}</span>}
-              </label>
+              <div className="apple-nav-location" title={deliveryAddress}>
+                <MapPin className="apple-location-icon" size={14} aria-hidden="true" />
+                {savedAddresses.length > 0 ? (
+                  <RoundedSelect
+                    className="apple-location-dropdown"
+                    size="compact"
+                    value={activeAddressId}
+                    options={addressOptions}
+                    onChange={setActiveAddressId}
+                    ariaLabel="Delivery address"
+                  />
+                ) : <span className="apple-location-text">{deliveryAddress}</span>}
+              </div>
             )}
           </div>
 
@@ -222,9 +235,16 @@ const Navbar = ({ setShowLogin }) => {
           {deliveryAddress && (
             <div className="apple-mobile-addr">
               <MapPin size={13} />
-              {savedAddresses.length > 0 ? <select className="apple-location-select" value={activeAddressId} onChange={(event) => setActiveAddressId(event.target.value)} aria-label="Delivery address">
-                {savedAddresses.map((entry) => <option key={entry.id || entry._id} value={entry.id || entry._id}>{entry.label}: {entry.address}, {entry.city}</option>)}
-              </select> : <span>{deliveryAddress}</span>}
+              {savedAddresses.length > 0 ? (
+                <RoundedSelect
+                  className="apple-location-dropdown apple-location-dropdown--mobile"
+                  size="compact"
+                  value={activeAddressId}
+                  options={addressOptions}
+                  onChange={setActiveAddressId}
+                  ariaLabel="Delivery address"
+                />
+              ) : <span>{deliveryAddress}</span>}
             </div>
           )}
         </div>

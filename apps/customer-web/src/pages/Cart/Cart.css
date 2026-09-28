@@ -43,8 +43,8 @@
 .cart-restaurant {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
+  gap: 8px;
+  padding: 5px 12px 5px 6px;
   border: 1px solid var(--apple-hairline);
   background: var(--apple-canvas-parchment);
   color: var(--apple-ink);
@@ -54,6 +54,27 @@
   font-weight: 500;
   cursor: pointer;
   transition: border-color 0.18s ease;
+}
+
+.cart-restaurant-avatar {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--apple-surface-tile-1, #f3f4f6);
+}
+
+.cart-restaurant-avatar-lg {
+  width: 58px;
+  height: 58px;
+}
+
+.cart-restaurant-avatar-fallback {
+  display: inline-grid;
+  place-items: center;
+  color: var(--apple-primary);
+  border: 1px solid var(--apple-hairline-soft);
 }
 
 .cart-restaurant:hover {
@@ -442,14 +463,117 @@
   margin-bottom: 22px;
 }
 
+.cart-index-head > div {
+  display: grid;
+  gap: 7px;
+}
+
 .cart-index-head p {
   color: var(--apple-body-muted);
-  margin: 0 0 4px;
+  margin: 0;
+}
+
+.cart-selection-toggle,
+.cart-select-all,
+.cart-delete-selected {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: var(--radius-pill);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cart-selection-toggle,
+.cart-select-all {
+  padding: 0 16px;
+  border: 1px solid var(--apple-hairline);
+  background: var(--apple-canvas);
+  color: var(--apple-primary);
+}
+
+.cart-selection-toggle:hover,
+.cart-select-all:hover {
+  border-color: var(--apple-primary);
+  background: color-mix(in srgb, var(--apple-primary) 6%, transparent);
+}
+
+.cart-selection-toggle:focus-visible,
+.cart-select-all:focus-visible,
+.cart-delete-selected:focus-visible,
+.cart-group-check input:focus-visible {
+  outline: 2px solid var(--apple-primary-focus);
+  outline-offset: 2px;
+}
+
+.cart-bulk-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--apple-hairline);
+  border-radius: var(--radius-lg);
+  background: var(--apple-canvas-parchment);
+}
+
+.cart-selected-count {
+  flex: 1;
+  color: var(--apple-body-muted);
+  font-size: 13px;
+}
+
+.cart-delete-selected {
+  padding: 0 16px;
+  border: 1px solid color-mix(in srgb, var(--danger, #c62828) 32%, transparent);
+  background: color-mix(in srgb, var(--danger, #c62828) 8%, transparent);
+  color: var(--danger, #c62828);
+}
+
+.cart-delete-selected:hover:not(:disabled) {
+  border-color: var(--danger, #c62828);
+  background: color-mix(in srgb, var(--danger, #c62828) 13%, transparent);
+}
+
+.cart-delete-selected:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .cart-group-list {
   display: grid;
   gap: 12px;
+}
+
+.cart-group-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.cart-group-row.is-selecting {
+  grid-template-columns: 44px minmax(0, 1fr);
+}
+
+.cart-group-check {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.cart-group-check input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--apple-primary);
+  cursor: pointer;
 }
 
 .cart-group-card {
@@ -476,6 +600,18 @@
   box-shadow: 0 10px 30px rgb(0 0 0 / 7%);
 }
 
+.cart-group-row.is-selected .cart-group-card {
+  border-color: var(--apple-primary);
+  background: color-mix(in srgb, var(--apple-primary) 5%, var(--apple-surface, #fff));
+}
+
+.cart-group-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
 .cart-group-copy {
   display: grid;
   gap: 7px;
@@ -499,4 +635,43 @@
 .cart-checkout-btn:disabled {
   cursor: not-allowed;
   opacity: 0.58;
+}
+
+@media (max-width: 560px) {
+  .cart-index-head {
+    align-items: center;
+  }
+
+  .cart-bulk-toolbar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .cart-selected-count {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .cart-select-all,
+  .cart-delete-selected {
+    width: 100%;
+  }
+
+  .cart-group-row.is-selecting {
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .cart-group-check {
+    width: 36px;
+  }
+
+  .cart-group-card {
+    padding: 16px;
+  }
+
+  .cart-restaurant-avatar-lg {
+    width: 50px;
+    height: 50px;
+  }
 }

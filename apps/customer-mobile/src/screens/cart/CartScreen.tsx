@@ -1,10 +1,11 @@
 import React from "react";
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { formatVnd, resolveMediaUrl } from "../../api/client";
 import { Button } from "../../components/common/Button";
 import { GlassSurface } from "../../components/common/GlassSurface";
 import { Header } from "../../components/common/Header";
 import { Icon } from "../../components/common/Icon";
+import { useToast } from "../../components/common/ToastProvider";
 import { colors, radius, spacing, typography } from "../../theme/tokens";
 import type { Cart, CartLine } from "../../types";
 
@@ -19,6 +20,7 @@ interface CartScreenProps {
 }
 
 export const CartScreen: React.FC<CartScreenProps> = ({ cart, loading, onUpdateQuantity, onClearCart, onProceedCheckout, onExploreFood, onBack }) => {
+  const { showToast } = useToast();
   const { width } = useWindowDimensions();
   const compact = width < 380;
   const items = cart?.items || [];
@@ -26,10 +28,14 @@ export const CartScreen: React.FC<CartScreenProps> = ({ cart, loading, onUpdateQ
   const count = items.reduce((sum, item) => sum + item.quantity, 0);
   const closed = cart?.restaurant?.isOpen === false;
 
-  const confirmClear = () => Alert.alert("Xóa giỏ hàng", "Bạn muốn xóa toàn bộ món trong giỏ?", [
-    { text: "Giữ lại", style: "cancel" },
-    { text: "Xóa hết", style: "destructive", onPress: onClearCart },
-  ]);
+  const confirmClear = () => showToast({
+    type: "warning",
+    title: "Xóa giỏ hàng?",
+    message: "Bạn muốn xóa toàn bộ món trong giỏ?",
+    duration: 8000,
+    secondaryAction: { label: "Giữ lại" },
+    primaryAction: { label: "Xóa hết", destructive: true, onPress: onClearCart },
+  });
 
   if (!items.length) return (
     <View style={styles.screen}>
@@ -47,8 +53,28 @@ export const CartScreen: React.FC<CartScreenProps> = ({ cart, loading, onUpdateQ
 
   return (
     <View style={styles.screen}>
-      <Header title={cart?.restaurant?.name || "Chi tiết giỏ hàng"} subtitle={`${count} món`} onBack={onBack} rightAction={<Pressable hitSlop={10} onPress={confirmClear}><Text style={styles.clear}>Xóa hết</Text></Pressable>} />
+      <Header title="Chi tiết giỏ hàng" subtitle={`${count} món`} onBack={onBack} rightAction={<Pressable hitSlop={10} onPress={confirmClear}><Text style={styles.clear}>Xóa hết</Text></Pressable>} />
       <ScrollView contentContainerStyle={[styles.content, compact && styles.contentCompact]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+        <GlassSurface tone="strong" contentStyle={styles.restaurantCard}>
+          {cart?.restaurant?.image ? (
+            <Image
+              source={{ uri: resolveMediaUrl(cart.restaurant.image) }}
+              style={styles.restaurantAvatar}
+              resizeMode="cover"
+              accessibilityLabel={`Ảnh cửa hàng ${cart.restaurant.name}`}
+            />
+          ) : (
+            <View style={styles.restaurantAvatarFallback}>
+              <Icon name="store" size={27} color={colors.primary} />
+            </View>
+          )}
+          <View style={styles.restaurantCopy}>
+            <Text numberOfLines={2} style={styles.restaurantName}>{cart?.restaurant?.name || "Nhà hàng"}</Text>
+            <Text style={[styles.restaurantStatus, closed && styles.restaurantStatusClosed]}>
+              {closed ? "Quán đang đóng cửa" : "Đang nhận đơn"}
+            </Text>
+          </View>
+        </GlassSurface>
         {closed ? (
           <GlassSurface tone="soft" contentStyle={styles.closedCard}>
             <Icon name="clock" size={18} color={colors.danger} />
@@ -105,6 +131,13 @@ const styles = StyleSheet.create({
   content: { padding: spacing.md, paddingBottom: 132, gap: spacing.md },
   contentCompact: { paddingHorizontal: spacing.sm, paddingTop: spacing.sm },
   clear: { ...typography.captionBold, color: colors.danger },
+  restaurantCard: { minHeight: 84, padding: spacing.sm, flexDirection: "row", alignItems: "center", gap: spacing.md },
+  restaurantAvatar: { width: 64, height: 64, borderRadius: radius.pill, backgroundColor: colors.surfaceSubtle },
+  restaurantAvatarFallback: { width: 64, height: 64, borderRadius: radius.pill, backgroundColor: colors.primaryLight, alignItems: "center", justifyContent: "center" },
+  restaurantCopy: { flex: 1, minWidth: 0, gap: spacing.xxs },
+  restaurantName: { ...typography.subheadBold, color: colors.textPrimary },
+  restaurantStatus: { ...typography.captionBold, color: colors.success },
+  restaurantStatusClosed: { color: colors.danger },
   closedCard: { padding: spacing.md, flexDirection: "row", alignItems: "center", gap: spacing.sm },
   closedText: { ...typography.captionBold, color: colors.danger, flex: 1 },
   emptyWrap: { flex: 1, padding: spacing.md, justifyContent: "center" },

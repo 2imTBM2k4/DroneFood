@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -21,6 +20,7 @@ import { Header } from "../../components/common/Header";
 import { Input } from "../../components/common/Input";
 import { Icon, type IconName } from "../../components/common/Icon";
 import { GlassSurface } from "../../components/common/GlassSurface";
+import { useToast } from "../../components/common/ToastProvider";
 import { AddressEditorModal } from "../../components/address/AddressEditorModal";
 import type {
   Address,
@@ -63,6 +63,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   transactionsLoading = false,
   onRefreshTransactions,
 }) => {
+  const { showToast } = useToast();
   const { width } = useWindowDimensions();
   const compact = width < 380;
   // Navigation between sub-views/modals
@@ -90,16 +91,16 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   const handleSaveProfile = async () => {
     if (!name.trim()) {
-      Alert.alert("Thiếu họ tên", "Vui lòng nhập họ và tên của bạn.");
+      showToast({ type: "warning", title: "Thiếu họ tên", message: "Vui lòng nhập họ và tên của bạn." });
       return;
     }
     try {
       setSavingProfile(true);
       await onUpdateProfile(name.trim(), phone.trim());
       setActiveView(null);
-      Alert.alert("Thành công", "Đã cập nhật thông tin cá nhân.");
+      showToast({ type: "success", title: "Thành công", message: "Đã cập nhật thông tin cá nhân." });
     } catch {
-      Alert.alert("Lỗi", "Không thể cập nhật hồ sơ, vui lòng thử lại.");
+      showToast({ type: "error", title: "Không thể cập nhật hồ sơ", message: "Vui lòng thử lại." });
     } finally {
       setSavingProfile(false);
     }
@@ -108,10 +109,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const handlePickAvatar = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert(
-        "Cần quyền truy cập ảnh",
-        "Vui lòng cho phép DroneFood truy cập thư viện ảnh để đổi ảnh đại diện."
-      );
+      showToast({
+        type: "warning",
+        title: "Cần quyền truy cập ảnh",
+        message: "Vui lòng cho phép DroneFood truy cập thư viện ảnh để đổi ảnh đại diện.",
+      });
       return;
     }
 
@@ -126,27 +128,32 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     try {
       setUploadingAvatar(true);
       await onUpdateAvatar(result.assets[0]);
-      Alert.alert("Thành công", "Đã cập nhật ảnh đại diện.");
+      showToast({ type: "success", title: "Thành công", message: "Đã cập nhật ảnh đại diện." });
     } catch (err: any) {
-      Alert.alert("Không thể cập nhật ảnh", err?.message || "Vui lòng thử lại.");
+      showToast({ type: "error", title: "Không thể cập nhật ảnh", message: err?.message || "Vui lòng thử lại." });
     } finally {
       setUploadingAvatar(false);
     }
   };
 
   const handleConfirmLogout = () => {
-    Alert.alert("Đăng xuất", "Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng?", [
-      { text: "Hủy", style: "cancel" },
-      { text: "Đăng xuất", style: "destructive", onPress: onLogout },
-    ]);
+    showToast({
+      type: "warning",
+      title: "Đăng xuất?",
+      message: "Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng?",
+      duration: 8000,
+      secondaryAction: { label: "Ở lại" },
+      primaryAction: { label: "Đăng xuất", destructive: true, onPress: onLogout },
+    });
   };
 
   const handleAddNewAddress = () => {
     if (addressBook.length >= MAX_ADDRESSES) {
-      Alert.alert(
-        "Đã đạt giới hạn",
-        `Bạn chỉ có thể lưu tối đa ${MAX_ADDRESSES} địa chỉ nhận hàng.`
-      );
+      showToast({
+        type: "warning",
+        title: "Đã đạt giới hạn",
+        message: `Bạn chỉ có thể lưu tối đa ${MAX_ADDRESSES} địa chỉ nhận hàng.`,
+      });
       return;
     }
     setEditingAddressEntry(null);
@@ -167,14 +174,15 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       await onSaveAddressEntry(input, editId);
       setAddressEditorVisible(false);
       setEditingAddressEntry(null);
-      Alert.alert(
-        "Thành công",
-        editId
+      showToast({
+        type: "success",
+        title: "Thành công",
+        message: editId
           ? "Đã cập nhật địa chỉ thành công."
-          : "Đã thêm địa chỉ vào sổ địa chỉ."
-      );
+          : "Đã thêm địa chỉ vào sổ địa chỉ.",
+      });
     } catch (err: any) {
-      Alert.alert("Lỗi", err?.message || "Không thể lưu địa chỉ.");
+      showToast({ type: "error", title: "Không thể lưu địa chỉ", message: err?.message || "Vui lòng thử lại." });
     } finally {
       setSavingAddress(false);
     }
@@ -182,39 +190,40 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   const handleConfirmDeleteAddress = (entry: AddressBookEntry) => {
     if (entry.isDefault) {
-      Alert.alert(
-        "Không thể xóa",
-        "Không thể xóa địa chỉ mặc định. Vui lòng đặt địa chỉ khác làm mặc định trước khi xóa."
-      );
+      showToast({
+        type: "warning",
+        title: "Không thể xóa",
+        message: "Không thể xóa địa chỉ mặc định. Vui lòng đặt địa chỉ khác làm mặc định trước khi xóa.",
+      });
       return;
     }
-    Alert.alert(
-      "Xóa địa chỉ",
-      `Bạn có chắc chắn muốn xóa địa chỉ "${entry.label}" khỏi sổ địa chỉ?`,
-      [
-        { text: "Hủy", style: "cancel" },
-        {
-          text: "Xóa",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await onDeleteAddressEntry(entry.id || entry._id || "");
-              Alert.alert("Thành công", "Đã xóa địa chỉ.");
-            } catch (err: any) {
-              Alert.alert("Lỗi", err?.message || "Không thể xóa địa chỉ.");
-            }
-          },
+    showToast({
+      type: "warning",
+      title: "Xóa địa chỉ?",
+      message: `Bạn có chắc chắn muốn xóa địa chỉ "${entry.label}" khỏi sổ địa chỉ?`,
+      duration: 8000,
+      secondaryAction: { label: "Giữ lại" },
+      primaryAction: {
+        label: "Xóa",
+        destructive: true,
+        onPress: async () => {
+          try {
+            await onDeleteAddressEntry(entry.id || entry._id || "");
+            showToast({ type: "success", title: "Thành công", message: "Đã xóa địa chỉ." });
+          } catch (err: any) {
+            showToast({ type: "error", title: "Không thể xóa địa chỉ", message: err?.message || "Vui lòng thử lại." });
+          }
         },
-      ]
-    );
+      },
+    });
   };
 
   const handleSetDefault = async (entry: AddressBookEntry) => {
     try {
       await onSetDefaultAddress(entry.id || entry._id || "");
-      Alert.alert("Thành công", `Đã đặt "${entry.label}" làm địa chỉ mặc định.`);
+      showToast({ type: "success", title: "Thành công", message: `Đã đặt "${entry.label}" làm địa chỉ mặc định.` });
     } catch (err: any) {
-      Alert.alert("Lỗi", err?.message || "Không thể đặt làm mặc định.");
+      showToast({ type: "error", title: "Không thể đặt mặc định", message: err?.message || "Vui lòng thử lại." });
     }
   };
 

@@ -32,4 +32,30 @@ describe("multi-restaurant cart migration", () => {
       migration.classifyLegacyCart({ items: [{ foodId: null }] }).status
     ).toBe("empty");
   });
+
+  it("detects the legacy one-cart-per-user unique index by its key", () => {
+    expect(migration.isLegacyUserOnlyIndex({
+      name: "custom_legacy_name",
+      key: { userId: 1 },
+      unique: true,
+    })).toBe(true);
+    expect(migration.isLegacyUserOnlyIndex({
+      name: "userId_1",
+      key: { userId: 1 },
+      unique: false,
+    })).toBe(false);
+  });
+
+  it("detects the current user-and-restaurant unique index", () => {
+    expect(migration.isUserRestaurantIndex({
+      name: "userId_1_restaurantId_1",
+      key: { userId: 1, restaurantId: 1 },
+      unique: true,
+    })).toBe(true);
+    expect(migration.isUserRestaurantIndex({
+      name: "userId_1",
+      key: { userId: 1 },
+      unique: true,
+    })).toBe(false);
+  });
 });

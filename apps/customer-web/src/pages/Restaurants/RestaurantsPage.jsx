@@ -4,12 +4,34 @@ import { Search, X, SlidersHorizontal, Store } from "lucide-react";
 import "./RestaurantsPage.css";
 import useNearbyRestaurants from "../../hooks/useNearbyRestaurants";
 import RestaurantItem from "../../components/RestaurantItem/RestaurantItem";
+import RoundedSelect from "../../components/RoundedSelect/RoundedSelect";
 import Reveal from "../../components/Reveal/Reveal";
 import { EmptyState } from "@drone-food/web-ui/components/StateBlock";
 import { NEARBY_RADIUS_KM } from "../../lib/distance";
 
 const getSearchParam = (params) =>
   params.get("q") ?? params.get("search") ?? "";
+
+const ratingOptions = [
+  { value: "", label: "Tất cả" },
+  { value: "4.5", label: "Từ 4,5 sao" },
+  { value: "4", label: "Từ 4 sao" },
+  { value: "3", label: "Từ 3 sao" },
+];
+
+const deliveryFeeOptions = [
+  { value: "", label: "Tất cả" },
+  { value: "20000", label: "Tối đa 20.000 ₫" },
+  { value: "40000", label: "Tối đa 40.000 ₫" },
+  { value: "60000", label: "Tối đa 60.000 ₫" },
+];
+
+const etaOptions = [
+  { value: "", label: "Tất cả" },
+  { value: "15", label: "Tối đa 15 phút" },
+  { value: "25", label: "Tối đa 25 phút" },
+  { value: "35", label: "Tối đa 35 phút" },
+];
 
 /**
  * Browse restaurants that deliver here — the step between the home page and a
@@ -139,45 +161,36 @@ const RestaurantsPage = () => {
           <h2>Bộ lọc</h2>
         </div>
         <div className="restaurants-filter-fields">
-          <label className="restaurants-filter-field" htmlFor="minimum-rating">
-            <span>Đánh giá</span>
-            <select
+          <div className="restaurants-filter-field">
+            <label htmlFor="minimum-rating">Đánh giá</label>
+            <RoundedSelect
               id="minimum-rating"
               value={minimumRating}
-              onChange={(event) => writeParam("minRating", event.target.value)}
-            >
-              <option value="">Tất cả</option>
-              <option value="4.5">Từ 4,5 sao</option>
-              <option value="4">Từ 4 sao</option>
-              <option value="3">Từ 3 sao</option>
-            </select>
-          </label>
-          <label className="restaurants-filter-field" htmlFor="maximum-delivery-fee">
-            <span>Phí giao hàng ước tính</span>
-            <select
+              options={ratingOptions}
+              onChange={(value) => writeParam("minRating", value)}
+              ariaLabel="Lọc theo đánh giá tối thiểu"
+            />
+          </div>
+          <div className="restaurants-filter-field">
+            <label htmlFor="maximum-delivery-fee">Phí giao hàng ước tính</label>
+            <RoundedSelect
               id="maximum-delivery-fee"
               value={maximumDeliveryFee}
-              onChange={(event) => writeParam("maxDeliveryFee", event.target.value)}
-            >
-              <option value="">Tất cả</option>
-              <option value="20000">Tối đa 20.000 ₫</option>
-              <option value="40000">Tối đa 40.000 ₫</option>
-              <option value="60000">Tối đa 60.000 ₫</option>
-            </select>
-          </label>
-          <label className="restaurants-filter-field" htmlFor="maximum-eta">
-            <span>Thời gian giao ước tính</span>
-            <select
+              options={deliveryFeeOptions}
+              onChange={(value) => writeParam("maxDeliveryFee", value)}
+              ariaLabel="Lọc theo phí giao hàng tối đa"
+            />
+          </div>
+          <div className="restaurants-filter-field">
+            <label htmlFor="maximum-eta">Thời gian giao ước tính</label>
+            <RoundedSelect
               id="maximum-eta"
               value={maximumEta}
-              onChange={(event) => writeParam("maxEta", event.target.value)}
-            >
-              <option value="">Tất cả</option>
-              <option value="15">Tối đa 15 phút</option>
-              <option value="25">Tối đa 25 phút</option>
-              <option value="35">Tối đa 35 phút</option>
-            </select>
-          </label>
+              options={etaOptions}
+              onChange={(value) => writeParam("maxEta", value)}
+              ariaLabel="Lọc theo thời gian giao tối đa"
+            />
+          </div>
         </div>
         {hasFilters && (
           <button type="button" className="restaurants-filter-clear" onClick={clearFilters}>

@@ -40,6 +40,16 @@
   font-size: 14px;
 }
 
+.order-summary-image,
+.order-summary-image-fallback {
+  width: 52px;
+  height: 52px;
+  flex: none;
+  border-radius: var(--radius);
+  object-fit: cover;
+  background: var(--background-secondary);
+}
+
 .order-summary-qty {
   flex: none;
   min-width: 26px;
@@ -73,10 +83,19 @@
 }
 
 .order-summary-amount {
-  flex: none;
   font-size: 13px;
   color: var(--text-color);
 }
+
+.order-summary-side { display: flex; flex: none; flex-direction: column; align-items: flex-end; gap: 7px; }
+.order-summary-controls { display: inline-flex; align-items: center; gap: 5px; }
+.order-summary-controls button { display: inline-grid; width: 32px; height: 32px; place-items: center; padding: 0; border: 1px solid var(--border-color); border-radius: var(--radius); background: var(--background-secondary); color: var(--text-color); cursor: pointer; }
+.order-summary-controls button:hover:not(:disabled), .order-summary-controls button:focus-visible { border-color: var(--accent-color); color: var(--accent-color); }
+.order-summary-controls button:disabled, .order-summary-customize:disabled { opacity: .5; cursor: wait; }
+.order-summary-controls > span { min-width: 18px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; }
+.order-summary-customize { display: inline-flex; align-items: center; width: fit-content; min-height: 28px; gap: 4px; padding: 0; border: 0; background: transparent; color: var(--accent-color); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
+.order-summary-customize:hover:not(:disabled) { text-decoration: underline; }
+.order-summary-customize:focus-visible, .order-summary-controls button:focus-visible { outline: 3px solid var(--accent-color); outline-offset: 2px; }
 
 .order-summary-fees {
   display: flex;

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -16,6 +15,7 @@ import { colors, radius, spacing, typography } from "../../theme/tokens";
 import { reviewApi } from "../../api/client";
 import type { Order, ReviewFlow } from "../../types";
 import { Icon } from "../common/Icon";
+import { useToast } from "../common/ToastProvider";
 
 interface OrderReviewModalProps {
   visible: boolean;
@@ -39,6 +39,7 @@ export const OrderReviewModal: React.FC<OrderReviewModalProps> = ({
   onClose,
   onReviewCompleted,
 }) => {
+  const { showToast } = useToast();
   const [selectedRating, setSelectedRating] = useState<number>(0);
   const [comment, setComment] = useState<string>("");
   const [saving, setSaving] = useState<boolean>(false);
@@ -73,7 +74,11 @@ export const OrderReviewModal: React.FC<OrderReviewModalProps> = ({
 
   const submit = async (outcome: "rated" | "skipped") => {
     if (outcome === "rated" && selectedRating === 0) {
-      Alert.alert("Vui lòng chọn số sao", "Hãy chọn từ 1 đến 5 sao trước khi gửi đánh giá.");
+      showToast({
+        type: "warning",
+        title: "Vui lòng chọn số sao",
+        message: "Hãy chọn từ 1 đến 5 sao trước khi gửi đánh giá.",
+      });
       return;
     }
 
@@ -97,17 +102,18 @@ export const OrderReviewModal: React.FC<OrderReviewModalProps> = ({
       onReviewCompleted(order._id, nextFlow);
 
       if (nextFlow.complete || !nextFlow.nextTarget) {
-        Alert.alert(
-          "Cảm ơn bạn!",
-          outcome === "rated"
+        showToast({
+          type: outcome === "rated" ? "success" : "info",
+          title: "Cảm ơn bạn!",
+          message: outcome === "rated"
             ? "Đánh giá của bạn đã được ghi nhận thành công."
-            : "Bạn đã bỏ qua bước đánh giá này."
-        );
+            : "Bạn đã bỏ qua bước đánh giá này.",
+        });
         onClose();
       }
     } catch (error: any) {
       const msg = error.response?.data?.message || "Không thể lưu đánh giá lúc này.";
-      Alert.alert("Lỗi", msg);
+      showToast({ type: "error", title: "Không thể lưu đánh giá", message: msg });
     } finally {
       setSaving(false);
     }

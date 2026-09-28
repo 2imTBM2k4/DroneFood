@@ -60,6 +60,7 @@ export type CartLine = {
 export type CartRestaurant = {
   id: string | null;
   name: string;
+  image?: string;
   isOpen: boolean;
 };
 

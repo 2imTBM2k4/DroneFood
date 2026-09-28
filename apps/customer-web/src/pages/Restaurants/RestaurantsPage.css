@@ -121,19 +121,10 @@
   font-weight: 600;
 }
 
-.restaurants-filter-field select {
-  min-height: 44px;
-  width: 100%;
-  padding: 0 10px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  background: var(--background-secondary);
-  color: var(--text-color);
-  font: inherit;
-  font-size: 14px;
+.restaurants-filter-field > label {
+  cursor: pointer;
 }
 
-.restaurants-filter-field select:focus-visible,
 .restaurants-filter-clear:focus-visible {
   outline: 2px solid var(--accent-color);
   outline-offset: 2px;
@@ -143,7 +134,7 @@
   min-height: 44px;
   padding: 0 12px;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill, 999px);
   background: transparent;
   color: var(--accent-color);
   font: inherit;

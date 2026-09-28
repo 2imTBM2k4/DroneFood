@@ -14,6 +14,16 @@ dotenv.config({ path: path.join(__dirname, "../.env") });
 
 const migrationId = "multi-restaurant-carts-v1";
 
+const indexKeyEquals = (index, expected) =>
+  JSON.stringify(index?.key || {}) === JSON.stringify(expected);
+
+const isLegacyUserOnlyIndex = (index) =>
+  index?.unique === true && indexKeyEquals(index, { userId: 1 });
+
+const isUserRestaurantIndex = (index) =>
+  index?.unique === true
+  && indexKeyEquals(index, { userId: 1, restaurantId: 1 });
+
 const restaurantIdOf = (line) => {
   const value = line?.foodId?.restaurantId;
   if (!value) return null;
@@ -44,6 +54,9 @@ const run = async ({ apply = process.argv.includes("--apply") } = {}) => {
     const backups = mongoose.connection.collection(
       "multi_restaurant_cart_migration_backups"
     );
+    const indexes = await carts.indexes();
+    const legacyIndexes = indexes.filter(isLegacyUserOnlyIndex);
+    const hasUserRestaurantIndex = indexes.some(isUserRestaurantIndex);
     const legacy = await carts
       .find({ restaurantId: { $exists: false } })
       .toArray();
@@ -87,6 +100,8 @@ const run = async ({ apply = process.argv.includes("--apply") } = {}) => {
         mode: apply ? "apply" : "dry-run",
         candidates: legacy.length,
         ...counts,
+        legacyUserOnlyUniqueIndex: legacyIndexes.length > 0,
+        userRestaurantUniqueIndex: hasUserRestaurantIndex,
       })
     );
     if (!apply) return counts;
@@ -126,21 +141,28 @@ const run = async ({ apply = process.argv.includes("--apply") } = {}) => {
       throw new Error(`${remaining} carts still have no restaurantId`);
     }
 
-    const indexes = await carts.indexes();
-    if (indexes.some((index) => index.name === "userId_1")) {
-      await carts.dropIndex("userId_1");
+    for (const index of legacyIndexes) {
+      await carts.dropIndex(index.name);
     }
-    await carts.createIndex(
-      { userId: 1, restaurantId: 1 },
-      { unique: true, name: "userId_1_restaurantId_1" }
-    );
+    if (!hasUserRestaurantIndex) {
+      await carts.createIndex(
+        { userId: 1, restaurantId: 1 },
+        { unique: true, name: "userId_1_restaurantId_1" }
+      );
+    }
     return counts;
   } finally {
     await mongoose.connection.close();
   }
 };
 
-module.exports = { classifyLegacyCart, deriveLegacyRestaurantId, run };
+module.exports = {
+  classifyLegacyCart,
+  deriveLegacyRestaurantId,
+  isLegacyUserOnlyIndex,
+  isUserRestaurantIndex,
+  run,
+};
 
 if (require.main === module) {
   run().catch((error) => {

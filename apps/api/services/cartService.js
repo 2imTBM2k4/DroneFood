@@ -16,6 +16,7 @@ const restaurantIdOf = (restaurant) =>
 const serialiseRestaurant = (restaurant) => ({
   id: restaurantIdOf(restaurant),
   name: restaurant?.name || "Nhà hàng không còn hoạt động",
+  image: restaurant?.image || "",
   isOpen: isRestaurantOpenNow(restaurant),
 });
 

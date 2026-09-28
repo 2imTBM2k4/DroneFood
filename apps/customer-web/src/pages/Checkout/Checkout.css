@@ -209,6 +209,14 @@
   text-decoration: underline;
 }
 
+.checkout-remove-overlay { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(0, 0, 0, .42); }
+.checkout-remove-dialog { width: min(100%, 380px); padding: 22px; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--card-bg); box-shadow: 0 18px 56px rgba(0, 0, 0, .2); }
+.checkout-remove-dialog h2, .checkout-remove-dialog p { margin: 0; }
+.checkout-remove-dialog p { margin-top: 8px; color: var(--text-secondary); line-height: 1.5; }
+.checkout-remove-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.checkout-remove-confirm { min-height: 44px; padding: 0 16px; border: 1px solid var(--danger, #b42318); border-radius: var(--radius); background: var(--danger, #b42318); color: #fff; font: inherit; font-weight: 650; cursor: pointer; }
+.checkout-remove-confirm:disabled { opacity: .6; cursor: wait; }
+
 /* ---------- Actions ---------- */
 
 .checkout-actions {
@@ -423,4 +431,5 @@
   .checkout-actions button {
     flex: 1;
   }
+
 }

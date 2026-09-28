@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -16,6 +15,7 @@ import { Header } from "../../components/common/Header";
 import { Input } from "../../components/common/Input";
 import { Icon, type IconName } from "../../components/common/Icon";
 import { GlassSurface } from "../../components/common/GlassSurface";
+import { useToast } from "../../components/common/ToastProvider";
 import { CargoUnlockModal } from "../../components/drone/CargoUnlockModal";
 import { DroneTelemetryHUD } from "../../components/drone/DroneTelemetryHUD";
 import { OrderReviewModal } from "../../components/orders/OrderReviewModal";
@@ -41,6 +41,7 @@ export const DroneTrackingScreen: React.FC<DroneTrackingScreenProps> = ({
   onCancelOrder,
   working,
 }) => {
+  const { showToast } = useToast();
   const [cargoModalVisible, setCargoModalVisible] = useState(false);
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
@@ -104,7 +105,7 @@ export const DroneTrackingScreen: React.FC<DroneTrackingScreenProps> = ({
 
   const handleConfirmCancel = async () => {
     if (!cancelReason.trim()) {
-      Alert.alert("Thiếu lý do", "Vui lòng nhập lý do bạn muốn hủy đơn.");
+      showToast({ type: "warning", title: "Thiếu lý do", message: "Vui lòng nhập lý do bạn muốn hủy đơn." });
       return;
     }
     await onCancelOrder(order._id, cancelReason.trim());

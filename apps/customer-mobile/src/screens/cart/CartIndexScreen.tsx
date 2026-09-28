@@ -1,9 +1,10 @@
 import React from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Button } from "../../components/common/Button";
 import { GlassSurface } from "../../components/common/GlassSurface";
 import { Header } from "../../components/common/Header";
 import { Icon } from "../../components/common/Icon";
+import { resolveMediaUrl } from "../../api/client";
 import { getCartCardMeta } from "../../cart/cartState";
 import { colors, motion, radius, spacing, typography } from "../../theme/tokens";
 import type { CartSummary } from "../../types";
@@ -38,6 +39,18 @@ export const CartIndexScreen: React.FC<CartIndexScreenProps> = ({ carts, loading
             style={({ pressed }) => [pressed && styles.pressed]}
           >
             <GlassSurface tone="strong" contentStyle={[styles.cartCard, cart.restaurant.isOpen === false && styles.cartCardClosed]}>
+              {cart.restaurant.image ? (
+                <Image
+                  source={{ uri: resolveMediaUrl(cart.restaurant.image) }}
+                  style={styles.restaurantAvatar}
+                  resizeMode="cover"
+                  accessibilityLabel={`Ảnh cửa hàng ${cart.restaurant.name}`}
+                />
+              ) : (
+                <View style={styles.restaurantAvatarFallback}>
+                  <Icon name="store" size={25} color={colors.primary} />
+                </View>
+              )}
               <View style={styles.cartCopy}>
                 <Text numberOfLines={1} style={styles.restaurantName}>{cart.restaurant.name}</Text>
                 <Text style={[styles.meta, cart.restaurant.isOpen === false && styles.closedText]}>{getCartCardMeta(cart).join(" · ")}</Text>
@@ -54,8 +67,10 @@ export const CartIndexScreen: React.FC<CartIndexScreenProps> = ({ carts, loading
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "transparent" },
   content: { padding: spacing.md, paddingBottom: 132, gap: spacing.sm },
-  cartCard: { minHeight: 84, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, flexDirection: "row", alignItems: "center", gap: spacing.md },
+  cartCard: { minHeight: 96, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, flexDirection: "row", alignItems: "center", gap: spacing.md },
   cartCardClosed: { borderColor: colors.danger },
+  restaurantAvatar: { width: 64, height: 64, borderRadius: radius.pill, backgroundColor: colors.surfaceSubtle },
+  restaurantAvatarFallback: { width: 64, height: 64, borderRadius: radius.pill, backgroundColor: colors.primaryLight, alignItems: "center", justifyContent: "center" },
   cartCopy: { flex: 1, gap: spacing.xxs },
   restaurantName: { ...typography.subheadBold, color: colors.textPrimary },
   meta: { ...typography.caption, color: colors.textSecondary },

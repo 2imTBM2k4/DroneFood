@@ -1,7 +1,7 @@
 import React from "react";
 import {
   ActivityIndicator,
-  Alert,
+  Image,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -14,17 +14,20 @@ import {
 } from "react-native";
 import { colors, radius, spacing, typography } from "../../theme/tokens";
 import { formatVnd } from "../../api/client";
+import { resolveMediaUrl } from "../../api/client";
 import { Button } from "../../components/common/Button";
 import { Header } from "../../components/common/Header";
 import { Input } from "../../components/common/Input";
 import { Icon } from "../../components/common/Icon";
 import { GlassSurface } from "../../components/common/GlassSurface";
+import { useToast } from "../../components/common/ToastProvider";
 import { AddressEditorModal } from "../../components/address/AddressEditorModal";
 import type {
   Address,
   AddressBookEntry,
   AddressBookInput,
   Cart,
+  CartLine,
   DeliveryMethod,
   PaymentMethod,
   Quote,
@@ -54,6 +57,8 @@ interface CheckoutScreenProps {
   voucherCodes?: string[];
   onApplyVoucher?: (code: string) => Promise<void>;
   onRemoveVoucher?: (code: string) => Promise<void>;
+  onUpdateQuantity: (line: CartLine, quantity: number) => Promise<void>;
+  onCustomizeLine: (line: CartLine) => Promise<void>;
 }
 
 export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
@@ -79,7 +84,10 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   voucherCodes = [],
   onApplyVoucher,
   onRemoveVoucher,
+  onUpdateQuantity,
+  onCustomizeLine,
 }) => {
+  const { showToast } = useToast();
   const { width } = useWindowDimensions();
   const compact = width < 380;
   const [useCustomAddress, setUseCustomAddress] = React.useState(false);
@@ -137,6 +145,26 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     }
   };
 
+  const handleDecreaseItem = (line: CartLine) => {
+    if (line.quantity > 1) {
+      void onUpdateQuantity(line, line.quantity - 1);
+      return;
+    }
+
+    showToast({
+      type: "warning",
+      title: "Xóa món?",
+      message: `Bạn có muốn xóa ${line.name} khỏi đơn hàng?`,
+      duration: 7000,
+      secondaryAction: { label: "Giữ lại" },
+      primaryAction: {
+        label: "Xóa",
+        destructive: true,
+        onPress: () => onUpdateQuantity(line, 0),
+      },
+    });
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -145,11 +173,89 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       <Header title="Thanh toán & Đặt đơn" onBack={onBack} />
 
       <ScrollView
+        style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, compact && styles.scrollContentCompact]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
       >
+        {/* Order Summary */}
+        <GlassSurface tone="strong" contentStyle={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Tóm tắt đơn hàng</Text>
+            <View style={styles.itemCountBadge}>
+              <Text style={styles.itemCount}>{cart?.items.reduce((count, item) => count + item.quantity, 0) || 0} món</Text>
+            </View>
+          </View>
+          <View style={styles.orderItemsList}>
+            {(cart?.items || []).map((line) => (
+              <View key={line.lineKey} style={[styles.checkoutItem, compact && styles.checkoutItemCompact]}>
+                <View style={styles.checkoutItemTop}>
+                  {line.image ? (
+                    <Image source={{ uri: resolveMediaUrl(line.image) }} style={[styles.checkoutItemImage, compact && styles.checkoutItemImageCompact]} resizeMode="cover" accessibilityLabel={`Hình món ${line.name}`} />
+                  ) : (
+                    <View style={[styles.checkoutItemImageFallback, compact && styles.checkoutItemImageCompact]}><Icon name="utensils" size={23} color={colors.textSecondary} /></View>
+                  )}
+                  <View style={styles.checkoutItemInfo}>
+                    <Text numberOfLines={2} style={styles.checkoutItemName}>{line.name}</Text>
+                    {line.selectedOptions?.length ? (
+                      <Text numberOfLines={2} style={styles.checkoutItemOption}>
+                        {line.selectedOptions.map((option) => option.optionName).join(" · ")}
+                      </Text>
+                    ) : null}
+                    <Text style={styles.checkoutItemPrice}>{formatVnd(line.unitPrice * line.quantity)}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.checkoutItemActions}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Tùy chỉnh ${line.name}`}
+                    disabled={working || quoting}
+                    onPress={() => void onCustomizeLine(line)}
+                    style={({ pressed }) => [styles.customizeButton, (working || quoting) && styles.quantityButtonDisabled, pressed && styles.quantityButtonPressed]}
+                  >
+                    <Icon name="settings" size={15} color={colors.primary} />
+                    <Text style={styles.customizeButtonText}>Tùy chỉnh</Text>
+                  </Pressable>
+
+                  <View style={styles.quantityControls}>
+                    <Pressable accessibilityRole="button" accessibilityLabel={line.quantity === 1 ? `Xóa ${line.name}` : `Giảm số lượng ${line.name}`} disabled={working || quoting} onPress={() => handleDecreaseItem(line)} style={({ pressed }) => [styles.quantityButton, (working || quoting) && styles.quantityButtonDisabled, pressed && styles.quantityButtonPressed]}>
+                      {line.quantity === 1 ? <Icon name="trash" size={16} color={colors.danger} /> : <Text style={styles.quantityButtonText}>−</Text>}
+                    </Pressable>
+                    <Text accessibilityLabel={`Số lượng ${line.name}: ${line.quantity}`} style={styles.quantityValue}>{line.quantity}</Text>
+                    <Pressable accessibilityRole="button" accessibilityLabel={`Tăng số lượng ${line.name}`} disabled={working || quoting} onPress={() => void onUpdateQuantity(line, line.quantity + 1)} style={({ pressed }) => [styles.quantityButton, styles.quantityButtonAdd, (working || quoting) && styles.quantityButtonDisabled, pressed && styles.quantityButtonPressed]}><Text style={[styles.quantityButtonText, styles.quantityButtonAddText]}>+</Text></Pressable>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+          <Text style={styles.itemHint}>Tổng tiền và ưu đãi sẽ được cập nhật sau khi bạn chỉnh sửa.</Text>
+          <View style={styles.divider} />
+          <View style={styles.priceRow}>
+            <Text style={styles.priceLabel}>Tiền món ({cart?.items.length || 0} món)</Text>
+            <Text style={styles.priceVal}>{formatVnd(subtotal)}</Text>
+          </View>
+          <View style={styles.priceRow}>
+            <Text style={styles.priceLabel}>
+              Phí giao hàng ({deliveryMethod === "drone" ? "Drone" : "Shipper"})
+            </Text>
+            <Text style={styles.priceVal}>
+              {quoting ? "..." : formatVnd(shippingFee)}
+            </Text>
+          </View>
+          {discountAmount > 0 ? (
+            <View style={styles.priceRow}>
+              <Text style={[styles.priceLabel, { color: colors.success }]}>
+                Giảm giá Voucher ({appliedVouchers.length} mã)
+              </Text>
+              <Text style={[styles.priceVal, { color: colors.success, fontWeight: "700" }]}>
+                -{formatVnd(discountAmount)}
+              </Text>
+            </View>
+          ) : null}
+        </GlassSurface>
+
         {/* Delivery Address Section */}
         <GlassSurface tone="strong" contentStyle={styles.sectionCard}>
           <View style={styles.sectionHeader}>
@@ -360,7 +466,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
         {/* Payment Method Selector */}
         <GlassSurface tone="strong" contentStyle={styles.sectionCard}>
-          <View style={styles.sectionTitleRow}><Icon name="credit-card" size={20} color={colors.textPrimary} /><Text style={styles.sectionTitle}>Hình thức thanh toán</Text></View>
+          <View style={styles.sectionTitleRow}><Icon name="credit-card" size={20} color={colors.textPrimary} /><Text style={styles.sectionTitle}>Phương thức thanh toán</Text></View>
 
           <Pressable
             style={[
@@ -425,7 +531,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
         {/* Voucher Section */}
         <GlassSurface tone="soft" contentStyle={styles.sectionCard}>
-          <View style={styles.sectionTitleRow}><Icon name="ticket" size={20} color={colors.textPrimary} /><Text style={styles.sectionTitle}>Mã ưu đãi / Voucher</Text></View>
+          <View style={styles.sectionTitleRow}><Icon name="ticket" size={20} color={colors.textPrimary} /><Text style={styles.sectionTitle}>Mã ưu đãi</Text></View>
           <View style={[styles.voucherInputRow, compact && styles.stackOnCompact]}>
             <Input
               containerStyle={styles.voucherInput}
@@ -476,44 +582,16 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           ) : null}
         </GlassSurface>
 
-        {/* Total Summary */}
-        <GlassSurface tone="strong" contentStyle={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Chi tiết thanh toán</Text>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Tiền món ({cart?.items.length || 0} món)</Text>
-            <Text style={styles.priceVal}>{formatVnd(subtotal)}</Text>
-          </View>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>
-              Phí giao hàng ({deliveryMethod === "drone" ? "Drone" : "Shipper"})
-            </Text>
-            <Text style={styles.priceVal}>
-              {quoting ? "..." : formatVnd(shippingFee)}
-            </Text>
-          </View>
-          {discountAmount > 0 ? (
-            <View style={styles.priceRow}>
-              <Text style={[styles.priceLabel, { color: colors.success }]}>
-                Giảm giá Voucher ({appliedVouchers.length} mã)
-              </Text>
-              <Text style={[styles.priceVal, { color: colors.success, fontWeight: "700" }]}>
-                -{formatVnd(discountAmount)}
-              </Text>
-            </View>
-          ) : null}
-          <View style={styles.divider} />
-          <View style={styles.priceRow}>
-            <Text style={styles.grandLabel}>Tổng thanh toán</Text>
-            <Text style={styles.grandVal}>{formatVnd(total)}</Text>
-          </View>
-        </GlassSurface>
+      </ScrollView>
 
+      <View style={styles.checkoutFooter}>
         <Button
           label={`Đặt đơn hàng ngay • ${formatVnd(total)}`}
           loading={working || quoting}
+          disabled={working || quoting || !currentQuote}
           onPress={onPlaceOrder}
         />
-      </ScrollView>
+      </View>
 
       {/* Add Address Modal directly from Checkout */}
       {onSaveNewAddress ? (
@@ -525,9 +603,13 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               setSavingNewAddress(true);
               await onSaveNewAddress(input);
               setShowAddAddressModal(false);
-              Alert.alert("Thành công", "Đã thêm địa chỉ mới vào sổ địa chỉ!");
+              showToast({ type: "success", message: "Đã thêm địa chỉ mới vào sổ địa chỉ!" });
             } catch (err: any) {
-              Alert.alert("Lỗi", err?.message || "Không thể lưu địa chỉ.");
+              showToast({
+                type: "error",
+                title: "Không thể lưu địa chỉ",
+                message: err?.message || "Vui lòng thử lại.",
+              });
             } finally {
               setSavingNewAddress(false);
             }
@@ -545,13 +627,24 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "transparent",
   },
+  scroll: {
+    flex: 1,
+  },
   scrollContent: {
     padding: spacing.md,
     gap: spacing.md,
-    paddingBottom: 110,
+    paddingBottom: spacing.xl,
   },
   scrollContentCompact: {
     paddingHorizontal: spacing.sm,
+  },
+  checkoutFooter: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderHairline,
+    backgroundColor: colors.glassFillStrong,
   },
   sectionCard: {
     padding: spacing.lg,
@@ -593,6 +686,150 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     gap: spacing.sm,
+  },
+  itemCount: {
+    ...typography.captionBold,
+    color: colors.primary,
+  },
+  itemCountBadge: {
+    minHeight: 28,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  orderItemsList: {
+    gap: spacing.sm,
+  },
+  checkoutItem: {
+    padding: spacing.sm,
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.borderHairline,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  checkoutItemCompact: {
+    padding: spacing.sm,
+  },
+  checkoutItemTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+  },
+  checkoutItemInfo: {
+    flex: 1,
+    minWidth: 0,
+    gap: spacing.xxs,
+  },
+  checkoutItemImage: {
+    width: 76,
+    height: 76,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  checkoutItemImageFallback: {
+    width: 76,
+    height: 76,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceCard,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkoutItemImageCompact: {
+    width: 68,
+    height: 68,
+  },
+  checkoutItemName: {
+    ...typography.subheadBold,
+    color: colors.textPrimary,
+  },
+  checkoutItemOption: {
+    ...typography.bodySecondary,
+    color: colors.textSecondary,
+  },
+  checkoutItemPrice: {
+    ...typography.subhead,
+    color: colors.primary,
+    fontWeight: "700",
+    marginTop: spacing.xxs,
+  },
+  checkoutItemActions: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderHairline,
+  },
+  quantityControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xxs,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceCard,
+  },
+  quantityButton: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
+    backgroundColor: "transparent",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quantityButtonAdd: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  quantityButtonDisabled: {
+    opacity: 0.5,
+  },
+  quantityButtonPressed: {
+    opacity: 0.72,
+  },
+  quantityButtonText: {
+    fontSize: 22,
+    lineHeight: 24,
+    color: colors.textPrimary,
+    fontWeight: "600",
+  },
+  quantityButtonAddText: {
+    color: "#FFFFFF",
+  },
+  quantityValue: {
+    ...typography.subhead,
+    minWidth: 26,
+    textAlign: "center",
+    color: colors.textPrimary,
+    fontWeight: "700",
+  },
+  itemHint: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    paddingHorizontal: spacing.xxs,
+  },
+  customizeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    minHeight: 44,
+    paddingHorizontal: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceCard,
+  },
+  customizeButtonText: {
+    ...typography.captionBold,
+    color: colors.primary,
   },
   stackOnCompact: {
     flexDirection: "column",
@@ -756,15 +993,6 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: colors.border,
     marginVertical: spacing.xs,
-  },
-  grandLabel: {
-    ...typography.title2,
-    color: colors.textPrimary,
-  },
-  grandVal: {
-    ...typography.title1,
-    color: colors.primary,
-    fontWeight: "700",
   },
   savedBox: {
     backgroundColor: colors.surfaceSubtle,

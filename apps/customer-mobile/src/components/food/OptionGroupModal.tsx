@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
 import {
-  Alert,
   Image,
   Pressable,
   StyleSheet,
@@ -11,6 +10,7 @@ import { colors, radius, spacing, typography } from "../../theme/tokens";
 import { formatVnd } from "../../api/client";
 import { Button } from "../common/Button";
 import { ModalContainer } from "../common/ModalContainer";
+import { useToast } from "../common/ToastProvider";
 import type { Food, OptionGroup } from "../../types";
 
 interface OptionGroupModalProps {
@@ -22,6 +22,11 @@ interface OptionGroupModalProps {
     selectedOptions: { groupName: string; optionName: string }[]
   ) => Promise<void>;
   loading?: boolean;
+  initial?: {
+    quantity: number;
+    selectedOptions: { groupName: string; optionName: string }[];
+  };
+  submitLabel?: string;
 }
 
 export const OptionGroupModal: React.FC<OptionGroupModalProps> = ({
@@ -29,7 +34,10 @@ export const OptionGroupModal: React.FC<OptionGroupModalProps> = ({
   onClose,
   onAddToCart,
   loading = false,
+  initial: initialValue,
+  submitLabel,
 }) => {
+  const { showToast } = useToast();
   const [picks, setPicks] = useState<Record<string, string[]>>({});
   const [quantity, setQuantity] = useState(1);
 
@@ -42,18 +50,38 @@ export const OptionGroupModal: React.FC<OptionGroupModalProps> = ({
     }
     const initial: Record<string, string[]> = {};
     (food.optionGroups || []).forEach((group) => {
+      const existing = (initialValue?.selectedOptions || [])
+        .filter((option) => option.groupName === group.name)
+        .map((option) => option.optionName);
       // If group is required and single, pick the first one by default
-      if (group.required && group.type === "single" && group.options.length > 0) {
+      if (existing.length > 0) {
+        initial[group.name] = existing;
+      } else if (group.required && group.type === "single" && group.options.length > 0) {
         initial[group.name] = [group.options[0].name];
       } else {
         initial[group.name] = [];
       }
     });
     setPicks(initial);
-    setQuantity(1);
-  }, [food]);
+    setQuantity(initialValue?.quantity || 1);
+  }, [food, initialValue]);
 
   const toggleOption = (group: OptionGroup, optionName: string) => {
+    const current = picks[group.name] || [];
+    if (
+      group.type !== "single"
+      && !current.includes(optionName)
+      && group.max
+      && current.length >= group.max
+    ) {
+      showToast({
+        type: "warning",
+        title: "Giới hạn lựa chọn",
+        message: `Nhóm ${group.name} chỉ được chọn tối đa ${group.max} mục.`,
+      });
+      return;
+    }
+
     setPicks((prev) => {
       const current = prev[group.name] || [];
       if (group.type === "single") {
@@ -67,13 +95,6 @@ export const OptionGroupModal: React.FC<OptionGroupModalProps> = ({
           ...prev,
           [group.name]: current.filter((n) => n !== optionName),
         };
-      }
-      if (group.max && current.length >= group.max) {
-        Alert.alert(
-          "Giới hạn lựa chọn",
-          `Nhóm ${group.name} chỉ được chọn tối đa ${group.max} mục.`
-        );
-        return prev;
       }
       return {
         ...prev,
@@ -104,10 +125,11 @@ export const OptionGroupModal: React.FC<OptionGroupModalProps> = ({
       const selected = picks[group.name] || [];
       const minRequired = group.required ? Math.max(group.min || 1, 1) : group.min || 0;
       if (selected.length < minRequired) {
-        Alert.alert(
-          "Chưa đủ lựa chọn",
-          `Vui lòng chọn ít nhất ${minRequired} mục ở nhóm "${group.name}".`
-        );
+        showToast({
+          type: "warning",
+          title: "Chưa đủ lựa chọn",
+          message: `Vui lòng chọn ít nhất ${minRequired} mục ở nhóm "${group.name}".`,
+        });
         return;
       }
     }
@@ -224,7 +246,7 @@ export const OptionGroupModal: React.FC<OptionGroupModalProps> = ({
       </View>
 
       <Button
-        label={`Thêm vào giỏ hàng • ${formatVnd(unitPrice * quantity)}`}
+        label={submitLabel || `Thêm vào giỏ hàng • ${formatVnd(unitPrice * quantity)}`}
         loading={loading}
         onPress={handleAdd}
       />

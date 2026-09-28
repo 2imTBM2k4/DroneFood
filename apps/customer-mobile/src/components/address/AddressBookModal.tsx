@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -11,6 +10,7 @@ import {
 import { colors, radius, spacing, typography } from "../../theme/tokens";
 import { Button } from "../common/Button";
 import { Icon, type IconName } from "../common/Icon";
+import { useToast } from "../common/ToastProvider";
 import { AddressEditorModal } from "./AddressEditorModal";
 import type { AddressBookEntry, AddressBookInput, UserProfile } from "../../types";
 
@@ -45,16 +45,18 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
   userProfile,
   loading = false,
 }) => {
+  const { showToast } = useToast();
   const [editorVisible, setEditorVisible] = useState(false);
   const [editingEntry, setEditingEntry] = useState<AddressBookEntry | null>(null);
   const [saving, setSaving] = useState(false);
 
   const handleStartNew = () => {
     if (entries.length >= MAX_ADDRESSES) {
-      Alert.alert(
-        "Đã đạt giới hạn",
-        `Bạn chỉ có thể lưu tối đa ${MAX_ADDRESSES} địa chỉ nhận hàng trong sổ địa chỉ.`
-      );
+      showToast({
+        type: "warning",
+        title: "Đã đạt giới hạn",
+        message: `Bạn chỉ có thể lưu tối đa ${MAX_ADDRESSES} địa chỉ nhận hàng trong sổ địa chỉ.`,
+      });
       return;
     }
     setEditingEntry(null);
@@ -72,12 +74,13 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
       await onSaveEntry(input, editId);
       setEditorVisible(false);
       setEditingEntry(null);
-      Alert.alert(
-        "Thành công",
-        editId ? "Đã cập nhật thông tin địa chỉ." : "Đã thêm địa chỉ mới vào sổ địa chỉ."
-      );
+      showToast({
+        type: "success",
+        title: "Thành công",
+        message: editId ? "Đã cập nhật thông tin địa chỉ." : "Đã thêm địa chỉ mới vào sổ địa chỉ.",
+      });
     } catch (err: any) {
-      Alert.alert("Lỗi lưu địa chỉ", err?.message || "Không thể lưu địa chỉ.");
+      showToast({ type: "error", title: "Lỗi lưu địa chỉ", message: err?.message || "Không thể lưu địa chỉ." });
     } finally {
       setSaving(false);
     }
@@ -85,43 +88,44 @@ export const AddressBookModal: React.FC<AddressBookModalProps> = ({
 
   const handleConfirmDelete = (entry: AddressBookEntry) => {
     if (entry.isDefault) {
-      Alert.alert(
-        "Không thể xóa",
-        "Không thể xóa địa chỉ mặc định. Vui lòng đặt một địa chỉ khác làm mặc định trước khi xóa."
-      );
+      showToast({
+        type: "warning",
+        title: "Không thể xóa",
+        message: "Không thể xóa địa chỉ mặc định. Vui lòng đặt một địa chỉ khác làm mặc định trước khi xóa.",
+      });
       return;
     }
-    Alert.alert(
-      "Xóa địa chỉ",
-      `Bạn có chắc chắn muốn xóa địa chỉ "${entry.label}" khỏi sổ địa chỉ?`,
-      [
-        { text: "Hủy", style: "cancel" },
-        {
-          text: "Xóa",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              if (onDeleteEntry) {
-                await onDeleteEntry(entry.id || entry._id || "");
-                Alert.alert("Đã xóa", "Đã xóa địa chỉ thành công.");
-              }
-            } catch (err: any) {
-              Alert.alert("Lỗi", err?.message || "Không thể xóa địa chỉ.");
+    showToast({
+      type: "warning",
+      title: "Xóa địa chỉ?",
+      message: `Bạn có chắc chắn muốn xóa địa chỉ "${entry.label}" khỏi sổ địa chỉ?`,
+      duration: 8000,
+      secondaryAction: { label: "Giữ lại" },
+      primaryAction: {
+        label: "Xóa",
+        destructive: true,
+        onPress: async () => {
+          try {
+            if (onDeleteEntry) {
+              await onDeleteEntry(entry.id || entry._id || "");
+              showToast({ type: "success", title: "Đã xóa", message: "Đã xóa địa chỉ thành công." });
             }
-          },
+          } catch (err: any) {
+            showToast({ type: "error", title: "Không thể xóa địa chỉ", message: err?.message || "Vui lòng thử lại." });
+          }
         },
-      ]
-    );
+      },
+    });
   };
 
   const handleConfirmSetDefault = async (entry: AddressBookEntry) => {
     try {
       if (onSetDefault) {
         await onSetDefault(entry.id || entry._id || "");
-        Alert.alert("Thành công", `Đã đặt "${entry.label}" làm địa chỉ mặc định.`);
+        showToast({ type: "success", title: "Thành công", message: `Đã đặt "${entry.label}" làm địa chỉ mặc định.` });
       }
     } catch (err: any) {
-      Alert.alert("Lỗi", err?.message || "Không thể đặt làm địa chỉ mặc định.");
+      showToast({ type: "error", title: "Không thể đặt mặc định", message: err?.message || "Vui lòng thử lại." });
     }
   };
 

@@ -251,6 +251,34 @@ const StoreContextProvider = (props) => {
     return false;
   };
 
+  const clearCarts = async (cartIds = []) => {
+    const uniqueCartIds = [...new Set(cartIds.filter(Boolean))];
+    if (uniqueCartIds.length === 0) return { clearedIds: [], failedIds: [] };
+    if (!token) return { clearedIds: [], failedIds: uniqueCartIds };
+
+    const results = await Promise.allSettled(
+      uniqueCartIds.map(async (cartId) => {
+        const response = await customerApi.delete(`/api/cart/${cartId}`);
+        if (!response.data.success) throw new Error(response.data.message || "Failed to clear cart");
+        return cartId;
+      })
+    );
+    const clearedIds = results
+      .filter((result) => result.status === "fulfilled")
+      .map((result) => result.value);
+    const failedIds = uniqueCartIds.filter((cartId) => !clearedIds.includes(cartId));
+
+    if (clearedIds.length > 0) {
+      const cleared = new Set(clearedIds);
+      setCartDetails((current) => Object.fromEntries(
+        Object.entries(current).filter(([cartId]) => !cleared.has(cartId))
+      ));
+      await loadCartData();
+    }
+
+    return { clearedIds, failedIds };
+  };
+
   const cartCount = cartSummaries.length;
   const cartForRestaurant = useCallback(
     (restaurantId) => cartSummaries.find(
@@ -389,6 +417,7 @@ const StoreContextProvider = (props) => {
     updateLine,
     removeLine,
     clearCart,
+    clearCarts,
     fetchSingleFood,
     fees,
     url,

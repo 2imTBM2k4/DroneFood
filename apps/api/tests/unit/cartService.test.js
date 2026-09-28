@@ -24,6 +24,7 @@ describe("cartService", () => {
       address: "123 St",
       phone: "0123",
       email: "resta@test.com",
+      image: "restaurant-a.jpg",
       isLocked: false,
     });
 
@@ -113,6 +114,10 @@ describe("cartService", () => {
       expect(result.items).toHaveLength(1);
       expect(lineFor(result, food1).quantity).toBe(1);
       expect(result.restaurantId).toBe(restaurant._id.toString());
+      expect(result.restaurant.image).toBe("restaurant-a.jpg");
+
+      const listed = await cartService.listCarts(user._id);
+      expect(listed.carts[0].restaurant.image).toBe("restaurant-a.jpg");
     });
   });
 

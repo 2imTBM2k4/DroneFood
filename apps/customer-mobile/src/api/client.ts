@@ -300,6 +300,10 @@ export const restaurantApi = {
 };
 
 export const foodApi = {
+  get: async (foodId: string) => {
+    const res = await api.get<{ data: Food }>(`/api/food/${foodId}`);
+    return res.data.data;
+  },
   listByRestaurant: async (restaurantId: string) => {
     const res = await api.get<{ data: Food[] }>("/api/food/list", {
       params: { restaurantId },

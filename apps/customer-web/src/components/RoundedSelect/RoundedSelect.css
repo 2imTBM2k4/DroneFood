@@ -1,0 +1,121 @@
+.rounded-select {
+  position: relative;
+  min-width: 0;
+  color: var(--apple-ink, var(--text-color));
+  font-family: var(--font-text, var(--font-sans));
+}
+
+.rounded-select__trigger {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 14px 0 16px;
+  border: 1px solid var(--apple-hairline, var(--border-color));
+  border-radius: var(--radius-pill, 999px);
+  background: color-mix(in srgb, var(--apple-canvas, var(--card-bg)) 94%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.rounded-select__trigger:hover,
+.rounded-select.is-open .rounded-select__trigger {
+  border-color: color-mix(in srgb, var(--apple-primary, var(--accent-color)) 58%, transparent);
+  background: var(--apple-canvas, var(--card-bg));
+}
+
+.rounded-select__trigger:focus-visible {
+  outline: 2px solid var(--apple-primary-focus, var(--accent-color));
+  outline-offset: 2px;
+}
+
+.rounded-select__value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rounded-select__chevron {
+  flex: none;
+  color: var(--apple-body-muted, var(--text-secondary));
+  transition: transform 160ms ease;
+}
+
+.rounded-select.is-open .rounded-select__chevron {
+  transform: rotate(180deg);
+}
+
+.rounded-select__menu {
+  position: absolute;
+  z-index: 1080;
+  top: calc(100% + 8px);
+  left: 0;
+  width: max(100%, 220px);
+  max-height: min(320px, 60vh);
+  overflow-y: auto;
+  display: grid;
+  gap: 4px;
+  padding: 7px;
+  border: 1px solid var(--apple-hairline, var(--border-color));
+  border-radius: 18px;
+  background: var(--apple-canvas, var(--card-bg));
+  box-shadow: 0 18px 46px rgb(0 0 0 / 14%);
+}
+
+.rounded-select__option {
+  width: 100%;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--apple-ink, var(--text-color));
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rounded-select__option.is-highlighted {
+  background: var(--apple-canvas-parchment, var(--background-secondary));
+}
+
+.rounded-select__option.is-selected {
+  color: var(--apple-primary, var(--accent-color));
+  font-weight: 600;
+}
+
+.rounded-select--compact .rounded-select__trigger {
+  min-height: 34px;
+  padding-inline: 10px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 12px;
+}
+
+.rounded-select--compact .rounded-select__menu {
+  width: max(100%, 280px);
+}
+
+.dark-mode .rounded-select__menu {
+  box-shadow: 0 18px 46px rgb(0 0 0 / 38%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rounded-select__trigger,
+  .rounded-select__chevron {
+    transition: none;
+  }
+}

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -18,6 +17,7 @@ import { colors, radius, spacing, typography } from "../../theme/tokens";
 import { Button } from "../common/Button";
 import { Input } from "../common/Input";
 import { Icon, type IconName } from "../common/Icon";
+import { useToast } from "../common/ToastProvider";
 import type { AddressBookEntry, AddressBookInput, UserProfile } from "../../types";
 
 interface AddressEditorModalProps {
@@ -45,6 +45,7 @@ export const AddressEditorModal: React.FC<AddressEditorModalProps> = ({
   saving = false,
   embedded = false,
 }) => {
+  const { showToast } = useToast();
   const [selectedPreset, setSelectedPreset] = useState("home");
   const [customLabel, setCustomLabel] = useState("");
   const [recipient, setRecipient] = useState("");
@@ -105,10 +106,11 @@ export const AddressEditorModal: React.FC<AddressEditorModalProps> = ({
       setLocating(true);
       const perm = await Location.requestForegroundPermissionsAsync();
       if (perm.status !== "granted") {
-        Alert.alert(
-          "Cần quyền truy cập vị trí",
-          "Vui lòng cấp quyền định vị trong cài đặt để lấy tọa độ giao hàng tự động."
-        );
+        showToast({
+          type: "warning",
+          title: "Cần quyền truy cập vị trí",
+          message: "Vui lòng cấp quyền định vị trong cài đặt để lấy tọa độ giao hàng tự động.",
+        });
         return;
       }
       const pos = await Location.getCurrentPositionAsync({
@@ -126,9 +128,13 @@ export const AddressEditorModal: React.FC<AddressEditorModalProps> = ({
         if (geo.city) setCity(geo.city);
         if (geo.state) setState(geo.state);
       }
-      Alert.alert("Định vị thành công", "Đã lấy tọa độ GPS chính xác cho địa chỉ này.");
+      showToast({
+        type: "success",
+        title: "Định vị thành công",
+        message: "Đã lấy tọa độ GPS chính xác cho địa chỉ này.",
+      });
     } catch (err) {
-      Alert.alert("Lỗi định vị", apiError(err, "Không thể lấy vị trí GPS."));
+      showToast({ type: "error", title: "Lỗi định vị", message: apiError(err, "Không thể lấy vị trí GPS.") });
     } finally {
       setLocating(false);
     }
@@ -137,24 +143,29 @@ export const AddressEditorModal: React.FC<AddressEditorModalProps> = ({
   const handleFindCoordinates = async () => {
     const full = [address, state, city, country].filter((s) => s.trim()).join(", ");
     if (full.length < 5) {
-      Alert.alert("Thiếu địa chỉ", "Vui lòng nhập chi tiết số nhà và tên đường trước.");
+      showToast({
+        type: "warning",
+        title: "Thiếu địa chỉ",
+        message: "Vui lòng nhập chi tiết số nhà và tên đường trước.",
+      });
       return;
     }
     try {
       setGeocoding(true);
       const res = await userApi.geocode(full);
       if (!res) {
-        Alert.alert(
-          "Không tìm thấy",
-          "Không tìm được tọa độ cho địa chỉ này. Hãy thử dùng định vị GPS khi bạn đang ở địa điểm nhận hàng."
-        );
+        showToast({
+          type: "warning",
+          title: "Không tìm thấy",
+          message: "Không tìm được tọa độ cho địa chỉ này. Hãy thử dùng định vị GPS khi bạn đang ở địa điểm nhận hàng.",
+        });
         return;
       }
       setLat(res.lat);
       setLng(res.lng);
-      Alert.alert("Thành công", "Đã tìm thấy tọa độ GPS cho địa chỉ của bạn.");
+      showToast({ type: "success", title: "Thành công", message: "Đã tìm thấy tọa độ GPS cho địa chỉ của bạn." });
     } catch (err) {
-      Alert.alert("Lỗi", apiError(err, "Không thể tìm tọa độ cho địa chỉ này."));
+      showToast({ type: "error", title: "Không thể tìm tọa độ", message: apiError(err, "Không thể tìm tọa độ cho địa chỉ này.") });
     } finally {
       setGeocoding(false);
     }
@@ -167,26 +178,27 @@ export const AddressEditorModal: React.FC<AddressEditorModalProps> = ({
         : PRESET_LABELS.find((p) => p.id === selectedPreset)?.label || "Nhà riêng";
 
     if (!recipient.trim()) {
-      Alert.alert("Thiếu thông tin", "Vui lòng nhập tên người nhận hàng.");
+      showToast({ type: "warning", title: "Thiếu thông tin", message: "Vui lòng nhập tên người nhận hàng." });
       return;
     }
     if (!phone.trim()) {
-      Alert.alert("Thiếu thông tin", "Vui lòng nhập số điện thoại người nhận.");
+      showToast({ type: "warning", title: "Thiếu thông tin", message: "Vui lòng nhập số điện thoại người nhận." });
       return;
     }
     if (!address.trim()) {
-      Alert.alert("Thiếu thông tin", "Vui lòng nhập số nhà, tên đường chi tiết.");
+      showToast({ type: "warning", title: "Thiếu thông tin", message: "Vui lòng nhập số nhà, tên đường chi tiết." });
       return;
     }
     if (!city.trim() || !state.trim()) {
-      Alert.alert("Thiếu thông tin", "Vui lòng nhập Tỉnh/Thành phố và Quận/Huyện.");
+      showToast({ type: "warning", title: "Thiếu thông tin", message: "Vui lòng nhập Tỉnh/Thành phố và Quận/Huyện." });
       return;
     }
     if (lat === null || lng === null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
-      Alert.alert(
-        "Cần tọa độ GPS",
-        "Để Drone và Shipper giao hàng chuẩn xác, vui lòng định vị GPS hoặc tìm tọa độ từ địa chỉ trước khi lưu."
-      );
+      showToast({
+        type: "warning",
+        title: "Cần tọa độ GPS",
+        message: "Để Drone và Shipper giao hàng chuẩn xác, vui lòng định vị GPS hoặc tìm tọa độ từ địa chỉ trước khi lưu.",
+      });
       return;
     }
 

@@ -92,7 +92,7 @@
   align-items: center;
   gap: 6px;
   background-color: rgba(0, 0, 0, 0.04);
-  padding: 5px 12px;
+  padding: 3px 7px 3px 10px;
   border-radius: var(--radius-pill);
   font-size: 12px;
   color: var(--apple-ink);
@@ -114,8 +114,18 @@
   white-space: nowrap;
 }
 
-.apple-location-select { min-width: 0; max-width: 190px; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; outline: none; }
-.apple-location-select:focus-visible { outline: 2px solid var(--apple-primary-focus); outline-offset: 2px; border-radius: 3px; }
+.apple-location-dropdown {
+  width: min(180px, 24vw);
+}
+
+.apple-location-dropdown .rounded-select__trigger {
+  padding-left: 7px;
+}
+
+.apple-location-dropdown .rounded-select__menu {
+  left: 50%;
+  transform: translateX(-50%);
+}
 
 /* ── Right Actions ────────────────────────────────────────── */
 .apple-nav-actions {
@@ -309,6 +319,17 @@
   font-size: 13px;
   color: var(--apple-body-muted);
   padding-top: 4px;
+}
+
+.apple-mobile-addr .apple-location-dropdown--mobile {
+  width: min(100%, 360px);
+  flex: 1;
+}
+
+.apple-mobile-addr .rounded-select__menu {
+  left: 0;
+  transform: none;
+  width: min(360px, calc(100vw - var(--container-pad) - var(--container-pad)));
 }
 
 /* ── Responsive ───────────────────────────────────────────── */

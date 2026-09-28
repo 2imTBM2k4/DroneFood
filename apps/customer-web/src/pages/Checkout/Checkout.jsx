@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import "./Checkout.css";
 import { StoreContext } from "../../context/StoreContext";
 import OrderSummary from "../../components/OrderSummary/OrderSummary";
+import ItemOptionsSheet from "../../components/ItemOptionsSheet/ItemOptionsSheet";
 import AddressFormModal from "../../components/AddressFormModal/AddressFormModal";
 import { emptyDeliveryAddress } from "../../components/AddressFormModal/addressFormModel";
 import { formatVND } from "@drone-food/web-ui/utils/money";
@@ -38,6 +39,10 @@ const Checkout = () => {
     cartDetails,
     loadCartDetail,
     loadCartData,
+    updateLine,
+    removeLine,
+    addToCart,
+    food_list,
     isHydrated,
     activeAddressId,
     setActiveAddressId,
@@ -60,6 +65,9 @@ const Checkout = () => {
   const [applyingVoucher, setApplyingVoucher] = useState(false);
   const [voucherError, setVoucherError] = useState("");
   const [placing, setPlacing] = useState(false);
+  const [updatingLineKey, setUpdatingLineKey] = useState("");
+  const [pendingRemoval, setPendingRemoval] = useState(null);
+  const [editingLine, setEditingLine] = useState(null);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -225,6 +233,73 @@ const Checkout = () => {
     setVoucherError("");
   };
 
+  const handleUpdateQuantity = async (line, quantity) => {
+    if (quantity < 1) {
+      setPendingRemoval(line);
+      return;
+    }
+    setUpdatingLineKey(line.lineKey);
+    try {
+      const updated = await updateLine(cartId, line.lineKey, quantity);
+      if (updated) {
+        setDeliveryQuote(null);
+        await loadCartDetail(cartId);
+      }
+    } finally {
+      setUpdatingLineKey("");
+    }
+  };
+
+  const handleRemoveLine = async () => {
+    if (!pendingRemoval) return;
+    setUpdatingLineKey(pendingRemoval.lineKey);
+    try {
+      const removed = await removeLine(cartId, pendingRemoval.lineKey);
+      if (!removed) return;
+      setDeliveryQuote(null);
+      setPendingRemoval(null);
+      if (cart?.items?.length === 1) {
+        navigate("/cart", { replace: true });
+        return;
+      }
+      await loadCartDetail(cartId);
+    } finally {
+      setUpdatingLineKey("");
+    }
+  };
+
+  const openLineCustomizer = (line) => {
+    const food = food_list.find((item) => item._id === line.foodId);
+    setEditingLine({
+      line,
+      item: {
+        _id: line.foodId,
+        name: line.name,
+        price: line.basePrice,
+        image: line.image,
+        description: food?.description || "",
+        optionGroups: food?.optionGroups || [],
+      },
+    });
+  };
+
+  const saveLineCustomization = async ({ quantity, selectedOptions, note }) => {
+    if (!editingLine) return false;
+    setUpdatingLineKey(editingLine.line.lineKey);
+    try {
+      const removed = await removeLine(cartId, editingLine.line.lineKey);
+      if (!removed) return false;
+      const added = await addToCart(editingLine.item._id, quantity, selectedOptions, note);
+      if (!added) return false;
+      setDeliveryQuote(null);
+      await loadCartDetail(cartId);
+      setEditingLine(null);
+      return true;
+    } finally {
+      setUpdatingLineKey("");
+    }
+  };
+
   const placeOrder = useCallback(async () => {
     if (!address || !isComplete(address)) return;
     if (paymentMethod === "COD" && deliveryMethod !== "shipper") {
@@ -298,6 +373,18 @@ const Checkout = () => {
 
   return (
     <div className="checkout">
+      {pendingRemoval && (
+        <div className="checkout-remove-overlay" role="presentation">
+          <section className="checkout-remove-dialog" role="dialog" aria-modal="true" aria-labelledby="checkout-remove-title" aria-describedby="checkout-remove-description" aria-busy={Boolean(updatingLineKey)}>
+            <h2 id="checkout-remove-title">Xóa món?</h2>
+            <p id="checkout-remove-description">{pendingRemoval.name} sẽ được xóa khỏi đơn hàng.</p>
+            <div className="checkout-remove-actions">
+              <button type="button" className="checkout-back" onClick={() => setPendingRemoval(null)} disabled={Boolean(updatingLineKey)}>Giữ lại</button>
+              <button type="button" className="checkout-remove-confirm" onClick={handleRemoveLine} disabled={Boolean(updatingLineKey)}>{updatingLineKey ? "Đang xóa…" : "Xóa món"}</button>
+            </div>
+          </section>
+        </div>
+      )}
       <nav className="checkout-steps" aria-label="Checkout progress">
         {STEPS.map((label, index) => (
           <button
@@ -665,7 +752,7 @@ const Checkout = () => {
                   type="button"
                   className="checkout-next"
                   onClick={placeOrder}
-                  disabled={placing}
+                  disabled={placing || Boolean(updatingLineKey) || !deliveryQuote}
                 >
                   {placing
                     ? paymentMethod === "PAYOS"
@@ -679,7 +766,7 @@ const Checkout = () => {
             </section>
           )}
         </div>
-        <OrderSummary cart={cart} deliveryQuote={deliveryQuote} />
+        <OrderSummary cart={cart} deliveryQuote={deliveryQuote} onUpdateQuantity={handleUpdateQuantity} onCustomizeLine={openLineCustomizer} updatingLineKey={updatingLineKey} />
       </div>
       <AddressFormModal
         open={addressModalOpen}
@@ -691,6 +778,7 @@ const Checkout = () => {
         onClose={() => setAddressModalOpen(false)}
         onSubmit={useOneTimeAddress}
       />
+      {editingLine && <ItemOptionsSheet item={editingLine.item} initial={{ quantity: editingLine.line.quantity, selectedOptions: editingLine.line.selectedOptions, note: editingLine.line.note }} onClose={() => setEditingLine(null)} onSubmit={saveLineCustomization} submitLabel="Lưu tùy chỉnh" />}
     </div>
   );
 };

@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
   Linking,
   SafeAreaView,
   StyleSheet,
@@ -56,6 +55,7 @@ import { floatingSurfaceForScreen } from "./src/components/navigation/activeOrde
 import { OptionGroupModal } from "./src/components/food/OptionGroupModal";
 import { AddressBookModal } from "./src/components/address/AddressBookModal";
 import { AmbientBackground } from "./src/components/common/AmbientBackground";
+import { ToastProvider, useToast } from "./src/components/common/ToastProvider";
 import { registerPushNotifications, unregisterPushNotifications } from "./src/pushNotifications";
 
 // Screens
@@ -118,11 +118,13 @@ const isLiveShipperRouteStatus = (value: unknown): value is LiveShipperRouteStat
   value === "available" || value === "unavailable";
 
 function CustomerApp() {
+  const { showToast } = useToast();
   const [token, setToken] = useState<string | null>(null);
   const [screen, setScreen] = useState<ScreenName>("home");
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
   const [selectedCartId, setSelectedCartId] = useState<string | null>(null);
   const [selectedFoodForModal, setSelectedFoodForModal] = useState<Food | null>(null);
+  const [editingCartLine, setEditingCartLine] = useState<CartLine | null>(null);
   const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
 
   const [address, setAddress] = useState<Address>(defaultAddress);
@@ -151,7 +153,11 @@ function CustomerApp() {
       setSelectedRestaurant(null);
       setScreen("home");
       setToken(null);
-      Alert.alert("Phiên đăng nhập đã hết hạn", "Vui lòng đăng nhập lại.");
+      showToast({
+        type: "warning",
+        title: "Phiên đăng nhập đã hết hạn",
+        message: "Vui lòng đăng nhập lại.",
+      });
     });
     return () => setSessionExpiredHandler(null);
   }, []);
@@ -192,13 +198,43 @@ function CustomerApp() {
     enabled: Boolean(token),
   });
 
-  const restaurantCart = selectRestaurantCart(cartsQuery.data?.carts || [], selectedRestaurant?._id);
+  const restaurantImageById = useMemo(
+    () => new Map(
+      (restaurantsQuery.data || []).map((restaurant) => [String(restaurant._id), restaurant.image])
+    ),
+    [restaurantsQuery.data]
+  );
+  const cartSummariesWithRestaurantImages = useMemo(
+    () => (cartsQuery.data?.carts || []).map((cart) => ({
+      ...cart,
+      restaurant: {
+        ...cart.restaurant,
+        image: cart.restaurant.image
+          || restaurantImageById.get(String(cart.restaurant.id))
+          || "",
+      },
+    })),
+    [cartsQuery.data?.carts, restaurantImageById]
+  );
+  const restaurantCart = selectRestaurantCart(cartSummariesWithRestaurantImages, selectedRestaurant?._id);
   const visibleCartId = screen === "restaurant" ? restaurantCart?.cartId || null : selectedCartId;
   const cartQuery = useQuery({
     queryKey: ["cart", token, visibleCartId],
     queryFn: () => cartApi.get(visibleCartId!),
     enabled: Boolean(token && visibleCartId),
   });
+  const cartWithRestaurantImage = useMemo(() => {
+    if (!cartQuery.data) return undefined;
+    return {
+      ...cartQuery.data,
+      restaurant: {
+        ...cartQuery.data.restaurant,
+        image: cartQuery.data.restaurant.image
+          || restaurantImageById.get(String(cartQuery.data.restaurant.id))
+          || "",
+      },
+    };
+  }, [cartQuery.data, restaurantImageById]);
 
   const transactionsQuery = useQuery({
     queryKey: ["userTransactions", token],
@@ -469,7 +505,11 @@ function CustomerApp() {
       setWorking(true);
       const perm = await Location.requestForegroundPermissionsAsync();
       if (perm.status !== "granted") {
-        Alert.alert("Cần quyền định vị", "Vui lòng cho phép quyền vị trí để định vị địa chỉ nhận hàng.");
+        showToast({
+          type: "warning",
+          title: "Cần quyền định vị",
+          message: "Vui lòng cho phép quyền vị trí để định vị địa chỉ nhận hàng.",
+        });
         return;
       }
       const pos = await Location.getCurrentPositionAsync({
@@ -487,9 +527,13 @@ function CustomerApp() {
         lng: String(lng),
       }));
       setDeliveryQuotes({});
-      Alert.alert("Thành công", "Đã cập nhật vị trí GPS hiện tại của bạn.");
+      showToast({ type: "success", message: "Đã cập nhật vị trí GPS hiện tại của bạn." });
     } catch (cause) {
-      Alert.alert("Lỗi vị trí", apiError(cause, "Không thể lấy vị trí GPS."));
+      showToast({
+        type: "error",
+        title: "Lỗi vị trí",
+        message: apiError(cause, "Không thể lấy vị trí GPS."),
+      });
     } finally {
       setWorking(false);
     }
@@ -500,14 +544,22 @@ function CustomerApp() {
       .filter((s) => s.trim())
       .join(", ");
     if (fullText.length < 5) {
-      Alert.alert("Thiếu địa chỉ", "Vui lòng nhập chi tiết số nhà và tên đường.");
+      showToast({
+        type: "warning",
+        title: "Thiếu địa chỉ",
+        message: "Vui lòng nhập chi tiết số nhà và tên đường.",
+      });
       return;
     }
     try {
       setWorking(true);
       const res = await userApi.geocode(fullText);
       if (!res) {
-        Alert.alert("Không tìm thấy", "Không tìm được tọa độ cho địa chỉ này.");
+        showToast({
+          type: "warning",
+          title: "Không tìm thấy",
+          message: "Không tìm được tọa độ cho địa chỉ này.",
+        });
         return;
       }
       setAddress((prev) => ({
@@ -516,9 +568,9 @@ function CustomerApp() {
         lng: String(res.lng),
       }));
       setDeliveryQuotes({});
-      Alert.alert("Thành công", "Đã tìm thấy tọa độ cho địa chỉ của bạn.");
+      showToast({ type: "success", message: "Đã tìm thấy tọa độ cho địa chỉ của bạn." });
     } catch (cause) {
-      Alert.alert("Lỗi", apiError(cause));
+      showToast({ type: "error", message: apiError(cause) });
     } finally {
       setWorking(false);
     }
@@ -597,7 +649,6 @@ function CustomerApp() {
       setVoucherCodes(nextVoucherCodes);
       setDeliveryQuotes((prev) => ({ ...prev, [deliveryMethod]: quote }));
     } catch (cause) {
-      Alert.alert("Mã không hợp lệ", apiError(cause, "Không thể áp dụng mã voucher này."));
       throw cause;
     } finally {
       setWorking(false);
@@ -621,7 +672,6 @@ function CustomerApp() {
       setVoucherCodes(nextVoucherCodes);
       setDeliveryQuotes((prev) => ({ ...prev, [deliveryMethod]: quote }));
     } catch (cause) {
-      Alert.alert("Không thể bỏ mã", apiError(cause, "Không thể cập nhật voucher."));
       throw cause;
     } finally {
       setWorking(false);
@@ -639,9 +689,13 @@ function CustomerApp() {
       if (updated?.cartId) queryClient.setQueryData(["cart", token, updated.cartId], updated);
       await queryClient.invalidateQueries({ queryKey: ["carts", token] });
       setSelectedFoodForModal(null);
-      Alert.alert("Đã thêm món", `Đã thêm ${quantity}x "${food.name}" vào giỏ hàng!`);
+      showToast({
+        type: "success",
+        title: "Đã thêm món",
+        message: `Đã thêm ${quantity}x "${food.name}" vào giỏ hàng!`,
+      });
     } catch (cause) {
-      Alert.alert("Lỗi thêm món", apiError(cause));
+      showToast({ type: "error", title: "Lỗi thêm món", message: apiError(cause) });
     } finally {
       setWorking(false);
     }
@@ -650,7 +704,12 @@ function CustomerApp() {
   const handleUpdateCartQuantity = async (line: CartLine, quantity: number) => {
     if (!selectedCartId) return;
     try {
+      setWorking(true);
       const updated = await cartApi.updateLine(selectedCartId, line.lineKey, quantity);
+      // A quote belongs to a particular server-priced cart version. Once the
+      // mutation succeeds, hide the previous quote until the checkout effect
+      // receives a new server quote for this basket.
+      setDeliveryQuotes({});
       if (!updated?.items?.length) {
         queryClient.removeQueries({ queryKey: ["cart", token, selectedCartId] });
         setSelectedCartId(null);
@@ -661,7 +720,55 @@ function CustomerApp() {
       await queryClient.invalidateQueries({ queryKey: ["cart", token, selectedCartId] });
       await queryClient.invalidateQueries({ queryKey: ["carts", token] });
     } catch (cause) {
-      Alert.alert("Lỗi giỏ hàng", apiError(cause));
+      showToast({ type: "error", title: "Lỗi giỏ hàng", message: apiError(cause) });
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const handleCustomizeCartLine = async (line: CartLine) => {
+    try {
+      setWorking(true);
+      const food = await foodApi.get(line.foodId);
+      setEditingCartLine(line);
+      setSelectedFoodForModal(food);
+    } catch (cause) {
+      showToast({ type: "error", title: "Không thể tùy chỉnh món", message: apiError(cause) });
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const handleOptionModalSubmit = async (
+    food: Food,
+    quantity: number,
+    selectedOptions: { groupName: string; optionName: string }[]
+  ) => {
+    if (!editingCartLine) {
+      await handleAddToCart(food, quantity, selectedOptions);
+      return;
+    }
+    if (!selectedCartId) return;
+
+    try {
+      setWorking(true);
+      // A cart line's key is derived from its options. Replacing the old line
+      // with a server-validated new line matches the existing web cart flow.
+      const removed = await cartApi.updateLine(selectedCartId, editingCartLine.lineKey, 0);
+      if (!removed) return;
+      const updated = await cartApi.add(food._id, quantity, selectedOptions);
+      if (updated?.cartId) {
+        queryClient.setQueryData(["cart", token, updated.cartId], updated);
+        setDeliveryQuotes({});
+      }
+      await queryClient.invalidateQueries({ queryKey: ["cart", token, selectedCartId] });
+      await queryClient.invalidateQueries({ queryKey: ["carts", token] });
+      setEditingCartLine(null);
+      setSelectedFoodForModal(null);
+    } catch (cause) {
+      showToast({ type: "error", title: "Không thể cập nhật món", message: apiError(cause) });
+    } finally {
+      setWorking(false);
     }
   };
 
@@ -674,25 +781,37 @@ function CustomerApp() {
       setSelectedCartId(null);
       setScreen("cart");
     } catch (cause) {
-      Alert.alert("Lỗi", apiError(cause));
+      showToast({ type: "error", title: "Không thể xóa giỏ hàng", message: apiError(cause) });
     }
   };
 
   const handlePlaceOrder = async () => {
     if (!selectedCartId || !cartQuery.data) {
-      Alert.alert("Giỏ hàng không hợp lệ", "Vui lòng chọn lại giỏ hàng của nhà hàng.");
+      showToast({
+        type: "error",
+        title: "Giỏ hàng không hợp lệ",
+        message: "Vui lòng chọn lại giỏ hàng của nhà hàng.",
+      });
       setScreen("cart");
       return;
     }
     const required = [address.fullName, address.address, address.city, address.state, address.phone];
     if (required.some((f) => !f.trim())) {
-      Alert.alert("Thiếu thông tin", "Vui lòng điền đầy đủ họ tên, số điện thoại và địa chỉ giao hàng.");
+      showToast({
+        type: "warning",
+        title: "Thiếu thông tin",
+        message: "Vui lòng điền đầy đủ họ tên, số điện thoại và địa chỉ giao hàng.",
+      });
       return;
     }
     const lat = Number(address.lat);
     const lng = Number(address.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      Alert.alert("Thiếu tọa độ GPS", "Cần có tọa độ vị trí để tính toán lộ trình bay của Drone.");
+      showToast({
+        type: "warning",
+        title: "Thiếu tọa độ GPS",
+        message: "Cần có tọa độ vị trí để tính toán lộ trình bay của Drone.",
+      });
       return;
     }
 
@@ -721,21 +840,27 @@ function CustomerApp() {
 
       if (!res.zeroPayableVoucherCheckout && paymentMethod === "PAYOS" && (res.checkoutUrl || res.paymentUrl)) {
         const payUrl = res.checkoutUrl || res.paymentUrl;
-        Alert.alert(
-          "Đặt đơn thành công",
-          "Đang mở trang thanh toán PayOS để bạn chuyển khoản an toàn.",
-          [
-            {
-              text: "Mở thanh toán PayOS",
-              onPress: () => payUrl && Linking.openURL(payUrl),
+        showToast({
+          type: "success",
+          title: "Đặt đơn thành công",
+          message: "Mở PayOS để hoàn tất thanh toán an toàn.",
+          duration: 8000,
+          primaryAction: {
+            label: "Thanh toán PayOS",
+            onPress: () => {
+              if (payUrl) void Linking.openURL(payUrl);
             },
-          ]
-        );
+          },
+        });
       } else {
-        Alert.alert("Đặt đơn thành công", `Mã đơn hàng: #${res.orderId.slice(-6).toUpperCase()}`);
+        showToast({
+          type: "success",
+          title: "Đặt đơn thành công",
+          message: `Mã đơn hàng: #${res.orderId.slice(-6).toUpperCase()}`,
+        });
       }
     } catch (cause) {
-      Alert.alert("Không thể đặt đơn", apiError(cause));
+      showToast({ type: "error", title: "Không thể đặt đơn", message: apiError(cause) });
       const status = (cause as { response?: { status?: number } })?.response?.status;
       if (status === 409 && selectedCartId) {
         await queryClient.invalidateQueries({ queryKey: ["cart", token, selectedCartId] });
@@ -752,16 +877,24 @@ function CustomerApp() {
 
   const handleOpenCargo = async (order: Order) => {
     if (!order.qrCode) {
-      Alert.alert("Chưa có mã QR", "Mã bảo mật đang được đồng bộ, vui lòng thử lại.");
+      showToast({
+        type: "warning",
+        title: "Chưa có mã QR",
+        message: "Mã bảo mật đang được đồng bộ, vui lòng thử lại.",
+      });
       return;
     }
     try {
       setWorking(true);
       const res = await droneApi.scanQr(order._id, order.qrCode);
-      Alert.alert("Đã mở khoang hàng", res.message || "Khoang hàng Drone đang mở trong 5 giây!");
+      showToast({
+        type: "success",
+        title: "Đã mở khoang hàng",
+        message: res.message || "Khoang hàng Drone đang mở trong 5 giây!",
+      });
       await ordersQuery.refetch();
     } catch (cause) {
-      Alert.alert("Không thể mở khoang", apiError(cause));
+      showToast({ type: "error", title: "Không thể mở khoang", message: apiError(cause) });
     } finally {
       setWorking(false);
     }
@@ -771,10 +904,14 @@ function CustomerApp() {
     try {
       setWorking(true);
       const res = await droneApi.confirmDelivery(order._id);
-      Alert.alert("Hoàn tất", res.message || "Bạn đã xác nhận nhận đủ hàng thành công!");
+      showToast({
+        type: "success",
+        title: "Hoàn tất",
+        message: res.message || "Bạn đã xác nhận nhận đủ hàng thành công!",
+      });
       await ordersQuery.refetch();
     } catch (cause) {
-      Alert.alert("Lỗi", apiError(cause));
+      showToast({ type: "error", title: "Không thể xác nhận", message: apiError(cause) });
     } finally {
       setWorking(false);
     }
@@ -784,10 +921,10 @@ function CustomerApp() {
     try {
       setWorking(true);
       await orderApi.cancel(orderId, reason);
-      Alert.alert("Đã hủy đơn", "Đơn hàng đã được hủy thành công.");
+      showToast({ type: "success", title: "Đã hủy đơn", message: "Đơn hàng đã được hủy thành công." });
       await ordersQuery.refetch();
     } catch (cause) {
-      Alert.alert("Không thể hủy", apiError(cause));
+      showToast({ type: "error", title: "Không thể hủy", message: apiError(cause) });
     } finally {
       setWorking(false);
     }
@@ -803,7 +940,7 @@ function CustomerApp() {
     );
   }, [ordersQuery.data]);
 
-  const cartCount = getCartBadgeCount(cartsQuery.data?.carts || []);
+  const cartCount = getCartBadgeCount(cartSummariesWithRestaurantImages);
   const floatingSurface = floatingSurfaceForScreen(
     screen,
     Boolean(activeOrder),
@@ -862,7 +999,7 @@ function CustomerApp() {
 
         {screen === "cart" && (
           <CartIndexScreen
-            carts={cartsQuery.data?.carts || []}
+            carts={cartSummariesWithRestaurantImages}
             loading={cartsQuery.isLoading}
             onOpenCart={(cartId) => {
               setSelectedCartId(cartId);
@@ -874,7 +1011,7 @@ function CustomerApp() {
 
         {screen === "cart-detail" && (
           <CartScreen
-            cart={cartQuery.data}
+            cart={cartWithRestaurantImage}
             loading={cartQuery.isLoading}
             onUpdateQuantity={handleUpdateCartQuantity}
             onClearCart={handleClearCart}
@@ -886,7 +1023,7 @@ function CustomerApp() {
 
         {screen === "checkout" && (
           <CheckoutScreen
-            cart={cartQuery.data}
+            cart={cartWithRestaurantImage}
             address={address}
             onAddressChange={(k, v) => {
               setSelectedAddressId(undefined);
@@ -911,6 +1048,8 @@ function CustomerApp() {
             voucherCodes={voucherCodes}
             onApplyVoucher={handleApplyVoucher}
             onRemoveVoucher={handleRemoveVoucher}
+            onUpdateQuantity={handleUpdateCartQuantity}
+            onCustomizeLine={handleCustomizeCartLine}
           />
         )}
 
@@ -983,7 +1122,7 @@ function CustomerApp() {
       {/* Floating Cart Capsule */}
       {floatingSurface === "restaurant-cart" && restaurantCart && cartQuery.data ? (
         <FloatingCartBar
-          cart={cartQuery.data}
+          cart={cartWithRestaurantImage}
           onPress={() => {
             setSelectedCartId(restaurantCart.cartId);
             setScreen("cart-detail");
@@ -1005,8 +1144,13 @@ function CustomerApp() {
       <OptionGroupModal
         food={selectedFoodForModal}
         loading={working}
-        onClose={() => setSelectedFoodForModal(null)}
-        onAddToCart={handleAddToCart}
+        onClose={() => {
+          setSelectedFoodForModal(null);
+          setEditingCartLine(null);
+        }}
+        onAddToCart={handleOptionModalSubmit}
+        initial={editingCartLine ? { quantity: editingCartLine.quantity, selectedOptions: editingCartLine.selectedOptions } : undefined}
+        submitLabel={editingCartLine ? "Lưu tùy chỉnh" : undefined}
       />
 
       {/* Quick Address Picker Modal for Home Screen */}
@@ -1035,7 +1179,9 @@ function CustomerApp() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <CustomerApp />
+      <ToastProvider>
+        <CustomerApp />
+      </ToastProvider>
     </QueryClientProvider>
   );
 }

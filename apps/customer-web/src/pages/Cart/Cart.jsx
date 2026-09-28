@@ -3,16 +3,24 @@ import "./Cart.css";
 import { StoreContext } from "../../context/StoreContext";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
-import { ShoppingCart, Trash2, Plus, Minus } from "lucide-react";
+import { ShoppingCart, Store, Trash2, Plus, Minus } from "lucide-react";
 import { EmptyState } from "@drone-food/web-ui/components/StateBlock";
 import ItemOptionsSheet from "../../components/ItemOptionsSheet/ItemOptionsSheet";
 import { formatVND } from "@drone-food/web-ui/utils/money";
+
+const restaurantImageUrl = (url, image) => {
+  if (!image) return "";
+  if (/^(https?:|data:|blob:)/i.test(image)) return image;
+  const clean = image.replace(/^\/+/, "");
+  return clean.startsWith("images/") ? `${url}/${clean}` : `${url}/images/${clean}`;
+};
 
 const Cart = () => {
   const {
     cartDetails,
     loadCartDetail,
     food_list,
+    restaurant_list,
     updateLine,
     removeLine,
     fees,
@@ -35,6 +43,9 @@ const Cart = () => {
 
   // The cart is single-restaurant, so one name heads the whole order.
   const restaurant = cart?.restaurant;
+  const restaurantImage = restaurant?.image
+    || restaurant_list.find((entry) => String(entry._id) === String(restaurant?.id))?.image
+    || "";
   const itemCount = cartLines.reduce((sum, line) => sum + line.quantity, 0);
 
   useEffect(() => {
@@ -158,6 +169,18 @@ const Cart = () => {
                   className="cart-restaurant"
                   onClick={() => navigate(`/restaurant/${restaurant.id}`)}
                 >
+                  {restaurantImage ? (
+                    <img
+                      className="cart-restaurant-avatar"
+                      src={restaurantImageUrl(url, restaurantImage)}
+                      alt={`Ảnh cửa hàng ${restaurant.name}`}
+                      onError={(event) => { event.currentTarget.src = "/placeholder.png"; }}
+                    />
+                  ) : (
+                    <span className="cart-restaurant-avatar cart-restaurant-avatar-fallback" aria-hidden="true">
+                      <Store size={17} />
+                    </span>
+                  )}
                   <span>{restaurant.name}</span>
                 </button>
               )}
