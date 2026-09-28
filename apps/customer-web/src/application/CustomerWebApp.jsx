@@ -6,7 +6,8 @@ import "@drone-food/web-ui/toast.css";
 import Navbar from "../components/Navbar/Navbar";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Home from "../pages/Home/Home";
-import Cart from "../pages/Cart/Cart";
+import CartDetail from "../pages/Cart/Cart";
+import CartIndex from "../pages/Cart/CartIndex";
 import Checkout from "../pages/Checkout/Checkout";
 import Footer from "../components/Footer/Footer";
 import LoginPopup from "../components/LoginPopup/LoginPopup";
@@ -70,8 +71,10 @@ const CustomerWebApp = () => {
             {/* the old dish-browsing route now lands on the restaurant list */}
             <Route path="/food" element={<Navigate to="/restaurants" replace />} />
             <Route path="/restaurant/:id" element={<RestaurantPage />} />
-            <Route path="/cart" element={<Cart />} />
-            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/cart" element={<CartIndex />} />
+            <Route path="/cart/:cartId" element={<CartDetail />} />
+            <Route path="/checkout/:cartId" element={<Checkout />} />
+            <Route path="/checkout" element={<Navigate to="/cart" replace />} />
             <Route path="/verify" element={<Verify />} />
             <Route path="/myorders" element={<MyOrders />} />
             <Route path="/myorders/:id" element={<OrderDetail />} />
@@ -80,14 +83,14 @@ const CustomerWebApp = () => {
             <Route path="/reset-password/:token" element={<ResetPassword />} />
             {/* The old three-route flow (Cart → PlaceOrder → Payment) is now
                 one page; keep the old paths working for saved links. */}
-            <Route path="/order" element={<Navigate to="/checkout" replace />} />
+            <Route path="/order" element={<Navigate to="/cart" replace />} />
             <Route
               path="/placeorder"
-              element={<Navigate to="/checkout" replace />}
+              element={<Navigate to="/cart" replace />}
             />
             <Route
               path="/payment"
-              element={<Navigate to="/checkout" replace />}
+              element={<Navigate to="/cart" replace />}
             />
           </Routes>
         </PageTransition>

@@ -1,7 +1,7 @@
-import { useState, useContext } from "react";
+import { useState, useContext, useEffect } from "react";
 import "./Cart.css";
 import { StoreContext } from "../../context/StoreContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { ShoppingCart, Trash2, Plus, Minus } from "lucide-react";
 import { EmptyState } from "@drone-food/web-ui/components/StateBlock";
@@ -10,31 +10,36 @@ import { formatVND } from "@drone-food/web-ui/utils/money";
 
 const Cart = () => {
   const {
-    cartLines,
+    cartDetails,
+    loadCartDetail,
     food_list,
     updateLine,
     removeLine,
-    getTotalCartAmount,
     fees,
     url,
     token,
     setShowLogin,
-    cartRestaurantId,
-    restaurant_list,
   } = useContext(StoreContext);
   const navigate = useNavigate();
+  const { cartId } = useParams();
   const [pendingRemoval, setPendingRemoval] = useState(null);
   const [isRemoving, setIsRemoving] = useState(false);
   const [editingLine, setEditingLine] = useState(null);
 
-  const subtotal = getTotalCartAmount();
+  const cart = cartDetails[cartId];
+  const cartLines = cart?.items || [];
+  const subtotal = cart?.subtotal || 0;
   const deliveryFee = subtotal > 0 ? fees.deliveryFee : 0;
   const serviceFee = subtotal > 0 ? fees.serviceFee : 0;
   const total = subtotal + deliveryFee + serviceFee;
 
   // The cart is single-restaurant, so one name heads the whole order.
-  const restaurant = restaurant_list.find((r) => r._id === cartRestaurantId);
+  const restaurant = cart?.restaurant;
   const itemCount = cartLines.reduce((sum, line) => sum + line.quantity, 0);
+
+  useEffect(() => {
+    loadCartDetail(cartId);
+  }, [cartId, loadCartDetail]);
 
   const getImageUrl = (line) => {
     if (!line?.image) return "/placeholder.png";
@@ -45,7 +50,7 @@ const Cart = () => {
 
   const handleDecrease = (line) => {
     if (line.quantity > 1) {
-      updateLine(line.lineKey, line.quantity - 1);
+      updateLine(cartId, line.lineKey, line.quantity - 1);
     } else {
       setPendingRemoval(line);
     }
@@ -56,7 +61,7 @@ const Cart = () => {
 
     setIsRemoving(true);
     try {
-      const removed = await removeLine(pendingRemoval.lineKey);
+      const removed = await removeLine(cartId, pendingRemoval.lineKey);
       if (removed) {
         toast.success("Item removed from cart");
         setPendingRemoval(null);
@@ -91,7 +96,11 @@ const Cart = () => {
       toast.error("Your cart is empty");
       return;
     }
-    navigate("/checkout");
+    if (restaurant?.isOpen === false) {
+      toast.error("This restaurant is currently closed");
+      return;
+    }
+    navigate(`/checkout/${cartId}`);
   };
 
   return (
@@ -147,7 +156,7 @@ const Cart = () => {
                 <button
                   type="button"
                   className="cart-restaurant"
-                  onClick={() => navigate(`/restaurant/${restaurant._id}`)}
+                  onClick={() => navigate(`/restaurant/${restaurant.id}`)}
                 >
                   <span>{restaurant.name}</span>
                 </button>
@@ -207,7 +216,7 @@ const Cart = () => {
                     <span className="quantity-display">{line.quantity}</span>
                     <button
                       className="quantity-btn increase"
-                      onClick={() => updateLine(line.lineKey, line.quantity + 1)}
+                      onClick={() => updateLine(cartId, line.lineKey, line.quantity + 1)}
                       aria-label={`Increase quantity of ${line.name}`}
                     >
                       <Plus size={14} />
@@ -231,7 +240,7 @@ const Cart = () => {
               type="button"
               className="cart-add-more"
               onClick={() =>
-                navigate(restaurant ? `/restaurant/${restaurant._id}` : "/restaurants")
+                navigate(restaurant ? `/restaurant/${restaurant.id}` : "/restaurants")
               }
             >
               Add more items
@@ -262,8 +271,12 @@ const Cart = () => {
                 <b>Total</b>
                 <b className="ds-num">{formatVND(total)}</b>
               </div>
-              <button className="cart-checkout-btn" onClick={handleProceedCheckout}>
-                Proceed to checkout
+              <button
+                className="cart-checkout-btn"
+                onClick={handleProceedCheckout}
+                disabled={restaurant?.isOpen === false}
+              >
+                {restaurant?.isOpen === false ? "Restaurant is closed" : "Proceed to checkout"}
               </button>
             </div>
           </aside>
@@ -272,6 +285,7 @@ const Cart = () => {
 
       {editingLine && (
         <CartLineEditor
+          cartId={cartId}
           editing={editingLine}
           onClose={() => setEditingLine(null)}
         />
@@ -285,11 +299,12 @@ const Cart = () => {
  * identity includes its options, "editing" means removing the old line and
  * adding the new one.
  */
-const CartLineEditor = ({ editing, onClose }) => {
+const CartLineEditor = ({ cartId, editing, onClose }) => {
   const { addToCart, removeLine } = useContext(StoreContext);
+  const navigate = useNavigate();
 
   const handleSubmit = async ({ quantity, selectedOptions, note }) => {
-    const removed = await removeLine(editing.line.lineKey);
+    const removed = await removeLine(cartId, editing.line.lineKey);
     if (!removed) return false;
 
     const added = await addToCart(
@@ -298,7 +313,10 @@ const CartLineEditor = ({ editing, onClose }) => {
       selectedOptions,
       note
     );
-    if (added) toast.success("Item updated");
+    if (added) {
+      toast.success("Item updated");
+      if (added.cartId !== cartId) navigate(`/cart/${added.cartId}`, { replace: true });
+    }
     return added;
   };
 

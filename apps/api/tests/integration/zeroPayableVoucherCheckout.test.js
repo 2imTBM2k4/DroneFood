@@ -61,26 +61,125 @@ const addCartLine = async (customerId, restaurantId) => {
     category: "test",
     restaurantId,
   });
-  await Cart.create({
+  return Cart.create({
     userId: customerId,
+    restaurantId,
     items: [{ lineKey: String(food._id), foodId: food._id, quantity: 1 }],
   });
 };
 
-describe("zero-payable PayOS voucher checkout", () => {
+describe("zero-payable voucher checkout", () => {
+  it("settles a fully voucher-covered COD checkout without collecting cash", async () => {
+    const admin = await createAdmin();
+    const customer = await createUser({ email: "zero-voucher-cod@test.com" });
+    const { restaurant } = await createRestaurantOwner();
+    const voucher = await Voucher.create(voucherData(admin._id, "FREECOD"));
+    const cart = await addCartLine(customer._id, restaurant._id);
+
+    const placed = await request(app)
+      .post("/api/order/place")
+      .set("Authorization", `Bearer ${generateToken(customer._id)}`)
+      .send({
+        address: ADDRESS,
+        cartId: cart._id.toString(),
+        cartVersion: cart.__v,
+        paymentMethod: "COD",
+        deliveryMethod: "shipper",
+        voucherCodes: [voucher.code],
+      });
+
+    expect(placed.status, JSON.stringify(placed.body)).toBe(200);
+    expect(placed.body).toMatchObject({
+      success: true,
+      paymentMethod: "COD",
+      totalPrice: 0,
+      zeroPayableVoucherCheckout: true,
+      newlyPaid: true,
+    });
+
+    const order = await Order.findById(placed.body.orderId);
+    expect(order).toMatchObject({
+      paymentMethod: "COD",
+      totalPrice: 0,
+      isPaid: true,
+      orderStatus: "pending",
+      paymentResult: { status: "ZERO_PAYABLE_VOUCHER" },
+    });
+
+    const cancelled = await request(app)
+      .post("/api/order/status")
+      .set("Authorization", `Bearer ${generateToken(customer._id)}`)
+      .send({
+        orderId: order._id.toString(),
+        status: "cancelled",
+        reason: "Đổi ý",
+      });
+
+    expect(cancelled.status, JSON.stringify(cancelled.body)).toBe(200);
+    expect((await Order.findById(order._id)).orderStatus).toBe("cancelled");
+    expect((await Voucher.findById(voucher._id)).usageCount).toBe(0);
+    expect(await VoucherRedemption.countDocuments({
+      order: order._id,
+      status: "released",
+      releaseReason: "order_cancelled",
+    })).toBe(1);
+  });
+
+  it("checks out through the API when stacked item and shipping vouchers reduce the payable total to zero", async () => {
+    const admin = await createAdmin();
+    const customer = await createUser({ email: "zero-voucher-api-stacking@test.com" });
+    const { restaurant } = await createRestaurantOwner();
+    restaurant.lat = 10.7;
+    restaurant.lng = 106.6;
+    await restaurant.save();
+    const itemVoucher = await Voucher.create(voucherData(admin._id, "APIITEMS", {
+      value: 100000,
+      appliesTo: "items_subtotal",
+    }));
+    const shippingVoucher = await Voucher.create(voucherData(admin._id, "APISHIP", {
+      value: 100000,
+      appliesTo: "shipping_fee",
+    }));
+    const cart = await addCartLine(customer._id, restaurant._id);
+
+    const placed = await request(app)
+      .post("/api/order/place")
+      .set("Authorization", `Bearer ${generateToken(customer._id)}`)
+      .send({
+        address: ADDRESS,
+        cartId: cart._id.toString(),
+        cartVersion: cart.__v,
+        paymentMethod: "PAYOS",
+        deliveryMethod: "drone",
+        voucherCodes: [itemVoucher.code, shippingVoucher.code],
+      });
+
+    expect(placed.status, JSON.stringify(placed.body)).toBe(200);
+    expect(placed.body).toMatchObject({
+      success: true,
+      totalPrice: 0,
+      zeroPayableVoucherCheckout: true,
+      newlyPaid: true,
+    });
+    expect(await VoucherRedemption.countDocuments({
+      order: placed.body.orderId,
+      status: "reserved",
+    })).toBe(2);
+  });
+
   it("settles a fully covered PayOS checkout without PayOS, notifies the normal paid path, and releases its quota once on cancellation", async () => {
     const admin = await createAdmin();
     const customer = await createUser({ email: "zero-voucher-customer@test.com" });
     const { restaurant } = await createRestaurantOwner();
     const voucher = await Voucher.create(voucherData(admin._id, "FREE100"));
-    await addCartLine(customer._id, restaurant._id);
+    const cart = await addCartLine(customer._id, restaurant._id);
 
     // Credentials are removed for this test. A success proves this checkout
     // did not initialize PayOS or request a payment link.
     const placed = await request(app)
       .post("/api/order/place")
       .set("Authorization", `Bearer ${generateToken(customer._id)}`)
-      .send({ address: ADDRESS, paymentMethod: "PAYOS", deliveryMethod: "shipper", voucherCode: voucher.code });
+      .send({ address: ADDRESS, cartId: cart._id.toString(), cartVersion: cart.__v, paymentMethod: "PAYOS", deliveryMethod: "shipper", voucherCode: voucher.code });
 
     expect(placed.status).toBe(200);
     expect(placed.body).toMatchObject({
@@ -127,9 +226,9 @@ describe("zero-payable PayOS voucher checkout", () => {
     const customer = await createUser({ email: "zero-voucher-race@test.com" });
     const { restaurant } = await createRestaurantOwner();
     const voucher = await Voucher.create(voucherData(admin._id, "RACEFREE"));
-    await addCartLine(customer._id, restaurant._id);
+    const cart = await addCartLine(customer._id, restaurant._id);
 
-    const payload = { address: ADDRESS, paymentMethod: "PAYOS", deliveryMethod: "shipper", voucherCode: voucher.code };
+    const payload = { address: ADDRESS, cartId: cart._id.toString(), cartVersion: cart.__v, paymentMethod: "PAYOS", deliveryMethod: "shipper", voucherCode: voucher.code };
     const outcomes = await Promise.allSettled([
       orderService.placeOrder(customer, payload, "127.0.0.1"),
       orderService.placeOrder(customer, payload, "127.0.0.1"),
@@ -186,9 +285,9 @@ describe("zero-payable PayOS voucher checkout", () => {
     const customer = await createUser({ email: "zero-voucher-refund-denied@test.com" });
     const { restaurant } = await createRestaurantOwner();
     const voucher = await Voucher.create(voucherData(admin._id, "NOREFUND"));
-    await addCartLine(customer._id, restaurant._id);
+    const cart = await addCartLine(customer._id, restaurant._id);
     const checkout = await orderService.placeOrder(customer, {
-      address: ADDRESS, paymentMethod: "PAYOS", deliveryMethod: "shipper", voucherCode: voucher.code,
+      address: ADDRESS, cartId: cart._id.toString(), cartVersion: cart.__v, paymentMethod: "PAYOS", deliveryMethod: "shipper", voucherCode: voucher.code,
     }, "127.0.0.1");
 
     const refund = await request(app)
@@ -267,6 +366,46 @@ describe("zero-payable PayOS voucher checkout", () => {
     expect(String(funding.counterparty.shipper)).toBe(String(shipper._id));
     expect(await AuditLog.countDocuments({ action: "order.platform_voucher_funding_settled", targetId: order._id })).toBe(1);
     expect((await Order.findById(order._id)).platformVoucherFundingLedger.toString()).toBe(String(funding._id));
+  });
+
+  it("settles a voucher-covered COD delivery as prepaid without requiring COD liability", async () => {
+    const customer = await createUser({ email: "zero-voucher-cod-settlement@test.com" });
+    const shipper = await createUser({ role: "shipper", email: "zero-voucher-cod-shipper@test.com" });
+    const { restaurant } = await createRestaurantOwner();
+    const order = await Order.create({
+      user: customer._id,
+      restaurantId: restaurant._id,
+      shipperId: shipper._id,
+      orderItems: [{ product: restaurant._id, name: "COD voucher food", quantity: 1, price: 100000 }],
+      shippingAddress: ADDRESS,
+      paymentMethod: "COD",
+      isPaid: true,
+      paidAt: new Date(),
+      paymentResult: { id: "voucher_zero_payable", status: "ZERO_PAYABLE_VOUCHER", update_time: new Date().toISOString() },
+      itemsPrice: 100000,
+      shippingPrice: 20000,
+      totalPrice: 0,
+      discountAmount: 120000,
+      voucherSnapshots: [{ code: "CODFREE", kind: "fixed", value: 120000, appliesTo: "items_subtotal", discountAmount: 100000 }],
+      deliveryMethod: "shipper",
+      orderStatus: "arrived_at_delivery",
+      shipperAssignmentStatus: "arrived",
+      financialSnapshot: {
+        restaurantSharePercent: 80,
+        platformFoodCommissionPercent: 20,
+        shipperDeliverySharePercent: 85,
+        platformDeliverySharePercent: 15,
+        restaurantPayoutAmount: 80000,
+        shipperOnlineEarningsAmount: 17000,
+        codLiabilityAmount: 103000,
+      },
+    });
+
+    await expect(walletService.settleDeliveredOrder(order._id)).resolves.toMatchObject({
+      alreadySettled: false,
+    });
+    expect((await ShipperEarningsWallet.findOne({ shipper: shipper._id })).balance).toBe(17000);
+    expect((await Order.findById(order._id)).codReservationStatus).not.toBe("reserved");
   });
 
   it("does not let an admin settle a cancelled zero-payable order through the status API", async () => {

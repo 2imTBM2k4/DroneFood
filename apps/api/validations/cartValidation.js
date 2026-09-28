@@ -39,3 +39,7 @@ export const lineKeySchema = Joi.object({
     "any.required": "lineKey is required",
   }),
 });
+
+export const cartParamsSchema = Joi.object({
+  cartId: Joi.string().trim().hex().length(24).required(),
+});

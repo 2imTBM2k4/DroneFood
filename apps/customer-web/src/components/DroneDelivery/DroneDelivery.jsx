@@ -13,6 +13,7 @@ import { QRCodeSVG } from "qrcode.react";
 import QRScanner from "../QRScanner/QRScanner";
 import "leaflet/dist/leaflet.css";
 import "./DroneDelivery.css";
+import { API_URL } from "../../config/api";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -308,7 +309,7 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
         if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
 
         try {
-          const url = import.meta.env.VITE_API_URL || "http://localhost:4000";
+          const url = API_URL;
           const token = localStorage.getItem("token");
 
           await fetch(`${url}/api/order/status`, {
@@ -357,7 +358,7 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
         setLidOpen(false);
         setCanConfirm(true);
         try {
-          const url = import.meta.env.VITE_API_URL || "http://localhost:4000";
+          const url = API_URL;
           const token = localStorage.getItem("token");
           await fetch(`${url}/api/drone/confirm-delivery`, {
             method: "POST",
@@ -405,7 +406,7 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
 
       try {
-        const url = import.meta.env.VITE_API_URL || "http://localhost:4000";
+        const url = API_URL;
         const token = localStorage.getItem("token");
 
         await fetch(`${url}/api/order/status`, {
@@ -434,7 +435,7 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
 
-      const url = import.meta.env.VITE_API_URL || "http://localhost:4000";
+      const url = API_URL;
       const token = localStorage.getItem("token");
       const qrCodeToVerify = scannedCode || order.qrCode;
 

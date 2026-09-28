@@ -11,11 +11,12 @@ import { formatVND } from "@drone-food/web-ui/utils/money";
  * the bottom that expands on tap. Fees come from the server (GET
  * /api/config/fees) so what's shown here is what gets charged.
  */
-const OrderSummary = ({ collapsible = true, deliveryQuote = null }) => {
-  const { cartLines, getTotalCartAmount, fees } = useContext(StoreContext);
+const OrderSummary = ({ cart, collapsible = true, deliveryQuote = null }) => {
+  const { fees } = useContext(StoreContext);
+  const cartLines = cart?.items || [];
   const [expanded, setExpanded] = useState(false);
 
-  const subtotal = getTotalCartAmount();
+  const subtotal = cart?.subtotal || 0;
   const deliveryFee = subtotal > 0 ? deliveryQuote?.shippingPrice ?? fees.deliveryFee : 0;
   const serviceFee = subtotal > 0 ? fees.serviceFee : 0;
   // Voucher calculation is returned by the server quote. Never derive the

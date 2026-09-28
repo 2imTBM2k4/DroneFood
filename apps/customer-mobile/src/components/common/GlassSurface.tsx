@@ -13,6 +13,7 @@ interface GlassSurfaceProps {
   intensity?: number;
   tone?: GlassTone;
   elevated?: boolean;
+  overlayColor?: string;
 }
 
 const toneColor: Record<GlassTone, string> = {
@@ -29,6 +30,7 @@ export const GlassSurface: React.FC<GlassSurfaceProps> = ({
   intensity = 58,
   tone = "default",
   elevated = true,
+  overlayColor,
 }) => (
   <View style={[elevated && shadows.glass, style]}>
     <View style={[styles.clip, { borderRadius: radiusValue }]}>
@@ -44,7 +46,7 @@ export const GlassSurface: React.FC<GlassSurfaceProps> = ({
         style={[
           StyleSheet.absoluteFill,
           styles.tint,
-          { backgroundColor: toneColor[tone] },
+          { backgroundColor: overlayColor || toneColor[tone] },
         ]}
       />
       <View pointerEvents="box-none" style={contentStyle}>{children}</View>

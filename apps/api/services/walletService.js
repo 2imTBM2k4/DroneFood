@@ -160,6 +160,8 @@ export const settleDeliveredOrder = async (orderId, deliveredFields = {}) => {
     ? order.itemsPrice
     : order.orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const snapshot = order.financialSnapshot || {};
+  const zeroPayableVoucherOrder = isZeroPayableVoucherOrder(order);
+  const usesOnlineShipperSettlement = zeroPayableVoucherOrder || ["VNPAY", "PAYOS"].includes(order.paymentMethod);
   const restaurantAmount = snapshot.restaurantPayoutAmount || Math.round(itemsSubtotal * 0.8);
   const onlineEarningsAmount = snapshot.shipperOnlineEarningsAmount || Math.round((order.shippingPrice || 0) * 0.85);
   const codLiabilityAmount = snapshot.codLiabilityAmount || Math.round(itemsSubtotal + (order.shippingPrice || 0) * 0.15);
@@ -181,7 +183,7 @@ export const settleDeliveredOrder = async (orderId, deliveredFields = {}) => {
   let shipperTransaction = null;
   if (order.deliveryMethod === "shipper") {
     await walletRepo.ensureShipperWallets(order.shipperId, session);
-    if (["VNPAY", "PAYOS"].includes(order.paymentMethod)) {
+    if (usesOnlineShipperSettlement) {
       const wallet = await walletRepo.updateEarningsBalance(order.shipperId, onlineEarningsAmount, session);
       shipperTransaction = await addLedgerEntry({
         walletType: "shipper_earnings",
@@ -218,7 +220,7 @@ export const settleDeliveredOrder = async (orderId, deliveredFields = {}) => {
   }
 
   let platformVoucherFundingLedger = null;
-  if (isZeroPayableVoucherOrder(order)) {
+  if (zeroPayableVoucherOrder) {
     const fundingAmount = Math.round(order.discountAmount || 0);
     if (fundingAmount <= 0) throw new AppError("A zero-payable voucher order is missing its voucher funding amount", 409);
     platformVoucherFundingLedger = await PlatformVoucherFundingLedger.create([{
@@ -267,10 +269,10 @@ export const settleDeliveredOrder = async (orderId, deliveredFields = {}) => {
     restaurantId: order.restaurantId,
     restaurantPayoutAmount: restaurantAmount,
     shipperId: order.shipperId,
-    onlineEarningsAmount: order.deliveryMethod === "shipper" && ["VNPAY", "PAYOS"].includes(order.paymentMethod) ? onlineEarningsAmount : undefined,
-    codLiabilityAmount: order.deliveryMethod === "shipper" && order.paymentMethod === "COD" ? codLiabilityAmount : undefined,
+    onlineEarningsAmount: order.deliveryMethod === "shipper" && usesOnlineShipperSettlement ? onlineEarningsAmount : undefined,
+    codLiabilityAmount: order.deliveryMethod === "shipper" && order.paymentMethod === "COD" && !zeroPayableVoucherOrder ? codLiabilityAmount : undefined,
     platformVoucherFundingAmount: platformVoucherFundingLedger?.amount,
-  }, `Quyết toán đơn hàng [${order._id}]: Nhà hàng +${restaurantAmount} VND${order.shipperId ? (order.paymentMethod === "COD" ? `, Shipper thu COD (-${codLiabilityAmount} VND)` : `, Shipper nhận ship (+${onlineEarningsAmount} VND)`) : ""}`);
+  }, `Quyết toán đơn hàng [${order._id}]: Nhà hàng +${restaurantAmount} VND${order.shipperId ? (usesOnlineShipperSettlement ? `, Shipper nhận ship (+${onlineEarningsAmount} VND)` : `, Shipper thu COD (-${codLiabilityAmount} VND)`) : ""}`);
 
     return { alreadySettled: false, order, restaurantTransaction, shipperTransaction, platformVoucherFundingLedger };
   });

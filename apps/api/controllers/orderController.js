@@ -34,7 +34,7 @@ export const placeOrder = async (req, res) => {
       req.app.get("io")?.to(`restaurant_${restaurantId}`).emit("newOrder", result.orderId);
       await notifyRestaurantNewOrder(req.app.get("io"), result.orderId);
     }
-    if (result.paymentMethod === "COD" && result.deliveryMethod === "shipper" && req.app.get("io")) {
+    if (!result.zeroPayableVoucherCheckout && result.paymentMethod === "COD" && result.deliveryMethod === "shipper" && req.app.get("io")) {
       const { Order } = await import("../models/index.cjs");
       const { nearbyAvailableShipperIds } = await import("../services/shipperService.js");
       const order = await Order.findById(result.orderId).select("pickupLocation shipperAssignmentDeadlineAt");

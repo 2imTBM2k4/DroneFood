@@ -29,11 +29,17 @@ const cartSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      unique: true,
+    },
+    restaurantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Restaurant",
+      required: true,
     },
     items: [cartItemSchema],
   },
-  { timestamps: true }
+  { timestamps: true, optimisticConcurrency: true }
 );
+
+cartSchema.index({ userId: 1, restaurantId: 1 }, { unique: true });
 
 module.exports = mongoose.models.Cart || mongoose.model("Cart", cartSchema);

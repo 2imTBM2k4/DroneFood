@@ -39,8 +39,8 @@ describe("Address book API", () => {
     expect(blocked.status).toBe(409);
 
     const food = await createFood(restaurant._id);
-    await request(app).post("/api/cart/add").set("Authorization", `Bearer ${token}`).send({ itemId: food._id.toString() });
-    const placed = await request(app).post("/api/order/place").set("Authorization", `Bearer ${token}`).send({ addressEntryId: entryId, paymentMethod: "COD", deliveryMethod: "shipper" });
+    const cart = await request(app).post("/api/cart/add").set("Authorization", `Bearer ${token}`).send({ itemId: food._id.toString() });
+    const placed = await request(app).post("/api/order/place").set("Authorization", `Bearer ${token}`).send({ addressEntryId: entryId, cartId: cart.body.cartId, cartVersion: cart.body.cartVersion, paymentMethod: "COD", deliveryMethod: "shipper" });
     expect(placed.status).toBe(200);
 
     const order = await Order.findById(placed.body.orderId);

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   StyleSheet,
   Text,
@@ -15,6 +15,7 @@ interface InputProps extends TextInputProps {
   error?: string;
   hint?: string;
   containerStyle?: StyleProp<ViewStyle>;
+  inputWrapperStyle?: StyleProp<ViewStyle>;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
 }
@@ -24,23 +25,19 @@ export const Input: React.FC<InputProps> = ({
   error,
   hint,
   containerStyle,
+  inputWrapperStyle,
   leftIcon,
   rightIcon,
   style,
-  onFocus,
-  onBlur,
   ...rest
-}) => {
-  const [isFocused, setIsFocused] = useState(false);
-
-  return (
+}) => (
     <View style={[styles.container, containerStyle]}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <View
         pointerEvents="box-none"
         style={[
           styles.inputWrapper,
-          isFocused && styles.focused,
+          inputWrapperStyle,
           Boolean(error) && styles.errorBorder,
           rest.multiline && styles.multilineWrapper,
         ]}
@@ -50,14 +47,6 @@ export const Input: React.FC<InputProps> = ({
           style={[styles.input, rest.multiline && styles.multilineInput, style]}
           placeholderTextColor={colors.textMuted}
           selectionColor={colors.primary}
-          onFocus={(event) => {
-            setIsFocused(true);
-            onFocus?.(event);
-          }}
-          onBlur={(event) => {
-            setIsFocused(false);
-            onBlur?.(event);
-          }}
           {...rest}
         />
         {rightIcon ? <View style={styles.rightIcon}>{rightIcon}</View> : null}
@@ -66,7 +55,6 @@ export const Input: React.FC<InputProps> = ({
       {!error && hint ? <Text style={styles.hintText}>{hint}</Text> : null}
     </View>
   );
-};
 
 const styles = StyleSheet.create({
   container: { gap: spacing.xxs },
@@ -81,17 +69,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  focused: {
-    borderColor: colors.primary,
-    backgroundColor: colors.surfaceSolid,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-  },
   errorBorder: { borderColor: colors.danger },
   multilineWrapper: { minHeight: 96, alignItems: "flex-start", paddingVertical: spacing.sm },
-  input: { flex: 1, ...typography.body, color: colors.textPrimary, paddingVertical: 0 },
+  input: {
+    flex: 1,
+    alignSelf: "stretch",
+    ...typography.body,
+    color: colors.textPrimary,
+    paddingVertical: 0,
+  },
   multilineInput: { textAlignVertical: "top", minHeight: 72 },
   leftIcon: { marginRight: spacing.xs, justifyContent: "center", alignItems: "center" },
   rightIcon: { marginLeft: spacing.xs, justifyContent: "center", alignItems: "center" },

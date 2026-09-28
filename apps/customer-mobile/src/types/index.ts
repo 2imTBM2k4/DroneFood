@@ -57,10 +57,37 @@ export type CartLine = {
   restaurantId?: string | null;
 };
 
-export type Cart = {
+export type CartRestaurant = {
+  id: string | null;
+  name: string;
+  isOpen: boolean;
+};
+
+export type CartDetail = {
+  success?: boolean;
+  cartId: string;
+  cartVersion: number;
+  restaurant: CartRestaurant;
   items: CartLine[];
   subtotal: number;
-  restaurantId?: string;
+  restaurantId: string | null;
+};
+
+export type Cart = CartDetail;
+
+export type CartSummary = {
+  cartId: string;
+  restaurant: CartRestaurant;
+  itemCount: number;
+  distanceKm: number | null;
+  etaMin: number | null;
+  updatedAt?: string;
+};
+
+export type CartListResponse = {
+  success: boolean;
+  carts: CartSummary[];
+  cartCount: number;
 };
 
 export type DeliveryMethod = "drone" | "shipper";
@@ -78,6 +105,7 @@ export type AppliedVoucher = {
 };
 
 export type Quote = {
+  cartVersion?: number;
   deliveryMethod: DeliveryMethod;
   billedDistanceKm: number;
   distanceType: "air" | "road";
@@ -279,6 +307,7 @@ export type ScreenName =
   | "home"
   | "restaurant"
   | "cart"
+  | "cart-detail"
   | "checkout"
   | "orders"
   | "track"

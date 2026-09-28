@@ -12,6 +12,8 @@ services:
     build:
       context: .
       dockerfile: apps/customer-web/Dockerfile
+      args:
+        VITE_API_URL: ${CUSTOMER_WEB_API_URL:-https://api.dronefood.io.vn}
     container_name: dronefood-user
     ports:
       - "5173:80"

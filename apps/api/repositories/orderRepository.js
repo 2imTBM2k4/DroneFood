@@ -4,7 +4,6 @@ import { Order } from "../models/index.cjs";
 export const create = async (orderData, { session } = {}) => {
   const { totalPrice, paymentMethod, restaurantId, isPaid, paymentResult } = orderData;
   const isZeroPayableVoucherOrder = Number(totalPrice) === 0 &&
-    paymentMethod === "PAYOS" &&
     isPaid === true &&
     paymentResult?.status === "ZERO_PAYABLE_VOUCHER";
   if (!Number.isFinite(totalPrice) || (totalPrice <= 0 && !isZeroPayableVoucherOrder) || !paymentMethod || !restaurantId) {
@@ -88,7 +87,6 @@ export const claimZeroPayableVoucherCancellation = async ({ orderId, expectedSta
   Order.findOneAndUpdate(
     {
       _id: orderId,
-      paymentMethod: "PAYOS",
       isPaid: true,
       totalPrice: 0,
       "paymentResult.status": "ZERO_PAYABLE_VOUCHER",

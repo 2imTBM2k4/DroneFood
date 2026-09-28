@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Check } from "lucide-react";
 import { toast } from "react-toastify";
 import "./Checkout.css";
@@ -8,6 +8,7 @@ import OrderSummary from "../../components/OrderSummary/OrderSummary";
 import AddressFormModal from "../../components/AddressFormModal/AddressFormModal";
 import { emptyDeliveryAddress } from "../../components/AddressFormModal/addressFormModel";
 import { formatVND } from "@drone-food/web-ui/utils/money";
+import { buildCheckoutPayload } from "../../lib/cartState";
 
 const STEPS = ["Address", "Payment", "Review"];
 const toShippingAddress = (entry, fullName) => ({
@@ -34,13 +35,17 @@ const Checkout = () => {
     customerApi,
     user,
     setUser,
-    clearCart,
-    cartLines,
+    cartDetails,
+    loadCartDetail,
+    loadCartData,
     isHydrated,
     activeAddressId,
     setActiveAddressId,
   } = useContext(StoreContext);
   const navigate = useNavigate();
+  const { cartId } = useParams();
+  const cart = cartDetails[cartId];
+  const [cartResolved, setCartResolved] = useState(false);
   const [step, setStep] = useState(0);
   const [savedAddresses, setSavedAddresses] = useState([]);
   const [selectedAddressId, setSelectedAddressId] = useState("");
@@ -57,10 +62,29 @@ const Checkout = () => {
   const [placing, setPlacing] = useState(false);
 
   useEffect(() => {
-    if (isHydrated && (!token || cartLines.length === 0)) {
+    if (!isHydrated) return;
+    if (!token) {
       navigate("/cart", { replace: true });
+      return;
     }
-  }, [cartLines.length, isHydrated, navigate, token]);
+    let active = true;
+    setCartResolved(false);
+    loadCartDetail(cartId).then((loaded) => {
+      if (!active) return;
+      setCartResolved(true);
+      if (!loaded?.items?.length) navigate("/cart", { replace: true });
+    });
+    return () => { active = false; };
+  }, [cartId, isHydrated, loadCartDetail, navigate, token]);
+
+  useEffect(() => {
+    setStep(0);
+    setDeliveryQuote(null);
+    setQuoteError("");
+    setAppliedVoucherCodes([]);
+    setVoucherInput("");
+    setVoucherError("");
+  }, [cartId]);
 
   useEffect(() => {
     if (!token) return undefined;
@@ -102,19 +126,19 @@ const Checkout = () => {
   );
 
   useEffect(() => {
-    if (!address || !isComplete(address) || !token) {
+    if (!address || !isComplete(address) || !token || !cart) {
       setDeliveryQuote(null);
       return undefined;
     }
     let active = true;
     setQuoteError("");
-    const quotePayload = {
+    const quotePayload = buildCheckoutPayload(cartId, cart?.cartVersion, {
       deliveryMethod,
       voucherCodes: appliedVoucherCodes,
       ...(selectedAddressId && !oneTimeAddress
         ? { addressEntryId: selectedAddressId }
         : { address }),
-    };
+    });
 
     customerApi
       .post("/api/order/quote", quotePayload)
@@ -139,11 +163,14 @@ const Checkout = () => {
   }, [
     address,
     appliedVoucherCodes,
+    cart?.cartVersion,
+    cartId,
     customerApi,
     deliveryMethod,
     oneTimeAddress,
     selectedAddressId,
     token,
+    cart,
   ]);
 
   const selectSaved = (entry) => {
@@ -163,7 +190,7 @@ const Checkout = () => {
 
   const handleAddVoucher = async () => {
     const code = voucherInput.trim().toUpperCase();
-    if (!code) return;
+    if (!code || !cart) return;
     if (appliedVoucherCodes.includes(code)) {
       setVoucherError("Mã giảm giá này đã được thêm.");
       return;
@@ -172,13 +199,13 @@ const Checkout = () => {
     setApplyingVoucher(true);
     setVoucherError("");
     try {
-      const quotePayload = {
+      const quotePayload = buildCheckoutPayload(cartId, cart?.cartVersion, {
         deliveryMethod,
         voucherCodes: nextCodes,
         ...(selectedAddressId && !oneTimeAddress
           ? { addressEntryId: selectedAddressId }
           : { address }),
-      };
+      });
       const response = await customerApi.post("/api/order/quote", quotePayload);
       setDeliveryQuote(response.data.data || null);
       setAppliedVoucherCodes(nextCodes);
@@ -206,14 +233,14 @@ const Checkout = () => {
     }
     setPlacing(true);
     try {
-      const payload = {
+      const payload = buildCheckoutPayload(cartId, cart?.cartVersion, {
         ...(selectedAddressId && !oneTimeAddress
           ? { addressEntryId: selectedAddressId }
           : { address }),
         paymentMethod,
         deliveryMethod,
         voucherCodes: appliedVoucherCodes,
-      };
+      });
       const response = await customerApi.post("/api/order/place", payload);
       if (!response.data.success) {
         throw new Error(response.data.message || "Error placing order");
@@ -222,7 +249,7 @@ const Checkout = () => {
         window.location.assign(response.data.checkoutUrl);
         return;
       }
-      await clearCart();
+      await loadCartData();
       toast.success("Order placed successfully!");
       navigate("/myorders");
     } catch (error) {
@@ -231,15 +258,25 @@ const Checkout = () => {
           error.message ||
           "Server error. Please try again."
       );
+      if (error.response?.status === 409) {
+        await loadCartDetail(cartId);
+        navigate(`/cart/${cartId}`, { replace: true });
+      } else if (error.response?.status === 404) {
+        await loadCartData();
+        navigate("/cart", { replace: true });
+      }
     } finally {
       setPlacing(false);
     }
   }, [
     address,
     appliedVoucherCodes,
-    clearCart,
+    cart?.cartVersion,
+    cartId,
     customerApi,
     deliveryMethod,
+    loadCartData,
+    loadCartDetail,
     navigate,
     oneTimeAddress,
     paymentMethod,
@@ -247,7 +284,7 @@ const Checkout = () => {
   ]);
 
   const canContinueAddress = Boolean(address && isComplete(address));
-  if (!isHydrated) {
+  if (!isHydrated || !cartResolved || !cart) {
     return (
       <div className="checkout">
         <div className="skeleton" style={{ height: 44, maxWidth: 340 }} />
@@ -642,7 +679,7 @@ const Checkout = () => {
             </section>
           )}
         </div>
-        <OrderSummary deliveryQuote={deliveryQuote} />
+        <OrderSummary cart={cart} deliveryQuote={deliveryQuote} />
       </div>
       <AddressFormModal
         open={addressModalOpen}

@@ -10,7 +10,7 @@ const Verify = () => {
   const paymentStatus = searchParams.get("status");
   const paymentCancelled = searchParams.get("cancel") === "true" || paymentStatus === "CANCELLED";
   const orderId = searchParams.get("orderId");
-  const { url, token, clearCart, isHydrated } = useContext(StoreContext);
+  const { url, token, loadCartData, isHydrated } = useContext(StoreContext);
   const navigate = useNavigate();
 
   const verifyPayment = useCallback(async () => {
@@ -42,7 +42,7 @@ const Verify = () => {
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (response.data.success) {
-          await clearCart();
+          await loadCartData();
           toast.success("Payment verified! Check My Orders.");
           navigate("/myorders");
           return;
@@ -56,7 +56,7 @@ const Verify = () => {
       toast.error(error.response?.data?.message || "Verification error");
       navigate("/");
     }
-  }, [clearCart, navigate, orderId, paymentCancelled, token, url]);
+  }, [loadCartData, navigate, orderId, paymentCancelled, token, url]);
 
   useEffect(() => {
     // A payment redirect reloads the SPA. Wait until StoreContext has restored

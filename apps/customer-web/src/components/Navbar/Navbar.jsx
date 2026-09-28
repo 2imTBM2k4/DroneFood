@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { io } from "socket.io-client";
 import { StoreContext } from "../../context/StoreContext";
+import { API_URL } from "../../config/api";
 import Avatar from "../Avatar/Avatar";
 import NotificationBell from "@drone-food/web-ui/components/NotificationBell";
 
@@ -20,14 +21,13 @@ const Navbar = ({ setShowLogin }) => {
   const [profileOpen, setProfileOpen] = useState(false);
   const [isDark, setIsDark] = useState(() => localStorage.getItem("mode") === "dark");
   const [scrolled, setScrolled] = useState(false);
-  const { getCartItemCount, token, logoutCustomer, user, liveLocation, liveAddress, activeAddressId, setActiveAddressId } =
+  const { cartCount, token, logoutCustomer, user, liveLocation, liveAddress, activeAddressId, setActiveAddressId } =
     useContext(StoreContext);
   const navigate = useNavigate();
   const location = useLocation();
   const profileRef = useRef(null);
 
-  const cartCount = getCartItemCount();
-  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
+  const apiUrl = API_URL;
   const connectRealtime = useCallback(() => io(apiUrl, { auth: { token } }), [apiUrl, token]);
 
   const logout = () => {
@@ -130,7 +130,7 @@ const Navbar = ({ setShowLogin }) => {
             <Link
               to="/cart"
               className="apple-icon-btn apple-bag-btn"
-              aria-label={`Shopping Bag, ${cartCount} items`}
+              aria-label={`Shopping Bag, ${cartCount} restaurant carts`}
             >
               <ShoppingBag size={17} />
               {cartCount > 0 && <span className="apple-bag-count">{cartCount}</span>}

@@ -8,6 +8,11 @@ const orderItemOptionSchema = new mongoose.Schema({
   priceDelta: { type: Number, default: 0 },
 }, { _id: false });
 
+const sourceCartItemSchema = new mongoose.Schema({
+  lineKey: { type: String, required: true },
+  quantity: { type: Number, required: true, min: 1 },
+}, { _id: false });
+
 const coordinateSchema = new mongoose.Schema({
   lat: { type: Number, required: true, min: -90, max: 90 },
   lng: { type: Number, required: true, min: -180, max: 180 },
@@ -36,6 +41,14 @@ const orderSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    sourceCartId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Cart",
+      default: null,
+    },
+    sourceCartVersion: { type: Number, default: null, min: 0 },
+    sourceCartItems: { type: [sourceCartItemSchema], default: [] },
+    cartCleanupCompletedAt: { type: Date, default: null },
     orderItems: [
       {
         product: {

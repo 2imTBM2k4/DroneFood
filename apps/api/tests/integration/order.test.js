@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import app from "../../app.js";
-import { Order, ShipperProfile } from "../../models/index.cjs";
+import { Cart, Order, ShipperProfile } from "../../models/index.cjs";
 import { emitCustomerShipperLocation } from "../../utils/orderRealtime.js";
+import * as orderService from "../../services/orderService.js";
 import {
   createUser,
   createAdmin,
@@ -32,7 +33,7 @@ describe("Order API", () => {
       const token = generateToken(user._id);
       const food = await createFood(restaurant._id);
 
-      await request(app)
+      const cart = await request(app)
         .post("/api/cart/add")
         .set("Authorization", `Bearer ${token}`)
         .send({ itemId: food._id.toString(), quantity: 2 });
@@ -40,7 +41,7 @@ describe("Order API", () => {
       const res = await request(app)
         .post("/api/order/place")
         .set("Authorization", `Bearer ${token}`)
-        .send({ address: ADDRESS, paymentMethod: "COD", deliveryMethod: "shipper" });
+        .send({ address: ADDRESS, cartId: cart.body.cartId, cartVersion: cart.body.cartVersion, paymentMethod: "COD", deliveryMethod: "shipper" });
 
       expect(res.body.success).toBe(true);
       expect(res.body.orderId).toBeDefined();
@@ -61,7 +62,7 @@ describe("Order API", () => {
       const token = generateToken(user._id);
       const food = await createFood(restaurant._id);
 
-      await request(app)
+      const cart = await request(app)
         .post("/api/cart/add")
         .set("Authorization", `Bearer ${token}`)
         .send({ itemId: food._id.toString(), quantity: 1 });
@@ -71,6 +72,8 @@ describe("Order API", () => {
         .set("Authorization", `Bearer ${token}`)
         .send({
           address: ADDRESS,
+          cartId: cart.body.cartId,
+          cartVersion: cart.body.cartVersion,
           paymentMethod: "COD",
           deliveryMethod: "shipper",
           amount: 0.01,
@@ -103,7 +106,7 @@ describe("Order API", () => {
       ];
       await food.save();
 
-      await request(app)
+      const cart = await request(app)
         .post("/api/cart/add")
         .set("Authorization", `Bearer ${token}`)
         .send({
@@ -116,7 +119,7 @@ describe("Order API", () => {
       const res = await request(app)
         .post("/api/order/place")
         .set("Authorization", `Bearer ${token}`)
-      .send({ address: ADDRESS, paymentMethod: "COD", deliveryMethod: "shipper" });
+      .send({ address: ADDRESS, cartId: cart.body.cartId, cartVersion: cart.body.cartVersion, paymentMethod: "COD", deliveryMethod: "shipper" });
 
       const order = await Order.findById(res.body.orderId);
       expect(order.orderItems[0].selectedOptions).toHaveLength(1);
@@ -134,10 +137,101 @@ describe("Order API", () => {
       const res = await request(app)
         .post("/api/order/place")
         .set("Authorization", `Bearer ${token}`)
-        .send({ address: ADDRESS, paymentMethod: "COD", deliveryMethod: "drone" });
+        .send({ address: ADDRESS, cartId: "507f1f77bcf86cd799439011", cartVersion: 0, paymentMethod: "PAYOS", deliveryMethod: "drone" });
 
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(404);
       expect(res.body.success).toBe(false);
+    });
+
+    it("should place only the selected restaurant cart", async () => {
+      const firstOwner = await createRestaurantOwner();
+      const secondOwner = await createRestaurantOwner();
+      const user = await createUser({ email: "multi-cart-order@test.com" });
+      const token = generateToken(user._id);
+      const firstFood = await createFood(firstOwner.restaurant._id, { name: "First cart food" });
+      const secondFood = await createFood(secondOwner.restaurant._id, { name: "Second cart food" });
+      const first = await request(app).post("/api/cart/add")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ itemId: firstFood._id.toString() });
+      const second = await request(app).post("/api/cart/add")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ itemId: secondFood._id.toString() });
+
+      const placed = await request(app).post("/api/order/place")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          address: ADDRESS,
+          cartId: first.body.cartId,
+          cartVersion: first.body.cartVersion,
+          paymentMethod: "COD",
+          deliveryMethod: "shipper",
+        });
+
+      expect(placed.status).toBe(200);
+      const order = await Order.findById(placed.body.orderId);
+      expect(order.restaurantId.toString()).toBe(firstOwner.restaurant._id.toString());
+      expect(await Cart.findById(first.body.cartId)).toBeNull();
+      expect(await Cart.findById(second.body.cartId)).not.toBeNull();
+    });
+
+    it("should not quote or place another user's cart", async () => {
+      const { restaurant } = await createRestaurantOwner();
+      const owner = await createUser({ email: "cart-checkout-owner@test.com" });
+      const other = await createUser({ email: "cart-checkout-other@test.com" });
+      const food = await createFood(restaurant._id);
+      const cart = await request(app).post("/api/cart/add")
+        .set("Authorization", `Bearer ${generateToken(owner._id)}`)
+        .send({ itemId: food._id.toString() });
+      const payload = {
+        address: ADDRESS,
+        cartId: cart.body.cartId,
+        cartVersion: cart.body.cartVersion,
+        paymentMethod: "COD",
+        deliveryMethod: "shipper",
+      };
+
+      const quote = await request(app).post("/api/order/quote")
+        .set("Authorization", `Bearer ${generateToken(other._id)}`)
+        .send(payload);
+      const placed = await request(app).post("/api/order/place")
+        .set("Authorization", `Bearer ${generateToken(other._id)}`)
+        .send(payload);
+      expect(quote.status).toBe(404);
+      expect(placed.status).toBe(404);
+    });
+
+    it("should preserve quantities added after an online checkout started", async () => {
+      const { restaurant } = await createRestaurantOwner();
+      const user = await createUser({ email: "changed-online-cart@test.com" });
+      const token = generateToken(user._id);
+      const food = await createFood(restaurant._id);
+      const added = await request(app).post("/api/cart/add")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ itemId: food._id.toString(), quantity: 2 });
+      await request(app)
+        .post(`/api/cart/${added.body.cartId}/update-line`)
+        .set("Authorization", `Bearer ${token}`)
+        .send({ lineKey: added.body.items[0].lineKey, quantity: 3 })
+        .expect(200);
+      const order = await Order.create({
+        user: user._id,
+        restaurantId: restaurant._id,
+        orderItems: [{ product: food._id, name: food.name, quantity: 2, price: food.price }],
+        shippingAddress: ADDRESS,
+        paymentMethod: "PAYOS",
+        deliveryMethod: "shipper",
+        totalPrice: food.price * 2,
+        sourceCartId: added.body.cartId,
+        sourceCartVersion: added.body.cartVersion,
+        sourceCartItems: [{ lineKey: added.body.items[0].lineKey, quantity: 2 }],
+      });
+
+      await orderService.cleanupPurchasedCart(order);
+      await orderService.cleanupPurchasedCart(await Order.findById(order._id));
+
+      const remaining = await Cart.findById(added.body.cartId);
+      expect(remaining.items[0].quantity).toBe(1);
+      expect((await Order.findById(order._id)).cartCleanupCompletedAt).toBeInstanceOf(Date);
     });
 
     it("should reject order without address", async () => {

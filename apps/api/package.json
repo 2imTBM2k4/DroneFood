@@ -17,6 +17,7 @@
     "migrate:order-review-indexes": "node seeds/migrateOrderReviewIndexes.cjs",
     "migrate:voucher-redemption-index": "node seeds/migrateVoucherRedemptionIndexes.cjs",
     "migrate:refund-bank-accounts": "node seeds/migrateRefundBankAccounts.cjs",
+    "migrate:multi-restaurant-carts": "node seeds/migrateMultiRestaurantCarts.cjs",
     "jobs:expire-shipper-orders": "node jobs/expireShipperOrders.js",
     "lint": "eslint . --max-warnings 0",
     "test:watch": "vitest",

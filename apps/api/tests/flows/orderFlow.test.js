@@ -24,12 +24,12 @@ describe("Phase 1 payment and shipper settlement flow", () => {
     const customer = await createUser({ email: "cod-drone@test.com" });
     const food = await createFood(restaurant._id, { price: 100000 });
     const token = generateToken(customer._id);
-    await request(app).post("/api/cart/add").set("Authorization", `Bearer ${token}`).send({ itemId: food._id.toString() });
+    const cart = await request(app).post("/api/cart/add").set("Authorization", `Bearer ${token}`).send({ itemId: food._id.toString() });
 
     const response = await request(app)
       .post("/api/order/place")
       .set("Authorization", `Bearer ${token}`)
-      .send({ address, paymentMethod: "COD", deliveryMethod: "drone" });
+      .send({ address, cartId: cart.body.cartId, cartVersion: cart.body.cartVersion, paymentMethod: "COD", deliveryMethod: "drone" });
 
     expect(response.status).toBe(400);
     expect(response.body.message).toMatch(/COD.*shipper/i);
@@ -42,11 +42,11 @@ describe("Phase 1 payment and shipper settlement flow", () => {
     const food = await createFood(restaurant._id, { price: 300000 });
     const customerToken = generateToken(customer._id);
 
-    await request(app).post("/api/cart/add").set("Authorization", `Bearer ${customerToken}`).send({ itemId: food._id.toString() });
+    const cart = await request(app).post("/api/cart/add").set("Authorization", `Bearer ${customerToken}`).send({ itemId: food._id.toString() });
     const placed = await request(app)
       .post("/api/order/place")
       .set("Authorization", `Bearer ${customerToken}`)
-      .send({ address, paymentMethod: "COD", deliveryMethod: "shipper" });
+      .send({ address, cartId: cart.body.cartId, cartVersion: cart.body.cartVersion, paymentMethod: "COD", deliveryMethod: "shipper" });
     expect(placed.body.success).toBe(true);
 
     const orderId = placed.body.orderId;

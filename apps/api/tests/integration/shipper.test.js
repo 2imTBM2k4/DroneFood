@@ -208,6 +208,30 @@ describe("Shipper dispatch", () => {
     expect(accepted.shipperAssignmentStatus).toBe("accepted");
   });
 
+  it("accepts a voucher-settled COD order without reserving COD liability", async () => {
+    const { restaurant } = await createRestaurantOwner();
+    const customer = await createUser({ email: "customer-zero-cod@test.com" });
+    const shipper = await makeShipper("zero-cod");
+    const order = await makeOrder(customer._id, restaurant._id, {
+      totalPrice: 0,
+      discountAmount: 55000,
+      isPaid: true,
+      paidAt: new Date(),
+      paymentResult: {
+        id: "voucher_zero_payable",
+        status: "ZERO_PAYABLE_VOUCHER",
+        update_time: new Date().toISOString(),
+      },
+    });
+
+    await shipperService.acceptOrder(shipper, order._id);
+
+    const accepted = await Order.findById(order._id);
+    expect(accepted.shipperAssignmentStatus).toBe("accepted");
+    expect(accepted.codReservationStatus).not.toBe("reserved");
+    expect(accepted.codReservedLiability).toBe(0);
+  });
+
   it("atomically lets only one available shipper accept an order", async () => {
     const { restaurant } = await createRestaurantOwner();
     const customer = await createUser({ email: "customer-race@test.com" });

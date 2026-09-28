@@ -2,18 +2,15 @@ import axios from "axios";
 import { createContext, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { clearCustomerAuthStorage, createCustomerClient } from "../api/customerClient";
+import { API_URL } from "../config/api";
 import { reverseGeocode } from "../lib/trackasia";
 import { haversineKm } from "../lib/distance";
 
 export const StoreContext = createContext(null);
 
 const StoreContextProvider = (props) => {
-  // The cart is a list of LINES, not a map of foodId -> quantity: the same
-  // dish with different options is two lines. Each line is
-  // { lineKey, foodId, name, image, basePrice, unitPrice, quantity,
-  //   selectedOptions, note, restaurantId } and comes priced by the server.
-  const [cartLines, setCartLines] = useState([]);
-  const [cartRestaurantId, setCartRestaurantId] = useState(null);
+  const [cartSummaries, setCartSummaries] = useState([]);
+  const [cartDetails, setCartDetails] = useState({});
   const [showLogin, setShowLogin] = useState(false);
   const [user, setUser] = useState(null);
   // This is the explicit saved delivery choice used by navbar and checkout.
@@ -26,7 +23,7 @@ const StoreContextProvider = (props) => {
   const [liveAddress, setLiveAddress] = useState(null);
   const lastGeocodedLocation = useRef(null);
   const geocodeRequestId = useRef(0);
-  const url = import.meta.env.VITE_API_URL;
+  const url = API_URL;
   const [token, setToken] = useState("");
   const customerClient = useMemo(() => createCustomerClient(url), [url]);
   const customerApi = customerClient.api;
@@ -111,30 +108,50 @@ const StoreContextProvider = (props) => {
     throw new Error(res.data.message || "Food not found");
   };
 
-  /** Every cart endpoint returns the whole cart; this is the single sink. */
+  /** Detail endpoints return the complete server-priced cart. */
   const applyCartResponse = useCallback((data) => {
-    setCartLines(data?.items || []);
-    setCartRestaurantId(data?.restaurantId || null);
+    if (!data?.cartId) return;
+    setCartDetails((current) => ({ ...current, [data.cartId]: data }));
   }, []);
 
-  const clearLocalCart = useCallback(() => {
-    setCartLines([]);
-    setCartRestaurantId(null);
+  const clearLocalCarts = useCallback(() => {
+    setCartSummaries([]);
+    setCartDetails({});
   }, []);
 
   const loadCartData = useCallback(async () => {
     try {
-      const res = await customerApi.get("/api/cart/get");
+      const res = await customerApi.get("/api/cart", {
+        params: activeAddressId ? { addressEntryId: activeAddressId } : undefined,
+      });
       if (res.data.success) {
-        applyCartResponse(res.data);
+        setCartSummaries(res.data.carts || []);
       } else {
-        clearLocalCart();
+        setCartSummaries([]);
       }
     } catch (err) {
       console.error("Load cart error:", err);
-      clearLocalCart();
+      setCartSummaries([]);
     }
-  }, [applyCartResponse, clearLocalCart, customerApi]);
+  }, [activeAddressId, customerApi]);
+
+  const loadCartDetail = useCallback(async (cartId) => {
+    if (!cartId) return null;
+    try {
+      const res = await customerApi.get(`/api/cart/${cartId}`);
+      if (!res.data.success) return null;
+      applyCartResponse(res.data);
+      return res.data;
+    } catch (err) {
+      if (err?.response?.status !== 404) console.error("Load cart detail error:", err);
+      setCartDetails((current) => {
+        const next = { ...current };
+        delete next[cartId];
+        return next;
+      });
+      return null;
+    }
+  }, [applyCartResponse, customerApi]);
 
   const fetchUserInfo = useCallback(async () => {
     try {
@@ -166,25 +183,23 @@ const StoreContextProvider = (props) => {
       const res = await customerApi.post("/api/cart/add", { itemId, quantity, selectedOptions, note });
       if (!res.data.success) throw new Error(res.data.message || "Add failed");
       applyCartResponse(res.data);
-      return true;
+      await loadCartData();
+      return res.data;
     } catch (err) {
       const msg = err?.response?.data?.message || err.message || "";
-      if (msg.toLowerCase().includes("one restaurant")) {
-        toast.warning("You can only add items from one restaurant!");
-      } else {
-        toast.error(msg || "Failed to add to cart");
-      }
+      toast.error(msg || "Failed to add to cart");
       return false;
     }
   };
 
   /** Set a line's quantity outright. Quantity 0 removes it. */
-  const updateLine = async (lineKey, quantity) => {
+  const updateLine = async (cartId, lineKey, quantity) => {
     if (!token) return false;
     try {
-      const res = await customerApi.post("/api/cart/update-line", { lineKey, quantity });
+      const res = await customerApi.post(`/api/cart/${cartId}/update-line`, { lineKey, quantity });
       if (!res.data.success) throw new Error(res.data.message);
       applyCartResponse(res.data);
+      await loadCartData();
       return true;
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to update cart");
@@ -193,12 +208,20 @@ const StoreContextProvider = (props) => {
   };
 
   /** Remove a whole line in one request, whatever its quantity. */
-  const removeLine = async (lineKey) => {
+  const removeLine = async (cartId, lineKey) => {
     if (!token) return false;
     try {
-      const res = await customerApi.post("/api/cart/remove-line", { lineKey });
+      const res = await customerApi.post(`/api/cart/${cartId}/remove-line`, { lineKey });
       if (!res.data.success) throw new Error(res.data.message);
-      applyCartResponse(res.data);
+      if (res.data.items?.length) applyCartResponse(res.data);
+      else {
+        setCartDetails((current) => {
+          const next = { ...current };
+          delete next[cartId];
+          return next;
+        });
+      }
+      await loadCartData();
       return true;
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to remove item");
@@ -206,31 +229,34 @@ const StoreContextProvider = (props) => {
     }
   };
 
-  const clearCart = async () => {
+  const clearCart = async (cartId) => {
     if (!token) {
-      clearLocalCart();
-      return;
+      clearLocalCarts();
+      return false;
     }
     try {
-      const res = await customerApi.post("/api/cart/clear", {});
-      if (res.data.success) clearLocalCart();
+      const res = await customerApi.delete(`/api/cart/${cartId}`);
+      if (res.data.success) {
+        setCartDetails((current) => {
+          const next = { ...current };
+          delete next[cartId];
+          return next;
+        });
+        await loadCartData();
+        return true;
+      }
     } catch (err) {
       console.error("Clear cart error:", err);
     }
+    return false;
   };
 
-  const getTotalCartAmount = useCallback(
-    () =>
-      cartLines.reduce(
-        (total, line) => total + line.unitPrice * line.quantity,
-        0
-      ),
-    [cartLines]
-  );
-
-  const getCartItemCount = useCallback(
-    () => cartLines.reduce((count, line) => count + line.quantity, 0),
-    [cartLines]
+  const cartCount = cartSummaries.length;
+  const cartForRestaurant = useCallback(
+    (restaurantId) => cartSummaries.find(
+      (cart) => String(cart.restaurant?.id) === String(restaurantId)
+    ) || null,
+    [cartSummaries]
   );
 
   useEffect(() => {
@@ -312,10 +338,10 @@ const StoreContextProvider = (props) => {
     clearCustomerAuthStorage();
     setToken("");
     setUser(null);
-    clearLocalCart();
+    clearLocalCarts();
     localStorage.removeItem("cartItems");
     localStorage.removeItem("cartRestaurantId");
-  }, [clearLocalCart]);
+  }, [clearLocalCarts]);
 
   useEffect(() => {
     let notified = false;
@@ -334,12 +360,12 @@ const StoreContextProvider = (props) => {
       fetchUserInfo();
       loadCartData().finally(() => setIsHydrated(true));
     } else {
-      clearLocalCart();
+      clearLocalCarts();
       setUser(null);
       localStorage.removeItem("cartItems");
       localStorage.removeItem("cartRestaurantId");
     }
-  }, [clearLocalCart, fetchUserInfo, loadCartData, token]);
+  }, [clearLocalCarts, fetchUserInfo, loadCartData, token]);
 
   useEffect(() => {
     if (!user?.addressBook?.length) return;
@@ -353,13 +379,16 @@ const StoreContextProvider = (props) => {
   const contextValue = {
     food_list,
     restaurant_list,
-    cartLines,
+    cartSummaries,
+    cartDetails,
+    cartCount,
+    cartForRestaurant,
+    loadCartData,
+    loadCartDetail,
     addToCart,
     updateLine,
     removeLine,
     clearCart,
-    getTotalCartAmount,
-    getCartItemCount,
     fetchSingleFood,
     fees,
     url,
@@ -370,7 +399,6 @@ const StoreContextProvider = (props) => {
     resetCustomerSessionExpiry,
     showLogin,
     setShowLogin,
-    cartRestaurantId,
     user,
     setUser,
     activeAddressId,

@@ -14,7 +14,7 @@ import * as voucherService from "./voucherService.js";
 import * as voucherRepo from "../repositories/voucherRepository.js";
 import { resolveAddressSnapshot } from "./addressBookService.js";
 import { attachReviewFlows } from "./orderReviewService.js";
-import { Order, ShipperProfile } from "../models/index.cjs";
+import { Cart, Order, ShipperProfile } from "../models/index.cjs";
 import { isCustomerTrackableShipperOrder, serialiseLiveShipperRoute } from "../utils/orderRealtime.js";
 import { logger } from "../utils/logger.js";
 import { isRestaurantOpenNow } from "../utils/openingHours.js";
@@ -101,16 +101,28 @@ const resolveShippingAddress = async (userId, { address, addressEntryId }) => {
   throw new AppError("Shipping address is required.", 400);
 };
 
-export const quoteDelivery = async (user, { address, addressEntryId, deliveryMethod, voucherCode, voucherCodes }) => {
-  const shippingAddress = await resolveShippingAddress(user._id, { address, addressEntryId });
-  const cart = await cartRepo.findByUserId(user._id);
-  const firstLine = (cart?.items || []).find((line) => line.foodId);
-  if (!firstLine?.foodId?.restaurantId) {
+const loadCheckoutCart = async (userId, cartId) => {
+  const cart = await cartRepo.findByIdForUser(cartId, userId);
+  if (!cart) throw new AppError("Cart not found", 404);
+  const restaurantId = cart.restaurantId?._id || cart.restaurantId;
+  const lines = (cart.items || []).filter((line) => line.foodId);
+  if (!restaurantId || lines.length === 0) {
     throw new AppError("Cart is empty. Please add items to your cart.", 400);
   }
+  if (lines.some((line) => String(line.foodId.restaurantId) !== String(restaurantId))) {
+    throw new AppError("Cart contains items from another restaurant", 409);
+  }
+  return { cart, lines, restaurantId };
+};
 
-  const restaurant = await restaurantRepo.findById(firstLine.foodId.restaurantId);
+export const quoteDelivery = async (user, { cartId, address, addressEntryId, deliveryMethod, voucherCode, voucherCodes }) => {
+  const shippingAddress = await resolveShippingAddress(user._id, { address, addressEntryId });
+  const { cart, restaurantId } = await loadCheckoutCart(user._id, cartId);
+  const restaurant = await restaurantRepo.findById(restaurantId);
   if (!restaurant) throw new AppError("Restaurant not found.", 404);
+  if (!isRestaurantOpenNow(restaurant)) {
+    throw new AppError("Nhà hàng hiện đang đóng cửa và tạm ngưng nhận đơn.", 409);
+  }
 
   const deliveryQuote = await calculateShippingQuote({
     deliveryMethod,
@@ -120,7 +132,7 @@ export const quoteDelivery = async (user, { address, addressEntryId, deliveryMet
 
   const rawCodes = Array.isArray(voucherCodes) ? voucherCodes : (voucherCode ? [voucherCode] : []);
   const codes = rawCodes.map((c) => String(c).trim()).filter(Boolean);
-  if (codes.length === 0) return deliveryQuote;
+  if (codes.length === 0) return { ...deliveryQuote, cartVersion: cart.__v };
 
   const itemsPrice = (cart.items || []).reduce((sum, line) => {
     const food = line.foodId;
@@ -135,6 +147,7 @@ export const quoteDelivery = async (user, { address, addressEntryId, deliveryMet
   });
   return {
     ...deliveryQuote,
+    cartVersion: cart.__v,
     itemsPrice: totals.subtotal,
     serviceFee: totals.serviceFee,
     discountAmount: multiVoucherResult.totalDiscountAmount,
@@ -144,8 +157,60 @@ export const quoteDelivery = async (user, { address, addressEntryId, deliveryMet
   };
 };
 
+export const cleanupPurchasedCart = async (orderLike) => {
+  const orderId = orderLike?._id;
+  if (!orderId) return false;
+  const session = await mongoose.startSession();
+  let cleaned = false;
+  try {
+    await session.withTransaction(async () => {
+      const order = await Order.findById(orderId).session(session);
+      if (!order || order.cartCleanupCompletedAt || !order.sourceCartId) return;
+
+      const userId = order.user?._id || order.user;
+      const cart = await Cart.findOne({
+        _id: order.sourceCartId,
+        userId,
+      }).session(session);
+
+      if (cart) {
+        if (cart.__v === order.sourceCartVersion) {
+          await Cart.deleteOne({ _id: cart._id, userId }, { session });
+        } else {
+          const purchased = new Map(
+            (order.sourceCartItems || []).map((line) => [
+              line.lineKey,
+              line.quantity,
+            ])
+          );
+          cart.items = cart.items.flatMap((line) => {
+            const boughtQuantity = purchased.get(line.lineKey) || 0;
+            if (boughtQuantity === 0) return [line];
+            const remaining = line.quantity - boughtQuantity;
+            if (remaining <= 0) return [];
+            line.quantity = remaining;
+            return [line];
+          });
+          if (cart.items.length === 0) {
+            await Cart.deleteOne({ _id: cart._id, userId }, { session });
+          } else {
+            await cart.save({ session });
+          }
+        }
+      }
+
+      order.cartCleanupCompletedAt = new Date();
+      await order.save({ session });
+      cleaned = true;
+    });
+  } finally {
+    await session.endSession();
+  }
+  return cleaned;
+};
+
 export const placeOrder = async (user, orderData, clientIp) => {
-  const { address, addressEntryId, paymentMethod, deliveryMethod, voucherCode } = orderData;
+  const { cartId, cartVersion, address, addressEntryId, paymentMethod, deliveryMethod, voucherCode } = orderData;
   const shippingAddress = await resolveShippingAddress(user._id, { address, addressEntryId });
   if (paymentMethod === "COD" && deliveryMethod !== "shipper") {
     throw new AppError("COD is only available for shipper delivery", 400);
@@ -157,11 +222,9 @@ export const placeOrder = async (user, orderData, clientIp) => {
   // The server's cart is the only source of truth for what is being bought
   // and what it costs. Whatever `items`, `amount` or `restaurantId` the client
   // sent is ignored — otherwise a customer could set their own prices.
-  const cart = await cartRepo.findByUserId(user._id);
-  const cartLines = (cart?.items || []).filter((line) => line.foodId);
-
-  if (cartLines.length === 0) {
-    throw new AppError("Cart is empty. Please add items to your cart.", 400);
+  const { cart, lines: cartLines, restaurantId } = await loadCheckoutCart(user._id, cartId);
+  if (cart.__v !== cartVersion) {
+    throw new AppError("Cart changed. Please review your order and try again.", 409);
   }
 
   const orderItems = cartLines.map((line) => {
@@ -187,11 +250,6 @@ export const placeOrder = async (user, orderData, clientIp) => {
     (sum, item) => sum + item.price * item.quantity,
     0
   );
-  const restaurantId = cartLines[0].foodId.restaurantId;
-  if (!restaurantId) {
-    throw new AppError("Restaurant ID is required.", 400);
-  }
-
   // The storefront hides closed restaurants, but a stale tab could still get
   // this far — the order has to be refused here too.
   const restaurant = await restaurantRepo.findById(restaurantId);
@@ -227,11 +285,9 @@ export const placeOrder = async (user, orderData, clientIp) => {
     : null;
   const discountAmount = multiVoucherResult?.totalDiscountAmount || 0;
   const payableTotal = Math.max(0, totals.total - discountAmount);
-  // A fully-voucher-covered PayOS selection is settled internally: PayOS
-  // accepts only positive payment requests, and no provider confirmation took
-  // place. Keep this deliberately limited to an actual voucher application.
-  const isZeroPayableVoucherCheckout = paymentMethod === "PAYOS" &&
-    payableTotal === 0 &&
+  // A fully voucher-covered order is settled internally regardless of the
+  // payment option selected: there is no cash or provider payment to collect.
+  const isZeroPayableVoucherCheckout = payableTotal === 0 &&
     (multiVoucherResult?.applications.length || 0) > 0;
   // Keep the existing pre-create configuration failure for positive PayOS
   // payments, while a zero-voucher order must not touch PayOS at all.
@@ -248,6 +304,12 @@ export const placeOrder = async (user, orderData, clientIp) => {
 
   const newOrderData = {
     user: user._id,
+    sourceCartId: cart._id,
+    sourceCartVersion: cart.__v,
+    sourceCartItems: cartLines.map((line) => ({
+      lineKey: line.lineKey,
+      quantity: line.quantity,
+    })),
     orderItems,
     shippingAddress: {
       fullName: shippingAddress.fullName,
@@ -321,8 +383,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
 
   let paymentUrl = null;
   if (isZeroPayableVoucherCheckout) {
-    await cartRepo.deleteByUserId(user._id);
-    await userRepo.updateById(user._id, { cart: [] });
+    await cleanupPurchasedCart(newOrder);
     await recordAudit({
       actor: user,
       action: "order.zero_payable_voucher_settled",
@@ -401,8 +462,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
       throw new AppError(`Unable to create PayOS payment link: ${error.message}`, 502);
     }
   } else {
-    await cartRepo.deleteByUserId(user._id);
-    await userRepo.updateById(user._id, { cart: [] });
+    await cleanupPurchasedCart(newOrder);
   }
 
   logger.info({
@@ -471,6 +531,7 @@ const recordVnpayResult = async (query) => {
       vnpTransactionNo: query.vnp_TransactionNo || null,
       paymentResult: { id: query.vnp_TransactionNo, status: query.vnp_ResponseCode, update_time: query.vnp_PayDate },
     });
+    await cleanupPurchasedCart(order);
     if (order.deliveryMethod === "drone") {
       try {
         const { dispatchPaidDroneOrder } = await import("./droneService.js");
@@ -493,6 +554,7 @@ const recordVnpayResult = async (query) => {
     await orderRepo.updateById(orderId, { orderStatus: "cancelled", reason: "VNPay payment failed or was cancelled" });
     await voucherRepo.releaseForOrder(orderId, "vnpay_payment_failed");
   }
+  if (paid && order?.isPaid) await cleanupPurchasedCart(order);
   return { ...result, paid: Boolean(paid || order?.isPaid), newlyPaid: false };
 };
 
@@ -533,7 +595,10 @@ export const handlePayosWebhook = async (payload) => {
   if (String(payment.code) !== "00") {
     return { paid: Boolean(order.isPaid), newlyPaid: false, orderId: order._id, ignored: true };
   }
-  if (order.isPaid) return { paid: true, newlyPaid: false, orderId: order._id };
+  if (order.isPaid) {
+    await cleanupPurchasedCart(order);
+    return { paid: true, newlyPaid: false, orderId: order._id };
+  }
 
   await orderRepo.updateById(order._id, {
     isPaid: true,
@@ -550,6 +615,7 @@ export const handlePayosWebhook = async (payload) => {
       update_time: payment.transactionDateTime,
     },
   });
+  await cleanupPurchasedCart(order);
   if (order.deliveryMethod === "drone") {
     try {
       const { dispatchPaidDroneOrder } = await import("./droneService.js");

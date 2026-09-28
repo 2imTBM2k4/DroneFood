@@ -52,6 +52,7 @@ import type {
 import { TabBar } from "./src/components/navigation/TabBar";
 import { FloatingCartBar } from "./src/components/navigation/FloatingCartBar";
 import { ActiveOrderBanner } from "./src/components/navigation/ActiveOrderBanner";
+import { floatingSurfaceForScreen } from "./src/components/navigation/activeOrderBannerState";
 import { OptionGroupModal } from "./src/components/food/OptionGroupModal";
 import { AddressBookModal } from "./src/components/address/AddressBookModal";
 import { AmbientBackground } from "./src/components/common/AmbientBackground";
@@ -62,12 +63,14 @@ import { AuthScreen } from "./src/screens/auth/AuthScreen";
 import { HomeScreen } from "./src/screens/home/HomeScreen";
 import { RestaurantDetailScreen } from "./src/screens/restaurant/RestaurantDetailScreen";
 import { CartScreen } from "./src/screens/cart/CartScreen";
+import { CartIndexScreen } from "./src/screens/cart/CartIndexScreen";
 import { CheckoutScreen } from "./src/screens/checkout/CheckoutScreen";
 import { OrdersScreen } from "./src/screens/orders/OrdersScreen";
 import { DroneTrackingScreen } from "./src/screens/orders/DroneTrackingScreen";
 import { ShipperTrackingScreen } from "./src/screens/orders/ShipperTrackingScreen";
 import { CompletedOrderDetailScreen } from "./src/screens/orders/CompletedOrderDetailScreen";
 import { ProfileScreen } from "./src/screens/profile/ProfileScreen";
+import { getCartBadgeCount, selectRestaurantCart } from "./src/cart/cartState";
 
 const queryClient = new QueryClient();
 const NEARBY_RADIUS_KM = 15;
@@ -118,6 +121,7 @@ function CustomerApp() {
   const [token, setToken] = useState<string | null>(null);
   const [screen, setScreen] = useState<ScreenName>("home");
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
+  const [selectedCartId, setSelectedCartId] = useState<string | null>(null);
   const [selectedFoodForModal, setSelectedFoodForModal] = useState<Food | null>(null);
   const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
 
@@ -182,10 +186,18 @@ function CustomerApp() {
     enabled: Boolean(token),
   });
 
-  const cartQuery = useQuery({
-    queryKey: ["cart", token],
-    queryFn: cartApi.get,
+  const cartsQuery = useQuery({
+    queryKey: ["carts", token, selectedAddressId],
+    queryFn: () => cartApi.list(selectedAddressId),
     enabled: Boolean(token),
+  });
+
+  const restaurantCart = selectRestaurantCart(cartsQuery.data?.carts || [], selectedRestaurant?._id);
+  const visibleCartId = screen === "restaurant" ? restaurantCart?.cartId || null : selectedCartId;
+  const cartQuery = useQuery({
+    queryKey: ["cart", token, visibleCartId],
+    queryFn: () => cartApi.get(visibleCartId!),
+    enabled: Boolean(token && visibleCartId),
   });
 
   const transactionsQuery = useQuery({
@@ -393,7 +405,7 @@ function CustomerApp() {
 
   // Fetch Quotes when in Checkout
   useEffect(() => {
-    if (!token || screen !== "checkout") return undefined;
+    if (!token || screen !== "checkout" || !selectedCartId || !cartQuery.data) return undefined;
     const lat = Number(address.lat);
     const lng = Number(address.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng) || !address.address.trim()) {
@@ -409,6 +421,7 @@ function CustomerApp() {
         const results = await Promise.allSettled(
           methods.map((method) =>
             orderApi.getQuote(
+              selectedCartId,
               { ...address, lat, lng },
               method,
               voucherCodes,
@@ -433,7 +446,12 @@ function CustomerApp() {
       active = false;
       clearTimeout(timer);
     };
-  }, [token, screen, address.address, address.lat, address.lng, cartQuery.data?.subtotal, voucherCodes, selectedAddressId]);
+  }, [token, screen, address.address, address.lat, address.lng, cartQuery.data, voucherCodes, selectedAddressId, selectedCartId]);
+
+  useEffect(() => {
+    setVoucherCodes([]);
+    setDeliveryQuotes({});
+  }, [selectedCartId]);
 
   // Actions
   const handleLogout = async () => {
@@ -558,6 +576,7 @@ function CustomerApp() {
   };
 
   const handleApplyVoucher = async (code: string) => {
+    if (!selectedCartId) throw new Error("Chưa chọn giỏ hàng.");
     const normalizedCode = code.trim().toUpperCase();
     if (voucherCodes.includes(normalizedCode)) {
       throw new Error("Mã voucher này đã được áp dụng.");
@@ -569,6 +588,7 @@ function CustomerApp() {
       const lng = Number(address.lng);
       const nextVoucherCodes = [...voucherCodes, normalizedCode];
       const quote = await orderApi.getQuote(
+        selectedCartId,
         { ...address, lat: Number.isFinite(lat) ? lat : 0, lng: Number.isFinite(lng) ? lng : 0 },
         deliveryMethod,
         nextVoucherCodes,
@@ -576,7 +596,6 @@ function CustomerApp() {
       );
       setVoucherCodes(nextVoucherCodes);
       setDeliveryQuotes((prev) => ({ ...prev, [deliveryMethod]: quote }));
-      Alert.alert("Áp mã thành công", `Đã áp dụng voucher: ${normalizedCode}`);
     } catch (cause) {
       Alert.alert("Mã không hợp lệ", apiError(cause, "Không thể áp dụng mã voucher này."));
       throw cause;
@@ -586,12 +605,14 @@ function CustomerApp() {
   };
 
   const handleRemoveVoucher = async (code: string) => {
+    if (!selectedCartId) return;
     const nextVoucherCodes = voucherCodes.filter((voucherCode) => voucherCode !== code);
     try {
       setWorking(true);
       const lat = Number(address.lat);
       const lng = Number(address.lng);
       const quote = await orderApi.getQuote(
+        selectedCartId,
         { ...address, lat: Number.isFinite(lat) ? lat : 0, lng: Number.isFinite(lng) ? lng : 0 },
         deliveryMethod,
         nextVoucherCodes,
@@ -614,8 +635,9 @@ function CustomerApp() {
   ) => {
     try {
       setWorking(true);
-      await cartApi.add(food._id, quantity, selectedOptions);
-      await queryClient.invalidateQueries({ queryKey: ["cart", token] });
+      const updated = await cartApi.add(food._id, quantity, selectedOptions);
+      if (updated?.cartId) queryClient.setQueryData(["cart", token, updated.cartId], updated);
+      await queryClient.invalidateQueries({ queryKey: ["carts", token] });
       setSelectedFoodForModal(null);
       Alert.alert("Đã thêm món", `Đã thêm ${quantity}x "${food.name}" vào giỏ hàng!`);
     } catch (cause) {
@@ -626,24 +648,42 @@ function CustomerApp() {
   };
 
   const handleUpdateCartQuantity = async (line: CartLine, quantity: number) => {
+    if (!selectedCartId) return;
     try {
-      await cartApi.updateLine(line.lineKey, quantity);
-      await queryClient.invalidateQueries({ queryKey: ["cart", token] });
+      const updated = await cartApi.updateLine(selectedCartId, line.lineKey, quantity);
+      if (!updated?.items?.length) {
+        queryClient.removeQueries({ queryKey: ["cart", token, selectedCartId] });
+        setSelectedCartId(null);
+        setScreen("cart");
+      } else {
+        queryClient.setQueryData(["cart", token, selectedCartId], updated);
+      }
+      await queryClient.invalidateQueries({ queryKey: ["cart", token, selectedCartId] });
+      await queryClient.invalidateQueries({ queryKey: ["carts", token] });
     } catch (cause) {
       Alert.alert("Lỗi giỏ hàng", apiError(cause));
     }
   };
 
   const handleClearCart = async () => {
+    if (!selectedCartId) return;
     try {
-      await cartApi.clear();
-      await queryClient.invalidateQueries({ queryKey: ["cart", token] });
+      await cartApi.clear(selectedCartId);
+      queryClient.removeQueries({ queryKey: ["cart", token, selectedCartId] });
+      await queryClient.invalidateQueries({ queryKey: ["carts", token] });
+      setSelectedCartId(null);
+      setScreen("cart");
     } catch (cause) {
       Alert.alert("Lỗi", apiError(cause));
     }
   };
 
   const handlePlaceOrder = async () => {
+    if (!selectedCartId || !cartQuery.data) {
+      Alert.alert("Giỏ hàng không hợp lệ", "Vui lòng chọn lại giỏ hàng của nhà hàng.");
+      setScreen("cart");
+      return;
+    }
     const required = [address.fullName, address.address, address.city, address.state, address.phone];
     if (required.some((f) => !f.trim())) {
       Alert.alert("Thiếu thông tin", "Vui lòng điền đầy đủ họ tên, số điện thoại và địa chỉ giao hàng.");
@@ -663,6 +703,8 @@ function CustomerApp() {
       await queryClient.invalidateQueries({ queryKey: ["profile", token] });
 
       const res = await orderApi.place({
+        cartId: selectedCartId,
+        cartVersion: cartQuery.data.cartVersion,
         address: { ...address, lat, lng },
         addressEntryId: selectedAddressId,
         deliveryMethod,
@@ -670,7 +712,8 @@ function CustomerApp() {
         voucherCodes: voucherCodes.length > 0 ? voucherCodes : undefined,
       });
 
-      await queryClient.invalidateQueries({ queryKey: ["cart", token] });
+      queryClient.removeQueries({ queryKey: ["cart", token, selectedCartId] });
+      await queryClient.invalidateQueries({ queryKey: ["carts", token] });
       await queryClient.invalidateQueries({ queryKey: ["orders", token] });
 
       setTrackingOrderId(res.orderId);
@@ -693,6 +736,15 @@ function CustomerApp() {
       }
     } catch (cause) {
       Alert.alert("Không thể đặt đơn", apiError(cause));
+      const status = (cause as { response?: { status?: number } })?.response?.status;
+      if (status === 409 && selectedCartId) {
+        await queryClient.invalidateQueries({ queryKey: ["cart", token, selectedCartId] });
+        setScreen("cart-detail");
+      } else if (status === 404) {
+        setSelectedCartId(null);
+        await queryClient.invalidateQueries({ queryKey: ["carts", token] });
+        setScreen("cart");
+      }
     } finally {
       setWorking(false);
     }
@@ -747,12 +799,16 @@ function CustomerApp() {
   // Active order for banner
   const activeOrder = useMemo(() => {
     return (ordersQuery.data || []).find((o) =>
-      ["preparing", "delivering"].includes(o.orderStatus)
+      ["preparing", "delivering", "arrived_at_delivery"].includes(o.orderStatus)
     );
   }, [ordersQuery.data]);
 
-  const cartCount =
-    cartQuery.data?.items.reduce((s, i) => s + i.quantity, 0) || 0;
+  const cartCount = getCartBadgeCount(cartsQuery.data?.carts || []);
+  const floatingSurface = floatingSurfaceForScreen(
+    screen,
+    Boolean(activeOrder),
+    Boolean(restaurantCart && cartQuery.data)
+  );
 
   if (!token) {
     return <AuthScreen onSuccess={setToken} />;
@@ -763,8 +819,8 @@ function CustomerApp() {
       <AmbientBackground>
         <StatusBar style="dark" />
 
-      {/* Active Order Banner (when not on tracking screen) */}
-      {screen !== "track" && activeOrder ? (
+      {/* Active Order Banner appears only on the Explore screen. */}
+      {activeOrder && floatingSurface === "active-order" ? (
         <ActiveOrderBanner
           order={activeOrder}
           onPress={(o) => {
@@ -805,6 +861,18 @@ function CustomerApp() {
         )}
 
         {screen === "cart" && (
+          <CartIndexScreen
+            carts={cartsQuery.data?.carts || []}
+            loading={cartsQuery.isLoading}
+            onOpenCart={(cartId) => {
+              setSelectedCartId(cartId);
+              setScreen("cart-detail");
+            }}
+            onExploreFood={() => setScreen("home")}
+          />
+        )}
+
+        {screen === "cart-detail" && (
           <CartScreen
             cart={cartQuery.data}
             loading={cartQuery.isLoading}
@@ -812,6 +880,7 @@ function CustomerApp() {
             onClearCart={handleClearCart}
             onProceedCheckout={() => setScreen("checkout")}
             onExploreFood={() => setScreen("home")}
+            onBack={() => setScreen("cart")}
           />
         )}
 
@@ -833,7 +902,7 @@ function CustomerApp() {
             onPaymentMethodChange={setPaymentMethod}
             onPlaceOrder={handlePlaceOrder}
             working={working}
-            onBack={() => setScreen("cart")}
+            onBack={() => setScreen("cart-detail")}
             addressBook={addressBookQuery.data || []}
             selectedAddressId={selectedAddressId}
             onSelectSavedAddress={handleSelectAddressBookEntry}
@@ -912,10 +981,13 @@ function CustomerApp() {
       </View>
 
       {/* Floating Cart Capsule */}
-      {(screen === "home" || screen === "restaurant") && cartCount > 0 ? (
+      {floatingSurface === "restaurant-cart" && restaurantCart && cartQuery.data ? (
         <FloatingCartBar
           cart={cartQuery.data}
-          onPress={() => setScreen("cart")}
+          onPress={() => {
+            setSelectedCartId(restaurantCart.cartId);
+            setScreen("cart-detail");
+          }}
         />
       ) : null}
 

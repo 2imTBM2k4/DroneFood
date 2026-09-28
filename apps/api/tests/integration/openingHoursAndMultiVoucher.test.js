@@ -175,8 +175,9 @@ describe("Multi-voucher Stacking & Validation", () => {
         restaurantId: restaurant._id,
       });
 
-      await Cart.create({
+      const cart = await Cart.create({
         userId: customer._id,
+        restaurantId: restaurant._id,
         items: [{ lineKey: String(food._id), foodId: food._id, quantity: 1 }],
       });
 
@@ -202,6 +203,8 @@ describe("Multi-voucher Stacking & Validation", () => {
       }));
 
       const orderData = {
+        cartId: cart._id.toString(),
+        cartVersion: cart.__v,
         address: {
           fullName: "Nguyễn Văn Test",
           address: "200 Lê Lợi, Bến Nghé",

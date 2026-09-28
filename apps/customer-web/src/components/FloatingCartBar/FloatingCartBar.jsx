@@ -1,20 +1,25 @@
-import { useContext } from "react";
+import { useContext, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ShoppingBag, ChevronRight } from "lucide-react";
 import "./FloatingCartBar.css";
 import { StoreContext } from "../../context/StoreContext";
 import { formatVND } from "@drone-food/web-ui/utils/money";
 
-const HIDDEN_ROUTES = ["/cart", "/checkout", "/payment", "/placeorder", "/order"];
-
 const FloatingCartBar = () => {
-  const { getCartItemCount, getTotalCartAmount, token } = useContext(StoreContext);
+  const { cartForRestaurant, cartDetails, loadCartDetail, token } = useContext(StoreContext);
   const location = useLocation();
   const navigate = useNavigate();
 
-  const itemCount = getCartItemCount();
-  const isHidden = !token || itemCount === 0 || HIDDEN_ROUTES.includes(location.pathname);
-  const total = getTotalCartAmount();
+  const match = location.pathname.match(/^\/restaurant\/([^/]+)$/);
+  const summary = match ? cartForRestaurant(decodeURIComponent(match[1])) : null;
+  const cart = summary ? cartDetails[summary.cartId] : null;
+  const itemCount = cart?.items?.reduce((sum, line) => sum + line.quantity, 0) || summary?.itemCount || 0;
+  const isHidden = !token || !match || !summary || itemCount === 0;
+  const total = cart?.subtotal || 0;
+
+  useEffect(() => {
+    if (summary?.cartId && !cart) loadCartDetail(summary.cartId);
+  }, [cart, loadCartDetail, summary?.cartId]);
 
   return (
     <aside
@@ -39,7 +44,7 @@ const FloatingCartBar = () => {
           <button
             type="button"
             className="btn-apple-primary button-primary apple-sticky-cta"
-            onClick={() => navigate("/cart")}
+            onClick={() => navigate(`/cart/${summary?.cartId}`)}
             tabIndex={isHidden ? -1 : 0}
           >
             <span>Review Bag</span>

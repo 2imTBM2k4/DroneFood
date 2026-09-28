@@ -16,6 +16,8 @@ const shippingAddressSchema = Joi.object({
 // with older clients but are IGNORED. The order is built from the user's
 // server-side cart and priced from the database — see orderService.placeOrder.
 export const placeOrderSchema = Joi.object({
+  cartId: Joi.string().trim().hex().length(24).required(),
+  cartVersion: Joi.number().integer().min(0).required(),
   items: Joi.array().items(Joi.object().unknown(true)).optional(),
   // Raw address remains for compatibility. New clients should send an ID from
   // the address book so the server copies the verified entry into the order.
@@ -45,6 +47,7 @@ export const placeOrderSchema = Joi.object({
 });
 
 export const deliveryQuoteSchema = Joi.object({
+  cartId: Joi.string().trim().hex().length(24).required(),
   address: shippingAddressSchema,
   addressEntryId: Joi.string().trim().hex().length(24),
   deliveryMethod: placeOrderSchema.extract("deliveryMethod"),

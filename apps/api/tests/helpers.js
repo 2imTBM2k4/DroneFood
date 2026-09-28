@@ -38,6 +38,9 @@ export const createRestaurantOwner = async () => {
     phone: "0123456789",
     email: owner.email,
     isLocked: false,
+    // Generic order fixtures must be time-independent. Dedicated opening-hour
+    // tests create their own schedules explicitly.
+    openingHours: { openTime: "00:00", closeTime: "00:00" },
     lat: 10.7769,
     lng: 106.7009,
   });

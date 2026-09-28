@@ -1,11 +1,14 @@
-import React, { useMemo, useState } from "react";
-import { FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import React, { useMemo, useRef, useState } from "react";
+import { Animated, FlatList, Image, type NativeScrollEvent, type NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { formatDistance } from "../../api/client";
 import { GlassSurface } from "../../components/common/GlassSurface";
 import { Icon, type IconName } from "../../components/common/Icon";
 import { Input } from "../../components/common/Input";
 import { colors, radius, shadows, spacing, typography } from "../../theme/tokens";
 import type { Restaurant, UserProfile } from "../../types";
+import { clampExploreHeaderProgress, exploreHeaderMetrics } from "./exploreHeaderState";
+
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Restaurant>);
 
 interface HomeScreenProps {
   restaurants: Restaurant[];
@@ -55,6 +58,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const compact = width < 380;
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const [headerProgress, setHeaderProgress] = useState(0);
+  const headerMetrics = exploreHeaderMetrics(headerProgress, compact);
 
   const filtered = useMemo(() => restaurants.filter((restaurant) => {
     const haystack = `${restaurant.name} ${restaurant.address} ${restaurant.description || ""}`.toLowerCase();
@@ -69,7 +75,43 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   return (
     <View style={styles.screen}>
-      <FlatList
+      <View style={styles.stickyHeader}>
+        <GlassSurface
+          radiusValue={0}
+          intensity={headerMetrics.blurIntensity}
+          overlayColor={headerMetrics.backgroundColor}
+          elevated={headerProgress < 0.98}
+          contentStyle={[styles.stickyContent, { paddingVertical: headerMetrics.verticalPadding }]}
+        >
+          <GlassSurface
+            style={styles.locationCard}
+            contentStyle={[styles.locationContent, compact && styles.locationContentCompact, { minHeight: headerMetrics.locationMinHeight }]}
+            tone="strong"
+            intensity={Math.max(12, headerMetrics.blurIntensity - 8)}
+            overlayColor={headerMetrics.backgroundColor}
+          >
+            <Pressable style={styles.locationMain} onPress={onOpenAddressBook} disabled={!onOpenAddressBook}>
+              <View style={styles.eyebrowRow}><Icon name="map-pin" size={14} color={colors.primary} /><Text style={styles.eyebrow}>GIAO ĐẾN</Text></View>
+              <View style={styles.addressRow}>
+                <Text numberOfLines={1} style={[styles.address, compact && styles.addressCompact]}>{addressText}</Text>
+                {onOpenAddressBook ? <Icon name="chevron-right" size={15} color={colors.textSecondary} /> : null}
+              </View>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={locating ? "Đang cập nhật vị trí" : "Cập nhật vị trí GPS"} disabled={locating} onPress={onLocateGps} style={({ pressed }) => [styles.locationButton, compact && styles.locationButtonCompact, pressed && styles.pressed, locating && styles.disabled]}>
+              <Icon name={locating ? "refresh" : "crosshair"} size={compact ? 17 : 19} color={colors.primary} />
+            </Pressable>
+          </GlassSurface>
+          <Input
+            inputWrapperStyle={{ minHeight: headerMetrics.controlMinHeight }}
+            placeholder="Tìm món hoặc nhà hàng"
+            value={query}
+            onChangeText={setQuery}
+            leftIcon={<Icon name="search" size={19} color={colors.textSecondary} />}
+            rightIcon={query ? <Pressable accessibilityRole="button" accessibilityLabel="Xóa tìm kiếm" hitSlop={10} onPress={() => setQuery("")}><Icon name="close" size={18} color={colors.textSecondary} /></Pressable> : undefined}
+          />
+        </GlassSurface>
+      </View>
+      <AnimatedFlatList
         data={filtered}
         keyExtractor={(item) => item._id}
         onRefresh={onRefresh}
@@ -77,43 +119,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
-        contentContainerStyle={[styles.list, compact && styles.listCompact]}
+        contentContainerStyle={[styles.list, compact && styles.listCompact, { paddingTop: compact ? 146 : 158 }]}
+        scrollEventThrottle={16}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          {
+            useNativeDriver: false,
+            listener: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+              setHeaderProgress(clampExploreHeaderProgress(event.nativeEvent.contentOffset.y));
+            },
+          }
+        )}
         ListHeaderComponent={(
           <View style={styles.headerContent}>
-            <GlassSurface style={styles.locationCard} contentStyle={[styles.locationContent, compact && styles.locationContentCompact]} tone="strong">
-              <Pressable style={styles.locationMain} onPress={onOpenAddressBook} disabled={!onOpenAddressBook}>
-                <View style={styles.eyebrowRow}>
-                  <Icon name="map-pin" size={14} color={colors.primary} />
-                  <Text style={styles.eyebrow}>GIAO ĐẾN</Text>
-                </View>
-                <View style={styles.addressRow}>
-                  <Text numberOfLines={1} style={[styles.address, compact && styles.addressCompact]}>{addressText}</Text>
-                  {onOpenAddressBook ? <Icon name="chevron-right" size={15} color={colors.textSecondary} /> : null}
-                </View>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={locating ? "Đang cập nhật vị trí" : "Cập nhật vị trí GPS"}
-                disabled={locating}
-                onPress={onLocateGps}
-                style={({ pressed }) => [styles.locationButton, compact && styles.locationButtonCompact, pressed && styles.pressed, locating && styles.disabled]}
-              >
-                <Icon name={locating ? "refresh" : "crosshair"} size={compact ? 17 : 19} color={colors.primary} />
-              </Pressable>
-            </GlassSurface>
-
-            <Input
-              placeholder="Tìm món hoặc nhà hàng"
-              value={query}
-              onChangeText={setQuery}
-              leftIcon={<Icon name="search" size={19} color={colors.textSecondary} />}
-              rightIcon={query ? (
-                <Pressable accessibilityRole="button" accessibilityLabel="Xóa tìm kiếm" hitSlop={10} onPress={() => setQuery("")}>
-                  <Icon name="close" size={18} color={colors.textSecondary} />
-                </Pressable>
-              ) : undefined}
-            />
-
             <View style={[styles.promoCard, compact && styles.promoCardCompact]}>
               <View style={styles.promoCopy}>
                 <Text style={styles.promoEyebrow}>DRONEFOOD MEMBER</Text>
@@ -181,6 +199,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "transparent" },
+  stickyHeader: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 80 },
+  stickyContent: { paddingHorizontal: spacing.md, gap: spacing.xs },
   locationCard: { width: "100%" },
   locationContent: { minHeight: 72, paddingLeft: spacing.md, paddingRight: spacing.xs, paddingVertical: spacing.xs, flexDirection: "row", alignItems: "center", gap: spacing.sm },
   locationContentCompact: { minHeight: 64, paddingLeft: spacing.sm },

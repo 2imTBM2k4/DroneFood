@@ -15,14 +15,16 @@ interface CartScreenProps {
   onClearCart: () => Promise<void>;
   onProceedCheckout: () => void;
   onExploreFood: () => void;
+  onBack: () => void;
 }
 
-export const CartScreen: React.FC<CartScreenProps> = ({ cart, loading, onUpdateQuantity, onClearCart, onProceedCheckout, onExploreFood }) => {
+export const CartScreen: React.FC<CartScreenProps> = ({ cart, loading, onUpdateQuantity, onClearCart, onProceedCheckout, onExploreFood, onBack }) => {
   const { width } = useWindowDimensions();
   const compact = width < 380;
   const items = cart?.items || [];
   const subtotal = cart?.subtotal || 0;
   const count = items.reduce((sum, item) => sum + item.quantity, 0);
+  const closed = cart?.restaurant?.isOpen === false;
 
   const confirmClear = () => Alert.alert("Xóa giỏ hàng", "Bạn muốn xóa toàn bộ món trong giỏ?", [
     { text: "Giữ lại", style: "cancel" },
@@ -31,7 +33,7 @@ export const CartScreen: React.FC<CartScreenProps> = ({ cart, loading, onUpdateQ
 
   if (!items.length) return (
     <View style={styles.screen}>
-      <Header title="Giỏ hàng" />
+      <Header title="Chi tiết giỏ hàng" onBack={onBack} />
       <View style={styles.emptyWrap}>
         <GlassSurface tone="strong" contentStyle={styles.emptyCard}>
           <View style={styles.emptyIcon}><Icon name="cart" size={34} color={colors.primary} /></View>
@@ -45,8 +47,14 @@ export const CartScreen: React.FC<CartScreenProps> = ({ cart, loading, onUpdateQ
 
   return (
     <View style={styles.screen}>
-      <Header title="Giỏ hàng" subtitle={`${count} món`} rightAction={<Pressable hitSlop={10} onPress={confirmClear}><Text style={styles.clear}>Xóa hết</Text></Pressable>} />
+      <Header title={cart?.restaurant?.name || "Chi tiết giỏ hàng"} subtitle={`${count} món`} onBack={onBack} rightAction={<Pressable hitSlop={10} onPress={confirmClear}><Text style={styles.clear}>Xóa hết</Text></Pressable>} />
       <ScrollView contentContainerStyle={[styles.content, compact && styles.contentCompact]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+        {closed ? (
+          <GlassSurface tone="soft" contentStyle={styles.closedCard}>
+            <Icon name="clock" size={18} color={colors.danger} />
+            <Text style={styles.closedText}>Quán đang đóng cửa. Bạn vẫn có thể sửa hoặc xóa món nhưng chưa thể đặt hàng.</Text>
+          </GlassSurface>
+        ) : null}
         <GlassSurface tone="strong" contentStyle={[styles.itemsCard, compact && styles.itemsCardCompact]}>
           {items.map((line, index) => (
             <View key={line.lineKey} style={[styles.item, index < items.length - 1 && styles.itemBorder]}>
@@ -86,7 +94,7 @@ export const CartScreen: React.FC<CartScreenProps> = ({ cart, loading, onUpdateQ
           <View style={styles.summaryRow}><Text style={styles.totalLabel}>Tổng tạm tính</Text><Text style={styles.total}>{formatVnd(subtotal)}</Text></View>
         </GlassSurface>
 
-        <Button label={`Tiếp tục thanh toán · ${formatVnd(subtotal)}`} loading={loading} onPress={onProceedCheckout} />
+        <Button label={closed ? "Quán đang đóng cửa" : `Tiếp tục thanh toán · ${formatVnd(subtotal)}`} loading={loading} disabled={closed} onPress={onProceedCheckout} />
       </ScrollView>
     </View>
   );
@@ -97,6 +105,8 @@ const styles = StyleSheet.create({
   content: { padding: spacing.md, paddingBottom: 132, gap: spacing.md },
   contentCompact: { paddingHorizontal: spacing.sm, paddingTop: spacing.sm },
   clear: { ...typography.captionBold, color: colors.danger },
+  closedCard: { padding: spacing.md, flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  closedText: { ...typography.captionBold, color: colors.danger, flex: 1 },
   emptyWrap: { flex: 1, padding: spacing.md, justifyContent: "center" },
   emptyCard: { padding: spacing.xl, alignItems: "center", gap: spacing.sm },
   emptyIcon: { width: 68, height: 68, borderRadius: 34, backgroundColor: colors.primaryLight, alignItems: "center", justifyContent: "center" },

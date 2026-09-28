@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { User, Food, Cart, Restaurant } from "../../models/index.cjs";
 import * as cartService from "../../services/cartService.js";
+import * as cartRepository from "../../repositories/cartRepository.js";
 import bcrypt from "bcrypt";
 
 /** Convenience: the line for a given dish, ignoring options. */
@@ -97,17 +98,17 @@ describe("cartService", () => {
     });
   });
 
-  describe("getCart", () => {
-    it("should return empty cart for new user", async () => {
-      const result = await cartService.getCart(user._id);
+  describe("listCarts and getCart", () => {
+    it("should return an empty list for a new user", async () => {
+      const result = await cartService.listCarts(user._id);
       expect(result.success).toBe(true);
-      expect(result.items).toEqual([]);
-      expect(result.subtotal).toBe(0);
+      expect(result.carts).toEqual([]);
+      expect(result.cartCount).toBe(0);
     });
 
     it("should return cart with items", async () => {
-      await cartService.addToCart(user._id, food1._id.toString());
-      const result = await cartService.getCart(user._id);
+      const added = await cartService.addToCart(user._id, food1._id.toString());
+      const result = await cartService.getCart(user._id, added.cartId);
       expect(result.success).toBe(true);
       expect(result.items).toHaveLength(1);
       expect(lineFor(result, food1).quantity).toBe(1);
@@ -146,11 +147,11 @@ describe("cartService", () => {
       expect(result.items).toHaveLength(2);
     });
 
-    it("should reject items from different restaurant", async () => {
-      await cartService.addToCart(user._id, food1._id.toString());
-      await expect(
-        cartService.addToCart(user._id, food3._id.toString())
-      ).rejects.toThrow();
+    it("should keep items from different restaurants in separate carts", async () => {
+      const first = await cartService.addToCart(user._id, food1._id.toString());
+      const second = await cartService.addToCart(user._id, food3._id.toString());
+      expect(first.cartId).not.toBe(second.cartId);
+      expect((await cartService.listCarts(user._id)).cartCount).toBe(2);
     });
 
     it("should throw for non-existent food", async () => {
@@ -158,6 +159,17 @@ describe("cartService", () => {
       await expect(cartService.addToCart(user._id, fakeId)).rejects.toThrow(
         "Food not found"
       );
+    });
+
+    it("should report an incomplete cart migration instead of dereferencing a null cart", async () => {
+      vi.spyOn(cartRepository, "findOrCreate").mockResolvedValueOnce(null);
+
+      await expect(
+        cartService.addToCart(user._id, food1._id.toString())
+      ).rejects.toMatchObject({
+        statusCode: 503,
+        message: "Cart storage migration is incomplete. Please try again after the database migration.",
+      });
     });
   });
 
@@ -279,6 +291,7 @@ describe("cartService", () => {
       const added = await cartService.addToCart(user._id, food1._id.toString());
       const result = await cartService.updateLine(
         user._id,
+        added.cartId,
         added.items[0].lineKey,
         7
       );
@@ -290,6 +303,7 @@ describe("cartService", () => {
       const added = await cartService.addToCart(user._id, food1._id.toString());
       const result = await cartService.updateLine(
         user._id,
+        added.cartId,
         added.items[0].lineKey,
         0
       );
@@ -297,16 +311,16 @@ describe("cartService", () => {
     });
 
     it("should throw for an unknown line", async () => {
-      await cartService.addToCart(user._id, food1._id.toString());
+      const added = await cartService.addToCart(user._id, food1._id.toString());
       await expect(
-        cartService.updateLine(user._id, "nope", 2)
+        cartService.updateLine(user._id, added.cartId, "nope", 2)
       ).rejects.toThrow("Line not in cart");
     });
 
     it("should throw when cart not found", async () => {
-      const fakeUserId = "507f1f77bcf86cd799439011";
+      const fakeCartId = "507f1f77bcf86cd799439011";
       await expect(
-        cartService.updateLine(fakeUserId, "nope", 1)
+        cartService.updateLine(user._id, fakeCartId, "nope", 1)
       ).rejects.toThrow("Cart not found");
     });
   });
@@ -320,6 +334,7 @@ describe("cartService", () => {
       );
       const result = await cartService.removeLine(
         user._id,
+        added.cartId,
         added.items[0].lineKey
       );
       expect(result.items).toHaveLength(0);
@@ -331,6 +346,7 @@ describe("cartService", () => {
       await cartService.addToCart(user._id, food2._id.toString());
       const result = await cartService.removeLine(
         user._id,
+        added.cartId,
         added.items[0].lineKey
       );
       expect(result.items).toHaveLength(1);
@@ -338,23 +354,23 @@ describe("cartService", () => {
     });
 
     it("should throw for an unknown line", async () => {
-      await cartService.addToCart(user._id, food1._id.toString());
+      const added = await cartService.addToCart(user._id, food1._id.toString());
       await expect(
-        cartService.removeLine(user._id, "nope")
+        cartService.removeLine(user._id, added.cartId, "nope")
       ).rejects.toThrow("Line not in cart");
     });
   });
 
   describe("clearCart", () => {
     it("should clear all items", async () => {
-      await cartService.addToCart(user._id, food1._id.toString());
+      const added = await cartService.addToCart(user._id, food1._id.toString());
       await cartService.addToCart(user._id, food2._id.toString());
 
-      const result = await cartService.clearCart(user._id);
+      const result = await cartService.clearCart(user._id, added.cartId);
       expect(result.success).toBe(true);
 
-      const cart = await cartService.getCart(user._id);
-      expect(cart.items).toEqual([]);
+      const carts = await cartService.listCarts(user._id);
+      expect(carts.carts).toEqual([]);
     });
   });
 });

@@ -5,7 +5,8 @@ import type {
   Address,
   AddressBookEntry,
   AddressBookInput,
-  Cart,
+  CartDetail,
+  CartListResponse,
   DeliveryMethod,
   Food,
   Order,
@@ -308,8 +309,14 @@ export const foodApi = {
 };
 
 export const cartApi = {
-  get: async () => {
-    const res = await api.get<Cart>("/api/cart/get");
+  list: async (addressEntryId?: string) => {
+    const res = await api.get<CartListResponse>("/api/cart", {
+      params: addressEntryId ? { addressEntryId } : undefined,
+    });
+    return res.data;
+  },
+  get: async (cartId: string) => {
+    const res = await api.get<CartDetail>(`/api/cart/${cartId}`);
     return res.data;
   },
   add: async (
@@ -324,24 +331,26 @@ export const cartApi = {
     });
     return res.data;
   },
-  updateLine: async (lineKey: string, quantity: number) => {
-    const res = await api.post("/api/cart/update-line", { lineKey, quantity });
+  updateLine: async (cartId: string, lineKey: string, quantity: number) => {
+    const res = await api.post(`/api/cart/${cartId}/update-line`, { lineKey, quantity });
     return res.data;
   },
-  clear: async () => {
-    const res = await api.post("/api/cart/clear");
+  clear: async (cartId: string) => {
+    const res = await api.delete(`/api/cart/${cartId}`);
     return res.data;
   },
 };
 
 export const orderApi = {
   getQuote: async (
+    cartId: string,
     address: { lat: number; lng: number; [key: string]: unknown },
     deliveryMethod: DeliveryMethod,
     voucherCodes?: string[],
     addressEntryId?: string
   ) => {
     const res = await api.post<{ data: Quote }>("/api/order/quote", {
+      cartId,
       ...(addressEntryId ? { addressEntryId } : { address }),
       deliveryMethod,
       voucherCodes: voucherCodes?.filter(Boolean),
@@ -349,6 +358,8 @@ export const orderApi = {
     return res.data.data;
   },
   place: async (payload: {
+    cartId: string;
+    cartVersion: number;
     address?: Record<string, unknown>;
     addressEntryId?: string;
     deliveryMethod: DeliveryMethod;

@@ -149,6 +149,7 @@ export const availableOrders = async (userId) => {
     },
   }).populate("restaurantId", "name address phone");
   const eligibleOrders = orders.filter((order) => {
+    if (isZeroPayableVoucherOrder(order)) return true;
     if (order.paymentMethod !== "COD") return true;
     const liability = order.financialSnapshot?.codLiabilityAmount || Math.round(
       (order.itemsPrice || 0) + (order.shippingPrice || 0) * 0.15
@@ -222,7 +223,7 @@ export const acceptOrder = async (user, orderId) => {
     await ShipperProfile.findByIdAndUpdate(profile._id, { $set: { status: "available", currentOrder: null } });
     throw new AppError("Order is no longer available", 409);
   }
-  if (order.paymentMethod === "COD") {
+  if (order.paymentMethod === "COD" && !isZeroPayableVoucherOrder(order)) {
     try {
       await reserveCodLiability(order._id, user._id);
     } catch (error) {
@@ -475,8 +476,8 @@ export const expireUnacceptedOrders = async () => {
       // A paid PayOS order must never be silently cancelled without returning
       // the customer's money. It is held for support/manual refund until the
       // PayOS payout workflow is configured.
-      if (order.paymentMethod === "PAYOS" && order.isPaid) {
-        const zeroPayableVoucherOrder = isZeroPayableVoucherOrder(order);
+      const zeroPayableVoucherOrder = isZeroPayableVoucherOrder(order);
+      if (zeroPayableVoucherOrder || (order.paymentMethod === "PAYOS" && order.isPaid)) {
         const result = await Order.updateOne(
           { _id: order._id, shipperAssignmentStatus: "unassigned", orderStatus: { $in: DISPATCHABLE_ORDER_STATUSES } },
           { $set: {
@@ -532,4 +533,3 @@ export const orderHistory = async (userId) => {
 };
 
 export { LOCATION_STALE_MS, OFFER_RADIUS_METRES };
-
