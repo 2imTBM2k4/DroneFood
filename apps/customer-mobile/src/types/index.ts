@@ -36,6 +36,7 @@ export type Food = {
   image?: string;
   category?: string;
   optionGroups?: OptionGroup[];
+  restaurantId?: string;
 };
 
 export type CartLineOption = {
@@ -310,6 +311,7 @@ export type UserProfile = {
 
 export type ScreenName =
   | "home"
+  | "search"
   | "restaurant"
   | "cart"
   | "cart-detail"

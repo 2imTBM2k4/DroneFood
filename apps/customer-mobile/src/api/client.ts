@@ -304,6 +304,12 @@ export const foodApi = {
     const res = await api.get<{ data: Food }>(`/api/food/${foodId}`);
     return res.data.data;
   },
+  list: async (params?: { restaurantId?: string; q?: string; category?: string; sort?: string }) => {
+    const res = await api.get<{ data: Food[] }>("/api/food/list", {
+      params,
+    });
+    return res.data.data || [];
+  },
   listByRestaurant: async (restaurantId: string) => {
     const res = await api.get<{ data: Food[] }>("/api/food/list", {
       params: { restaurantId },

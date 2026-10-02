@@ -27,7 +27,7 @@ export const TabBar: React.FC<TabBarProps> = ({
       {tabs.map((tab) => {
         const isActive =
           currentTab === tab.key ||
-          (tab.key === "home" && currentTab === "restaurant") ||
+          (tab.key === "home" && (currentTab === "restaurant" || currentTab === "search")) ||
           (tab.key === "cart" &&
             (currentTab === "cart-detail" || currentTab === "checkout")) ||
           (tab.key === "orders" && currentTab === "track") ||

@@ -35,6 +35,7 @@ interface HomeScreenProps {
   hasLocation?: boolean;
   currentAddressText?: string;
   onOpenAddressBook?: () => void;
+  onNavigateSearch?: (initialKeyword?: string) => void;
 }
 
 const CATEGORIES: { id: string; name: string; icon: IconName }[] = [
@@ -67,6 +68,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   hasLocation = false,
   currentAddressText = "",
   onOpenAddressBook,
+  onNavigateSearch,
 }) => {
   const { width } = useWindowDimensions();
   const compact = width < 380;
@@ -117,22 +119,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </Pressable>
           </View>
 
-          {/* Search Input Bar (Pill Shape with soft sky blue #EAF2FC background) */}
-          <Input
-            containerStyle={styles.searchContainer}
-            inputWrapperStyle={[styles.searchInputWrapper, { minHeight: headerMetrics.controlMinHeight }]}
-            placeholder="Tìm món ngon, nhà hàng hoặc ưu đãi..."
-            value={query}
-            onChangeText={setQuery}
-            leftIcon={<Icon name="search" size={18} color={colors.primary} />}
-            rightIcon={
-              query ? (
-                <Pressable accessibilityRole="button" accessibilityLabel="Xóa tìm kiếm" hitSlop={12} onPress={() => setQuery("")}>
-                  <Icon name="close" size={18} color={colors.textSecondary} />
-                </Pressable>
-              ) : undefined
-            }
-          />
+          {/* Search Trigger Bar (Pill Shape with soft sky blue #EAF2FC background) */}
+          <Pressable
+            accessibilityRole="search"
+            accessibilityLabel="Tìm món ngon, nhà hàng hoặc ưu đãi"
+            onPress={() => onNavigateSearch?.()}
+            style={({ pressed }) => [
+              styles.searchTrigger,
+              { minHeight: headerMetrics.controlMinHeight },
+              pressed && styles.pressed,
+            ]}
+          >
+            <View style={styles.searchTriggerLeft}>
+              <Icon name="search" size={18} color={colors.primary} />
+              <Text style={styles.searchTriggerPlaceholder} numberOfLines={1}>
+                Tìm món ngon, nhà hàng hoặc ưu đãi...
+              </Text>
+            </View>
+            <View style={styles.searchTriggerBadge}>
+              <Text style={styles.searchTriggerBadgeText}>Tìm kiếm</Text>
+            </View>
+          </Pressable>
         </View>
       </View>
 
@@ -437,6 +444,40 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderSubtle,
     borderRadius: radius.pill,
+  },
+  searchTrigger: {
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    borderRadius: radius.pill,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginTop: 2,
+  },
+  searchTriggerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  searchTriggerPlaceholder: {
+    ...typography.bodySecondary,
+    color: colors.textMuted,
+    flex: 1,
+  },
+  searchTriggerBadge: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  searchTriggerBadgeText: {
+    ...typography.micro,
+    color: colors.textWhite,
+    fontWeight: "600",
   },
   pressed: {
     opacity: motion.pressedOpacity,
