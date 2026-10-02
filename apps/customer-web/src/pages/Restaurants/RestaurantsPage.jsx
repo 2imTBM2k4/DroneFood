@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, X, SlidersHorizontal, Store } from "lucide-react";
+import { ChevronDown, Search, X, SlidersHorizontal, Store } from "lucide-react";
 import "./RestaurantsPage.css";
 import useNearbyRestaurants from "../../hooks/useNearbyRestaurants";
 import RestaurantItem from "../../components/RestaurantItem/RestaurantItem";
@@ -47,6 +47,13 @@ const RestaurantsPage = () => {
     searchParams.get("category") || "All"
   );
   const [search, setSearch] = useState(() => getSearchParam(searchParams));
+  const [filtersOpen, setFiltersOpen] = useState(() =>
+    Boolean(
+      searchParams.get("minRating") ||
+        searchParams.get("maxDeliveryFee") ||
+        searchParams.get("maxEta")
+    )
+  );
   const minimumRating = searchParams.get("minRating") || "";
   const maximumDeliveryFee = searchParams.get("maxDeliveryFee") || "";
   const maximumEta = searchParams.get("maxEta") || "";
@@ -117,6 +124,11 @@ const RestaurantsPage = () => {
       maximumDeliveryFee ||
       maximumEta
   );
+  const activeAdvancedFilterCount = [
+    minimumRating,
+    maximumDeliveryFee,
+    maximumEta,
+  ].filter(Boolean).length;
 
   return (
     <div className="restaurants-page">
@@ -155,66 +167,88 @@ const RestaurantsPage = () => {
         </div>
       </div>
 
-      <section className="restaurants-filters" aria-label="Lọc nhà hàng">
-        <div className="restaurants-filter-heading">
-          <SlidersHorizontal size={18} aria-hidden="true" />
-          <h2>Bộ lọc</h2>
-        </div>
-        <div className="restaurants-filter-fields">
-          <div className="restaurants-filter-field">
-            <label htmlFor="minimum-rating">Đánh giá</label>
-            <RoundedSelect
-              id="minimum-rating"
-              value={minimumRating}
-              options={ratingOptions}
-              onChange={(value) => writeParam("minRating", value)}
-              ariaLabel="Lọc theo đánh giá tối thiểu"
-            />
-          </div>
-          <div className="restaurants-filter-field">
-            <label htmlFor="maximum-delivery-fee">Phí giao hàng ước tính</label>
-            <RoundedSelect
-              id="maximum-delivery-fee"
-              value={maximumDeliveryFee}
-              options={deliveryFeeOptions}
-              onChange={(value) => writeParam("maxDeliveryFee", value)}
-              ariaLabel="Lọc theo phí giao hàng tối đa"
-            />
-          </div>
-          <div className="restaurants-filter-field">
-            <label htmlFor="maximum-eta">Thời gian giao ước tính</label>
-            <RoundedSelect
-              id="maximum-eta"
-              value={maximumEta}
-              options={etaOptions}
-              onChange={(value) => writeParam("maxEta", value)}
-              ariaLabel="Lọc theo thời gian giao tối đa"
-            />
-          </div>
-        </div>
-        {hasFilters && (
-          <button type="button" className="restaurants-filter-clear" onClick={clearFilters}>
-            Xóa bộ lọc
-          </button>
-        )}
-      </section>
+      <div className="restaurants-catalog">
+        <div className="restaurants-catalog-toolbar">
+          {categories.length > 0 && (
+            <div className="catalog-list" aria-label="Danh mục nhà hàng">
+              {["All", ...categories].map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  className={`catalog-item ${category === cat ? "active" : ""}`}
+                  onClick={() => handleCategoryChange(cat)}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          )}
 
-      {categories.length > 0 && (
-        <div className="restaurants-catalog">
-          <div className="catalog-list">
-            {["All", ...categories].map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                className={`catalog-item ${category === cat ? "active" : ""}`}
-                onClick={() => handleCategoryChange(cat)}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
+          <button
+            type="button"
+            id="restaurant-filters-toggle"
+            className={`restaurants-filter-toggle ${filtersOpen ? "is-open" : ""}`}
+            onClick={() => setFiltersOpen((open) => !open)}
+            aria-expanded={filtersOpen}
+            aria-controls="restaurant-filters-panel"
+          >
+            <SlidersHorizontal size={17} aria-hidden="true" />
+            <span>Bộ lọc</span>
+            {activeAdvancedFilterCount > 0 && (
+              <span className="restaurants-filter-count" aria-label={`${activeAdvancedFilterCount} bộ lọc đang áp dụng`}>
+                {activeAdvancedFilterCount}
+              </span>
+            )}
+            <ChevronDown className="restaurants-filter-chevron" size={17} aria-hidden="true" />
+          </button>
         </div>
-      )}
+
+        {filtersOpen && (
+          <section
+            id="restaurant-filters-panel"
+            className="restaurants-filters"
+            aria-labelledby="restaurant-filters-toggle"
+          >
+            <div className="restaurants-filter-fields">
+              <div className="restaurants-filter-field">
+                <label htmlFor="minimum-rating">Đánh giá</label>
+                <RoundedSelect
+                  id="minimum-rating"
+                  value={minimumRating}
+                  options={ratingOptions}
+                  onChange={(value) => writeParam("minRating", value)}
+                  ariaLabel="Lọc theo đánh giá tối thiểu"
+                />
+              </div>
+              <div className="restaurants-filter-field">
+                <label htmlFor="maximum-delivery-fee">Phí giao hàng ước tính</label>
+                <RoundedSelect
+                  id="maximum-delivery-fee"
+                  value={maximumDeliveryFee}
+                  options={deliveryFeeOptions}
+                  onChange={(value) => writeParam("maxDeliveryFee", value)}
+                  ariaLabel="Lọc theo phí giao hàng tối đa"
+                />
+              </div>
+              <div className="restaurants-filter-field">
+                <label htmlFor="maximum-eta">Thời gian giao ước tính</label>
+                <RoundedSelect
+                  id="maximum-eta"
+                  value={maximumEta}
+                  options={etaOptions}
+                  onChange={(value) => writeParam("maxEta", value)}
+                  ariaLabel="Lọc theo thời gian giao tối đa"
+                />
+              </div>
+            </div>
+            {hasFilters && (
+              <button type="button" className="restaurants-filter-clear" onClick={clearFilters}>
+                Xóa bộ lọc
+              </button>
+            )}
+          </section>
+        )}
+      </div>
 
       <div className="restaurants-grid">
         {visible.map((item, index) => (

@@ -1,9 +1,13 @@
 import "./Footer.css";
 import { Link } from "react-router-dom";
 
-const Footer = () => {
+const Footer = ({ compactTop = false }) => {
   return (
-    <footer className="apple-footer" id="footer" aria-label="Drone Food Directory">
+    <footer
+      className={`apple-footer${compactTop ? " apple-footer--compact" : ""}`}
+      id="footer"
+      aria-label="Drone Food Directory"
+    >
       <div className="apple-footer-inner">
         {/* Multi-column Directory Links */}
         <nav className="apple-footer-directory" aria-label="Directory Navigation">

@@ -9,7 +9,6 @@ import {
   Bike,
   Navigation,
   ChevronRight,
-  Store,
   UtensilsCrossed,
   AlertCircle,
   XCircle,
@@ -22,6 +21,7 @@ import { EmptyState, ErrorState } from "@drone-food/web-ui/components/StateBlock
 import "./MyOrders.css";
 import { formatVND } from "@drone-food/web-ui/utils/money";
 import OrderReviewPrompt from "../../components/OrderReviewPrompt/OrderReviewPrompt";
+import { assets } from "../../assets/assets";
 
 const STATUS_CONFIG = {
   pending_payment: { label: "Chờ thanh toán", colorClass: "status-pending" },
@@ -231,6 +231,13 @@ const MyOrders = () => {
     return raw.startsWith("http") ? raw : `${url}/images/${raw}`;
   };
 
+  const getRestaurantImage = (restaurant) => {
+    const raw = restaurant?.image;
+    if (!raw) return assets.logo;
+    if (raw.startsWith("http")) return raw;
+    return `${url}${raw.startsWith("/") ? raw : `/images/${raw}`}`;
+  };
+
   const getPaymentBadge = (method, isPaid) => {
     const methodNames = {
       COD: "Tiền mặt khi nhận hàng",
@@ -382,14 +389,22 @@ const MyOrders = () => {
                   const orderCode = order._id.slice(-8).toUpperCase();
                   const orderDate = formatDate(order.createdAt || order.orderDate);
                   const restaurantName = order.restaurantId?.name || "Nhà hàng đối tác";
+                  const restaurantImage = getRestaurantImage(order.restaurantId);
 
                   return (
                     <article key={order._id} className="order-card">
                       {/* Card Header */}
                       <div className="order-card-header">
                         <div className="order-card-restaurant">
-                          <div className="restaurant-icon-box">
-                            <Store size={18} />
+                          <div className="restaurant-image-box">
+                            <img
+                              src={restaurantImage}
+                              alt=""
+                              onError={(event) => {
+                                event.currentTarget.onerror = null;
+                                event.currentTarget.src = assets.logo;
+                              }}
+                            />
                           </div>
                           <div className="restaurant-meta">
                             <h3 className="restaurant-name">{restaurantName}</h3>
