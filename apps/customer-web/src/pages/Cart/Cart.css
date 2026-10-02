@@ -585,7 +585,7 @@
   padding: 20px 22px;
   border: 1px solid var(--apple-hairline);
   border-radius: 18px;
-  background: var(--apple-surface, #fff);
+  background: var(--apple-canvas);
   color: var(--apple-ink);
   text-align: left;
   font: inherit;
@@ -602,7 +602,7 @@
 
 .cart-group-row.is-selected .cart-group-card {
   border-color: var(--apple-primary);
-  background: color-mix(in srgb, var(--apple-primary) 5%, var(--apple-surface, #fff));
+  background: color-mix(in srgb, var(--apple-primary) 5%, var(--apple-canvas));
 }
 
 .cart-group-main {

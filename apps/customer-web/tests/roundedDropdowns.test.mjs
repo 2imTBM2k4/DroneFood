@@ -24,5 +24,7 @@ test("location and restaurant filters use the shared rounded dropdown", async ()
   assert.equal(navbarSource.includes("<select"), false);
   assert.equal(restaurantsSource.includes("<select"), false);
   assert.match(navbarSource, /<RoundedSelect/);
+  assert.match(navbarSource, /Vị trí hiện tại/);
+  assert.match(navbarSource, /fetchRestaurantList\(\)/);
   assert.match(restaurantsSource, /<RoundedSelect/);
 });

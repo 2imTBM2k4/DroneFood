@@ -13,6 +13,7 @@ import {
   estimateEtaMinutes,
   formatDistance,
 } from "../../lib/distance";
+import { resolveDeliveryCoordinates } from "../../lib/deliveryLocation";
 
 /** Turn a category name into a DOM id we can scroll to. */
 const sectionId = (category) =>
@@ -21,7 +22,7 @@ const sectionId = (category) =>
 const RestaurantPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { restaurant_list, url, user, liveLocation, fees } = useContext(StoreContext);
+  const { restaurant_list, url, user, restaurantLocationId, liveLocation, fees } = useContext(StoreContext);
 
   const [restaurant, setRestaurant] = useState(null);
   const [restaurantFoods, setRestaurantFoods] = useState([]);
@@ -183,7 +184,7 @@ const RestaurantPage = () => {
 
   // Real distance + delivery estimate when we know both ends' coordinates.
   const { distanceKm, etaMin } = useMemo(() => {
-    const a = liveLocation || user?.address;
+    const a = resolveDeliveryCoordinates({ user, restaurantLocationId, liveLocation });
     if (
       restaurant &&
       typeof restaurant.lat === "number" &&
@@ -199,7 +200,7 @@ const RestaurantPage = () => {
       return { distanceKm: d, etaMin: estimateEtaMinutes(d) };
     }
     return { distanceKm: null, etaMin: null };
-  }, [restaurant, liveLocation, user]);
+  }, [restaurant, restaurantLocationId, liveLocation, user]);
 
 
   const deliveryFee = fees?.deliveryFee;

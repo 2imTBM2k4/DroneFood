@@ -19,7 +19,6 @@ import { Button } from "../../components/common/Button";
 import { Header } from "../../components/common/Header";
 import { Input } from "../../components/common/Input";
 import { Icon, type IconName } from "../../components/common/Icon";
-import { GlassSurface } from "../../components/common/GlassSurface";
 import { useToast } from "../../components/common/ToastProvider";
 import { AddressEditorModal } from "../../components/address/AddressEditorModal";
 import type {
@@ -245,7 +244,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         keyboardDismissMode="interactive"
       >
         {/* User Profile Overview Card */}
-        <GlassSurface tone="soft" contentStyle={[styles.userCard, compact && styles.userCardCompact]}>
+        <View style={[styles.userCard, compact && styles.userCardCompact]}>
           <View style={styles.avatarWrap}>
             {profile?.avatar ? (
               <Image
@@ -282,10 +281,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               <View style={styles.phoneRow}><Icon name="phone" size={14} color={colors.textSecondary} /><Text style={styles.userPhone}>{profile.phone}</Text></View>
             ) : null}
           </View>
-        </GlassSurface>
+        </View>
 
         {/* Function Menu Group List (Apple Style) */}
-        <GlassSurface tone="strong" contentStyle={styles.menuGroupCard}>
+        <View style={styles.menuGroupCard}>
           {/* Item 1: Hồ sơ */}
           <Pressable
             style={styles.menuRow}
@@ -370,7 +369,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             </View>
             <Icon name="chevron-right" size={19} color={colors.textSecondary} />
           </Pressable>
-        </GlassSurface>
+        </View>
       </ScrollView>
 
       {/* Modal 1: Edit Profile */}
@@ -666,10 +665,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "transparent",
+    backgroundColor: colors.bg,
   },
   scrollContent: {
-    padding: spacing.md,
+    padding: spacing.screenPadding,
     gap: spacing.md,
     paddingBottom: 110,
   },
@@ -677,13 +676,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   userCard: {
-    padding: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.md,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
   },
   userCardCompact: {
-    padding: spacing.md,
+    padding: spacing.sm,
     gap: spacing.sm,
   },
   avatarWrap: {
@@ -727,6 +730,10 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   menuGroupCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
     overflow: "hidden",
   },
   avatarImage: {

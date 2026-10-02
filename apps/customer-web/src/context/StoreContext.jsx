@@ -5,6 +5,7 @@ import { clearCustomerAuthStorage, createCustomerClient } from "../api/customerC
 import { API_URL } from "../config/api";
 import { reverseGeocode } from "../lib/trackasia";
 import { haversineKm } from "../lib/distance";
+import { CURRENT_LOCATION_ID } from "../lib/deliveryLocation";
 
 export const StoreContext = createContext(null);
 
@@ -13,9 +14,14 @@ const StoreContextProvider = (props) => {
   const [cartDetails, setCartDetails] = useState({});
   const [showLogin, setShowLogin] = useState(false);
   const [user, setUser] = useState(null);
-  // This is the explicit saved delivery choice used by navbar and checkout.
+  // This is the explicit saved delivery choice used by checkout and cart pricing.
   // It must never be overwritten by browser GPS updates.
   const [activeAddressId, setActiveAddressIdState] = useState(() => localStorage.getItem("activeAddressId") || "");
+  // Restaurant discovery can use either a saved delivery address or live GPS.
+  // Keep it separate so the current-location sentinel never reaches checkout APIs.
+  const [restaurantLocationId, setRestaurantLocationIdState] = useState(
+    () => localStorage.getItem("restaurantLocationId") || localStorage.getItem("activeAddressId") || CURRENT_LOCATION_ID
+  );
   // This is intentionally separate from the saved delivery address. It is
   // only used to keep nearby-restaurant results current while the customer
   // moves, and must not silently change where an order will be delivered.
@@ -44,6 +50,12 @@ const StoreContextProvider = (props) => {
     setActiveAddressIdState(next);
     if (next) localStorage.setItem("activeAddressId", next);
     else localStorage.removeItem("activeAddressId");
+  }, []);
+
+  const setRestaurantLocationId = useCallback((id) => {
+    const next = id || CURRENT_LOCATION_ID;
+    setRestaurantLocationIdState(next);
+    localStorage.setItem("restaurantLocationId", next);
   }, []);
 
   const fetchFoodList = useCallback(async () => {
@@ -404,6 +416,14 @@ const StoreContextProvider = (props) => {
     }
   }, [activeAddressId, setActiveAddressId, user?.addressBook]);
 
+  useEffect(() => {
+    if (restaurantLocationId === CURRENT_LOCATION_ID || !user?.addressBook?.length) return;
+    const stillExists = user.addressBook.some(
+      (entry) => String(entry.id || entry._id) === restaurantLocationId
+    );
+    if (!stillExists) setRestaurantLocationId(activeAddressId || CURRENT_LOCATION_ID);
+  }, [activeAddressId, restaurantLocationId, setRestaurantLocationId, user?.addressBook]);
+
   const contextValue = {
     food_list,
     restaurant_list,
@@ -432,6 +452,8 @@ const StoreContextProvider = (props) => {
     setUser,
     activeAddressId,
     setActiveAddressId,
+    restaurantLocationId,
+    setRestaurantLocationId,
     liveLocation,
     liveAddress,
     isLoadingFoods,

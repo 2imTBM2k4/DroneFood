@@ -16,14 +16,26 @@ import { API_URL } from "../../config/api";
 import Avatar from "../Avatar/Avatar";
 import RoundedSelect from "../RoundedSelect/RoundedSelect";
 import NotificationBell from "@drone-food/web-ui/components/NotificationBell";
+import { toast } from "react-toastify";
+import { CURRENT_LOCATION_ID } from "../../lib/deliveryLocation";
 
 const Navbar = ({ setShowLogin }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [isDark, setIsDark] = useState(() => localStorage.getItem("mode") === "dark");
   const [scrolled, setScrolled] = useState(false);
-  const { cartCount, token, logoutCustomer, user, liveLocation, liveAddress, activeAddressId, setActiveAddressId } =
-    useContext(StoreContext);
+  const {
+    cartCount,
+    token,
+    logoutCustomer,
+    user,
+    liveLocation,
+    liveAddress,
+    restaurantLocationId,
+    setRestaurantLocationId,
+    setActiveAddressId,
+    fetchRestaurantList,
+  } = useContext(StoreContext);
   const navigate = useNavigate();
   const location = useLocation();
   const profileRef = useRef(null);
@@ -53,17 +65,37 @@ const Navbar = ({ setShowLogin }) => {
   }, [location.pathname]);
 
   const savedAddresses = user?.addressBook || [];
-  const addressOptions = savedAddresses.map((entry) => ({
+  const currentLocationText = liveAddress
+    ? liveAddress.formatted || [liveAddress.address || liveAddress.street, liveAddress.city].filter(Boolean).join(", ")
+    : liveLocation
+    ? `${liveLocation.lat.toFixed(5)}, ${liveLocation.lng.toFixed(5)}`
+    : "Đang định vị…";
+  const addressOptions = [{
+    value: CURRENT_LOCATION_ID,
+    label: `Vị trí hiện tại · ${currentLocationText}`,
+  }, ...savedAddresses.map((entry) => ({
     value: entry.id || entry._id,
     label: `${entry.label}: ${entry.address}, ${entry.city}`,
-  }));
-  const selectedSavedAddress = savedAddresses.find((entry) => String(entry.id || entry._id) === activeAddressId);
-  const addr = selectedSavedAddress || liveAddress || user?.address;
+  }))];
+  const selectedSavedAddress = savedAddresses.find(
+    (entry) => String(entry.id || entry._id) === restaurantLocationId
+  );
+  const usesCurrentLocation = restaurantLocationId === CURRENT_LOCATION_ID;
+  const addr = usesCurrentLocation ? liveAddress : selectedSavedAddress || user?.address;
   const deliveryAddress = addr
     ? addr.formatted || [addr.address || addr.street, addr.city].filter(Boolean).join(", ")
-    : liveLocation
-    ? "Updating location…"
+    : usesCurrentLocation && liveLocation
+    ? currentLocationText
     : "";
+
+  const handleLocationChange = (nextLocationId) => {
+    setRestaurantLocationId(nextLocationId);
+    if (nextLocationId !== CURRENT_LOCATION_ID) setActiveAddressId(nextLocationId);
+    if (nextLocationId === CURRENT_LOCATION_ID && !liveLocation) {
+      toast.info("Đang xác định vị trí hiện tại. Danh sách sẽ tự cập nhật khi có tín hiệu GPS.");
+    }
+    fetchRestaurantList();
+  };
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -112,19 +144,19 @@ const Navbar = ({ setShowLogin }) => {
               </Link>
             )}
 
-            {deliveryAddress && (
-              <div className="apple-nav-location" title={deliveryAddress}>
+            {addressOptions.length > 0 && (
+              <div className="apple-nav-location" title={deliveryAddress || currentLocationText}>
                 <MapPin className="apple-location-icon" size={14} aria-hidden="true" />
-                {savedAddresses.length > 0 ? (
+                {addressOptions.length > 1 ? (
                   <RoundedSelect
                     className="apple-location-dropdown"
                     size="compact"
-                    value={activeAddressId}
+                    value={restaurantLocationId}
                     options={addressOptions}
-                    onChange={setActiveAddressId}
-                    ariaLabel="Delivery address"
+                    onChange={handleLocationChange}
+                    ariaLabel="Vị trí hiển thị nhà hàng gần bạn"
                   />
-                ) : <span className="apple-location-text">{deliveryAddress}</span>}
+                ) : <span className="apple-location-text">{addressOptions[0].label}</span>}
               </div>
             )}
           </div>
@@ -232,19 +264,19 @@ const Navbar = ({ setShowLogin }) => {
           >
             Shopping Bag ({cartCount})
           </Link>
-          {deliveryAddress && (
+          {addressOptions.length > 0 && (
             <div className="apple-mobile-addr">
               <MapPin size={13} />
-              {savedAddresses.length > 0 ? (
+              {addressOptions.length > 1 ? (
                 <RoundedSelect
                   className="apple-location-dropdown apple-location-dropdown--mobile"
                   size="compact"
-                  value={activeAddressId}
+                  value={restaurantLocationId}
                   options={addressOptions}
-                  onChange={setActiveAddressId}
-                  ariaLabel="Delivery address"
+                  onChange={handleLocationChange}
+                  ariaLabel="Vị trí hiển thị nhà hàng gần bạn"
                 />
-              ) : <span>{deliveryAddress}</span>}
+              ) : <span>{addressOptions[0].label}</span>}
             </div>
           )}
         </div>

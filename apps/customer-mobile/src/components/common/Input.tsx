@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import {
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -9,11 +10,13 @@ import {
   type ViewStyle,
 } from "react-native";
 import { colors, radius, spacing, typography } from "../../theme/tokens";
+import { Icon } from "./Icon";
 
-interface InputProps extends TextInputProps {
+export interface InputProps extends TextInputProps {
   label?: string;
   error?: string;
   hint?: string;
+  isPassword?: boolean;
   containerStyle?: StyleProp<ViewStyle>;
   inputWrapperStyle?: StyleProp<ViewStyle>;
   leftIcon?: React.ReactNode;
@@ -24,15 +27,24 @@ export const Input: React.FC<InputProps> = ({
   label,
   error,
   hint,
+  isPassword = false,
   containerStyle,
   inputWrapperStyle,
   leftIcon,
   rightIcon,
   style,
+  secureTextEntry,
   ...rest
-}) => (
+}) => {
+  const [hidePassword, setHidePassword] = useState(isPassword);
+
+  return (
     <View style={[styles.container, containerStyle]}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+      {label ? (
+        <Text style={styles.label}>
+          {label}
+        </Text>
+      ) : null}
       <View
         pointerEvents="box-none"
         style={[
@@ -42,45 +54,113 @@ export const Input: React.FC<InputProps> = ({
           rest.multiline && styles.multilineWrapper,
         ]}
       >
-        {leftIcon ? <View pointerEvents="none" style={styles.leftIcon}>{leftIcon}</View> : null}
+        {leftIcon ? (
+          <View pointerEvents="none" style={styles.leftIcon}>
+            {leftIcon}
+          </View>
+        ) : null}
         <TextInput
-          style={[styles.input, rest.multiline && styles.multilineInput, style]}
+          style={[
+            styles.input,
+            rest.multiline && styles.multilineInput,
+            style,
+          ]}
           placeholderTextColor={colors.textMuted}
           selectionColor={colors.primary}
+          secureTextEntry={isPassword ? hidePassword : secureTextEntry}
+          accessibilityLabel={rest.accessibilityLabel || label}
           {...rest}
         />
-        {rightIcon ? <View style={styles.rightIcon}>{rightIcon}</View> : null}
+        {isPassword ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={hidePassword ? "Hiện mật khẩu" : "Ẩn mật khẩu"}
+            hitSlop={10}
+            onPress={() => setHidePassword((prev) => !prev)}
+            style={styles.rightIcon}
+          >
+            <Icon
+              name="settings"
+              size={18}
+              color={colors.textSecondary}
+            />
+          </Pressable>
+        ) : rightIcon ? (
+          <View style={styles.rightIcon}>{rightIcon}</View>
+        ) : null}
       </View>
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error ? (
+        <Text accessibilityRole="alert" style={styles.errorText}>
+          {error}
+        </Text>
+      ) : null}
       {!error && hint ? <Text style={styles.hintText}>{hint}</Text> : null}
     </View>
   );
+};
 
 const styles = StyleSheet.create({
-  container: { gap: spacing.xxs },
-  label: { ...typography.captionBold, color: colors.textPrimary, marginLeft: spacing.xs },
+  container: {
+    gap: spacing.xxs,
+  },
+  label: {
+    ...typography.caption,
+    fontWeight: "600",
+    color: colors.textPrimary,
+    marginBottom: 2,
+  },
   inputWrapper: {
-    minHeight: 52,
-    backgroundColor: colors.glassFillStrong,
+    minHeight: 48,
+    borderRadius: radius.pill, // Modern pill shape
+    backgroundColor: colors.surfaceSubtle, // #EFEFEF
     borderWidth: 1,
-    borderColor: colors.glassBorder,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
+    borderColor: colors.border,
     flexDirection: "row",
     alignItems: "center",
+    paddingHorizontal: spacing.md,
   },
-  errorBorder: { borderColor: colors.danger },
-  multilineWrapper: { minHeight: 96, alignItems: "flex-start", paddingVertical: spacing.sm },
+  multilineWrapper: {
+    minHeight: 96,
+    borderRadius: radius.md,
+    alignItems: "flex-start",
+    paddingVertical: spacing.sm,
+  },
+  errorBorder: {
+    borderColor: colors.danger,
+    backgroundColor: colors.statusCancelledBg,
+  },
   input: {
     flex: 1,
     alignSelf: "stretch",
     ...typography.body,
+    fontSize: 14,
     color: colors.textPrimary,
     paddingVertical: 0,
   },
-  multilineInput: { textAlignVertical: "top", minHeight: 72 },
-  leftIcon: { marginRight: spacing.xs, justifyContent: "center", alignItems: "center" },
-  rightIcon: { marginLeft: spacing.xs, justifyContent: "center", alignItems: "center" },
-  errorText: { ...typography.caption, color: colors.danger, marginLeft: spacing.xs },
-  hintText: { ...typography.caption, color: colors.textSecondary, marginLeft: spacing.xs },
+  multilineInput: {
+    textAlignVertical: "top",
+    paddingTop: 0,
+  },
+  leftIcon: {
+    marginRight: spacing.xs,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  rightIcon: {
+    marginLeft: spacing.xs,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  errorText: {
+    ...typography.caption,
+    color: colors.danger,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  hintText: {
+    ...typography.micro,
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 2,
+  },
 });

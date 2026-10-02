@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,10 +10,16 @@ import {
 import { colors, radius, spacing, typography } from "../../theme/tokens";
 import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
-import { AmbientBackground } from "../../components/common/AmbientBackground";
-import { GlassSurface } from "../../components/common/GlassSurface";
+import { Tabs } from "../../components/common/Tabs";
 import { Icon } from "../../components/common/Icon";
-import { apiError, authApi, removeStoredRefreshToken, resetSessionExpiryNotification, setStoredRefreshToken, setStoredToken } from "../../api/client";
+import {
+  apiError,
+  authApi,
+  removeStoredRefreshToken,
+  resetSessionExpiryNotification,
+  setStoredRefreshToken,
+  setStoredToken,
+} from "../../api/client";
 
 interface AuthScreenProps {
   onSuccess: (token: string) => void;
@@ -65,7 +70,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
   };
 
   return (
-    <AmbientBackground>
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={styles.container}
@@ -73,7 +77,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
+        {/* Brand Header */}
         <View style={styles.header}>
           <View style={styles.logoBadge}>
             <Icon name="drone" size={32} color={colors.primary} />
@@ -84,42 +90,24 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
           </Text>
         </View>
 
-        <View style={styles.segmentedControl}>
-          <Pressable
-            style={[styles.segmentBtn, mode === "login" && styles.segmentBtnActive]}
-            onPress={() => {
-              setMode("login");
+        {/* Mode Switcher Tabs */}
+        <View style={styles.tabWrapper}>
+          <Tabs<"login" | "register">
+            options={[
+              { key: "login", label: "Đăng nhập" },
+              { key: "register", label: "Tạo tài khoản" },
+            ]}
+            activeKey={mode}
+            onSelectTab={(selectedKey) => {
+              setMode(selectedKey);
               setError("");
             }}
-          >
-            <Text
-              style={[
-                styles.segmentText,
-                mode === "login" && styles.segmentTextActive,
-              ]}
-            >
-              Đăng nhập
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.segmentBtn, mode === "register" && styles.segmentBtnActive]}
-            onPress={() => {
-              setMode("register");
-              setError("");
-            }}
-          >
-            <Text
-              style={[
-                styles.segmentText,
-                mode === "register" && styles.segmentTextActive,
-              ]}
-            >
-              Tạo tài khoản
-            </Text>
-          </Pressable>
+            variant="pill"
+          />
         </View>
 
-        <GlassSurface tone="strong" contentStyle={styles.form}>
+        {/* Clean Flat Form Card */}
+        <View style={styles.formCard}>
           {mode === "register" ? (
             <>
               <Input
@@ -127,6 +115,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
                 placeholder="Ví dụ: Nguyễn Văn A"
                 value={name}
                 onChangeText={setName}
+                autoCapitalize="words"
               />
               <Input
                 label="Số điện thoại"
@@ -149,14 +138,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
 
           <Input
             label="Mật khẩu"
-            placeholder="Nhập mật khẩu"
-            secureTextEntry
+            placeholder="Nhập mật khẩu của bạn"
+            isPassword
             value={password}
             onChangeText={setPassword}
           />
 
           {error ? (
             <View style={styles.errorBox}>
+              <Icon name="close" size={16} color={colors.statusCancelledText} />
               <Text style={styles.errorText}>{error}</Text>
             </View>
           ) : null}
@@ -165,28 +155,30 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
             label={mode === "login" ? "Đăng nhập" : "Đăng ký tài khoản"}
             loading={loading}
             onPress={handleSubmit}
+            size="lg"
+            fullWidth
             style={styles.submitBtn}
           />
 
           <Text style={styles.legalText}>
             Bằng việc tiếp tục, bạn đồng ý với Điều khoản dịch vụ và Chính sách bảo mật của Drone Food.
           </Text>
-        </GlassSurface>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
-    </AmbientBackground>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "transparent",
+    backgroundColor: colors.bg,
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: "center",
-    padding: spacing.xl,
+    paddingHorizontal: spacing.screenPadding,
+    paddingVertical: spacing.xxl,
   },
   header: {
     alignItems: "center",
@@ -195,7 +187,7 @@ const styles = StyleSheet.create({
   logoBadge: {
     width: 64,
     height: 64,
-    borderRadius: 32,
+    borderRadius: radius.pill,
     backgroundColor: colors.primaryLight,
     alignItems: "center",
     justifyContent: "center",
@@ -203,65 +195,51 @@ const styles = StyleSheet.create({
   },
   brandTitle: {
     ...typography.hero,
+    fontSize: 26,
     color: colors.textPrimary,
   },
   brandSubtitle: {
-    ...typography.bodySecondary,
+    ...typography.body,
+    fontSize: 14,
     color: colors.textSecondary,
     textAlign: "center",
     marginTop: spacing.xs,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
   },
-  segmentedControl: {
-    flexDirection: "row",
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radius.pill,
-    padding: 3,
-    marginBottom: spacing.lg,
+  tabWrapper: {
+    marginBottom: spacing.md,
   },
-  segmentBtn: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radius.pill,
-  },
-  segmentBtnActive: {
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  segmentText: {
-    ...typography.captionBold,
-    color: colors.textSecondary,
-  },
-  segmentTextActive: {
-    color: colors.primary,
-  },
-  form: {
-    padding: spacing.lg,
+  formCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.xl,
     gap: spacing.md,
   },
   errorBox: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: colors.statusCancelledBg,
-    padding: spacing.sm,
-    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
+    gap: spacing.xs,
   },
   errorText: {
     ...typography.caption,
     color: colors.statusCancelledText,
-    textAlign: "center",
+    flex: 1,
+    fontWeight: "500",
   },
   submitBtn: {
     marginTop: spacing.xs,
   },
   legalText: {
     ...typography.micro,
-    color: colors.textMuted,
+    color: colors.textSecondary,
     textAlign: "center",
     lineHeight: 15,
+    marginTop: spacing.xs,
   },
 });

@@ -19,7 +19,6 @@ import { Button } from "../../components/common/Button";
 import { Header } from "../../components/common/Header";
 import { Input } from "../../components/common/Input";
 import { Icon } from "../../components/common/Icon";
-import { GlassSurface } from "../../components/common/GlassSurface";
 import { useToast } from "../../components/common/ToastProvider";
 import { AddressEditorModal } from "../../components/address/AddressEditorModal";
 import type {
@@ -180,7 +179,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         keyboardDismissMode="interactive"
       >
         {/* Order Summary */}
-        <GlassSurface tone="strong" contentStyle={styles.sectionCard}>
+        <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Tóm tắt đơn hàng</Text>
             <View style={styles.itemCountBadge}>
@@ -254,10 +253,10 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               </Text>
             </View>
           ) : null}
-        </GlassSurface>
+        </View>
 
         {/* Delivery Address Section */}
-        <GlassSurface tone="strong" contentStyle={styles.sectionCard}>
+        <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}><Icon name="map-pin" size={19} color={colors.textPrimary} /><Text style={styles.sectionTitle}>Địa chỉ giao hàng</Text></View>
             {hasCoords ? (
@@ -403,10 +402,10 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               </View>
             </View>
           )}
-        </GlassSurface>
+        </View>
 
         {/* Delivery Method Selector */}
-        <GlassSurface tone="strong" contentStyle={styles.sectionCard}>
+        <View style={styles.sectionCard}>
           <View style={styles.sectionTitleRow}><Icon name="drone" size={20} color={colors.textPrimary} /><Text style={styles.sectionTitle}>Phương thức giao hàng</Text></View>
 
           <Pressable
@@ -462,10 +461,10 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               </Text>
             </View>
           </Pressable>
-        </GlassSurface>
+        </View>
 
         {/* Payment Method Selector */}
-        <GlassSurface tone="strong" contentStyle={styles.sectionCard}>
+        <View style={styles.sectionCard}>
           <View style={styles.sectionTitleRow}><Icon name="credit-card" size={20} color={colors.textPrimary} /><Text style={styles.sectionTitle}>Phương thức thanh toán</Text></View>
 
           <Pressable
@@ -527,10 +526,10 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               ) : null}
             </View>
           </Pressable>
-        </GlassSurface>
+        </View>
 
         {/* Voucher Section */}
-        <GlassSurface tone="soft" contentStyle={styles.sectionCard}>
+        <View style={styles.sectionCard}>
           <View style={styles.sectionTitleRow}><Icon name="ticket" size={20} color={colors.textPrimary} /><Text style={styles.sectionTitle}>Mã ưu đãi</Text></View>
           <View style={[styles.voucherInputRow, compact && styles.stackOnCompact]}>
             <Input
@@ -580,7 +579,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           {voucherErrorMsg ? (
             <Text style={styles.voucherErrorText}>{voucherErrorMsg}</Text>
           ) : null}
-        </GlassSurface>
+        </View>
 
       </ScrollView>
 
@@ -625,13 +624,13 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "transparent",
+    backgroundColor: colors.bg,
   },
   scroll: {
     flex: 1,
   },
   scrollContent: {
-    padding: spacing.md,
+    padding: spacing.screenPadding,
     gap: spacing.md,
     paddingBottom: spacing.xl,
   },
@@ -639,16 +638,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   checkoutFooter: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.screenPadding,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.borderHairline,
-    backgroundColor: colors.glassFillStrong,
+    borderTopColor: colors.borderSubtle,
+    backgroundColor: colors.surface,
   },
   sectionCard: {
-    padding: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
     gap: spacing.md,
+    shadowColor: "#003366",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
   sectionHeader: {
     flexDirection: "row",

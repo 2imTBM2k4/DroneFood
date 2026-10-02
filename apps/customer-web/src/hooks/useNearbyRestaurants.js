@@ -6,6 +6,7 @@ import {
   isMajorCityAddress,
   NEARBY_RADIUS_KM,
 } from "../lib/distance";
+import { resolveDeliveryCoordinates } from "../lib/deliveryLocation";
 
 /**
  * Restaurants that can deliver to the customer right now: within range,
@@ -16,22 +17,13 @@ import {
  * Without a saved location we fall back to the major cities.
  */
 export default function useNearbyRestaurants() {
-  const { restaurant_list, food_list, user, liveLocation, fees } =
+  const { restaurant_list, food_list, user, restaurantLocationId, liveLocation, fees } =
     useContext(StoreContext);
 
-  const customer = useMemo(() => {
-    if (
-      typeof liveLocation?.lat === "number" &&
-      typeof liveLocation?.lng === "number"
-    ) {
-      return { lat: liveLocation.lat, lng: liveLocation.lng };
-    }
-
-    const a = user?.address;
-    return a && typeof a.lat === "number" && typeof a.lng === "number"
-      ? { lat: a.lat, lng: a.lng }
-      : null;
-  }, [liveLocation, user]);
+  const customer = useMemo(
+    () => resolveDeliveryCoordinates({ user, restaurantLocationId, liveLocation }),
+    [liveLocation, restaurantLocationId, user]
+  );
 
   // restaurantId -> the categories that restaurant actually serves.
   const categoriesByRestaurant = useMemo(() => {

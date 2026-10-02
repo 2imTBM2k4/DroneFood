@@ -59,12 +59,13 @@ const PageTransition = ({ children }) => {
 const CustomerWebApp = () => {
   const { showLogin, setShowLogin } = useContext(StoreContext);
   const location = useLocation();
-  const isMyOrdersPage = location.pathname === "/myorders";
+  const isOrdersPage =
+    location.pathname === "/myorders" || location.pathname.startsWith("/myorders/");
 
   return (
     <>
       {showLogin && <LoginPopup setShowLogin={setShowLogin} />}
-      <div className={`main-content${isMyOrdersPage ? " main-content--my-orders" : ""}`}>
+      <div className={`main-content${isOrdersPage ? " main-content--my-orders" : ""}`}>
         <Navbar setShowLogin={setShowLogin} />
         <PageTransition>
           <Routes>
@@ -97,7 +98,7 @@ const CustomerWebApp = () => {
           </Routes>
         </PageTransition>
       </div>
-      <Footer compactTop={isMyOrdersPage} />
+      <Footer compactTop={isOrdersPage} />
       <FloatingCartBar />
       <ActiveOrderBar />
       <ToastContainer position="bottom-center" pauseOnHover={false} />
