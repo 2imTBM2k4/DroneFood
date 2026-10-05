@@ -45,6 +45,20 @@ type RetriableRequestConfig = {
 };
 
 type SessionExpiredHandler = (() => void | Promise<void>) | null;
+export type VerificationRequiredResponse = {
+  success: true;
+  verificationRequired: true;
+  email: string;
+  message: string;
+};
+
+type EmailVerificationErrorPayload = {
+  code?: string;
+  email?: string;
+  message?: string;
+  canResend?: boolean;
+};
+
 let refreshPromise: Promise<string> | null = null;
 let sessionExpiredHandler: SessionExpiredHandler = null;
 let expiryNotified = false;
@@ -107,7 +121,17 @@ export const resetSessionExpiryNotification = () => {
 export const apiError = (cause: unknown, fallback = "Có lỗi xảy ra") =>
   axios.isAxiosError(cause)
     ? cause.response?.data?.message || fallback
-    : fallback;
+    : cause instanceof Error && cause.message
+      ? cause.message
+      : fallback;
+
+export const getEmailVerificationRequirement = (cause: unknown) => {
+  if (!axios.isAxiosError<EmailVerificationErrorPayload>(cause)) return null;
+  const data = cause.response?.data;
+  return data?.code === "EMAIL_VERIFICATION_REQUIRED"
+    ? { email: data.email, message: data.message, canResend: data.canResend !== false }
+    : null;
+};
 
 export const formatVnd = (value = 0) =>
   `${Math.round(value).toLocaleString("vi-VN")} ₫`;
@@ -211,9 +235,23 @@ export const authApi = {
     return res.data;
   },
   register: async (name: string, email: string, password: string, phone?: string) => {
-    const res = await refreshApi.post<{ token: string; refreshToken?: string; user: UserProfile }>(
+    const res = await refreshApi.post<VerificationRequiredResponse>(
       "/api/user/register",
       { name: name.trim(), email: email.trim(), password, phone: phone?.trim() }
+    );
+    return res.data;
+  },
+  resendVerification: async (email: string) => {
+    const res = await refreshApi.post<{ success: boolean; message: string }>(
+      "/api/user/resend-verification",
+      { email: email.trim() }
+    );
+    return res.data;
+  },
+  forgotPassword: async (email: string) => {
+    const res = await refreshApi.post<{ success: boolean; message: string }>(
+      "/api/user/forgot-password",
+      { email: email.trim() }
     );
     return res.data;
   },
@@ -226,6 +264,13 @@ export const userApi = {
   },
   updateProfile: async (name: string, phone: string) => {
     const res = await api.put("/api/user/profile", { name, phone });
+    return res.data;
+  },
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    const res = await api.put<{ success: boolean; message: string }>(
+      "/api/user/change-password",
+      { currentPassword, newPassword }
+    );
     return res.data;
   },
   updateAvatar: async (asset: { uri: string; fileName?: string | null; mimeType?: string | null; file?: unknown }) => {
@@ -303,6 +348,12 @@ export const foodApi = {
   get: async (foodId: string) => {
     const res = await api.get<{ data: Food }>(`/api/food/${foodId}`);
     return res.data.data;
+  },
+  list: async (params?: { restaurantId?: string; q?: string; category?: string; sort?: string }) => {
+    const res = await api.get<{ data: Food[] }>("/api/food/list", {
+      params,
+    });
+    return res.data.data || [];
   },
   listByRestaurant: async (restaurantId: string) => {
     const res = await api.get<{ data: Food[] }>("/api/food/list", {

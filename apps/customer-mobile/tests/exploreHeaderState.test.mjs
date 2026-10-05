@@ -16,5 +16,5 @@ test("compacts without crossing touch-size minimums", () => {
   const end = exploreHeaderMetrics(1, true);
   assert.ok(end.locationMinHeight >= 52);
   assert.ok(end.controlMinHeight >= 44);
-  assert.equal(end.backgroundColor, "#F8FAFC");
+  assert.equal(end.backgroundColor, "#F4F8FD");
 });

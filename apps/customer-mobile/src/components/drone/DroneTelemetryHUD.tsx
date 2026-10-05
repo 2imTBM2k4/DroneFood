@@ -2,75 +2,86 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { colors, radius, spacing, typography } from "../../theme/tokens";
 import { Icon } from "../common/Icon";
-import { GlassSurface } from "../common/GlassSurface";
+import { calculateDroneEtaMinutes } from "../../config/droneSimulation";
 import type { DroneTelemetry } from "../../types";
 
 interface DroneTelemetryHUDProps {
   telemetry?: DroneTelemetry;
-  etaMinutes?: number;
+  orderStatus?: string;
+  dronePhase?: string;
+  etaMinutes?: number | null;
+  distanceKm?: number | null;
 }
+
+const DRONE_PHASE_LABELS: Record<string, string> = {
+  assigned: "Đã chỉ định Drone",
+  preflight_check: "Kiểm tra kỹ thuật tiền chuyến bay",
+  en_route_to_restaurant: "Drone đang bay tới nhà hàng",
+  awaiting_restaurant_handover: "Đang nhận món tại nhà hàng",
+  en_route_to_customer: "Drone đang bay tới điểm giao",
+  arrived_at_customer: "Drone đã tới điểm giao, sẵn sàng hạ cánh",
+  delivered: "Đã hoàn thành chuyến bay",
+};
 
 export const DroneTelemetryHUD: React.FC<DroneTelemetryHUDProps> = ({
   telemetry,
-  etaMinutes = 5,
+  orderStatus = "delivering",
+  dronePhase = "en_route_to_customer",
+  etaMinutes,
+  distanceKm,
 }) => {
-  const battery = telemetry?.batteryPercent ?? 85;
-  const speed = telemetry?.speedKmh ?? 38;
-  const altitude = telemetry?.altitudeMeters ?? 65;
-  const eta = telemetry?.etaMinutes ?? etaMinutes;
+  // Compute ETA: only display minutes when dronePhase is "en_route_to_customer"
+  const isEnRoute = dronePhase === "en_route_to_customer" || orderStatus === "delivering";
+  const calculatedMinutes =
+    etaMinutes ??
+    telemetry?.etaMinutes ??
+    (distanceKm ? calculateDroneEtaMinutes(distanceKm) : null) ??
+    5;
 
-  const getBatteryColor = () => {
-    if (battery >= 50) return colors.batteryHigh;
-    if (battery >= 25) return colors.batteryMed;
-    return colors.batteryLow;
-  };
+  const etaDisplay = isEnRoute ? `~${calculatedMinutes} phút` : "Đang cập nhật";
+  const phaseLabel = DRONE_PHASE_LABELS[dronePhase] || "Đang xử lý chuyến bay";
 
   return (
-    <GlassSurface tone="strong" contentStyle={styles.container}>
+    <View style={styles.card}>
       <View style={styles.headerRow}>
         <View style={styles.titleBadge}>
-          <Icon name="drone" size={17} color={colors.primary} />
-          <Text style={styles.titleText}>DRONE FLIGHT TELEMETRY</Text>
+          <Icon name="drone" size={18} color={colors.primary} />
+          <Text style={styles.titleText}>THEO DÕI HÀNH TRÌNH DRONE</Text>
         </View>
         <View style={styles.statusLive}>
           <View style={styles.liveDot} />
-          <Text style={styles.liveText}>LIVE HUD</Text>
+          <Text style={styles.liveText}>TRỰC TIẾP</Text>
         </View>
       </View>
 
-      <View style={styles.metricsGrid}>
+      <View style={styles.metricsBox}>
+        {/* Status display */}
         <View style={styles.metricItem}>
-          <Text style={styles.metricValue}>{altitude} m</Text>
-          <Text style={styles.metricLabel}>Độ cao bay</Text>
-        </View>
-        <View style={styles.metricDivider} />
-
-        <View style={styles.metricItem}>
-          <Text style={styles.metricValue}>{speed} km/h</Text>
-          <Text style={styles.metricLabel}>Vận tốc</Text>
-        </View>
-        <View style={styles.metricDivider} />
-
-        <View style={styles.metricItem}>
-          <Text style={[styles.metricValue, { color: getBatteryColor() }]}>{battery}%</Text>
-          <Text style={styles.metricLabel}>Pin Drone</Text>
-        </View>
-        <View style={styles.metricDivider} />
-
-        <View style={styles.metricItem}>
-          <Text style={[styles.metricValue, { color: colors.primary }]}>
-            {eta} phút
+          <Text style={styles.metricLabel}>Trạng thái chặng bay</Text>
+          <Text numberOfLines={1} style={styles.statusValue}>
+            {phaseLabel}
           </Text>
+        </View>
+
+        <View style={styles.metricDivider} />
+
+        {/* ETA display */}
+        <View style={styles.etaItem}>
           <Text style={styles.metricLabel}>Dự kiến đến</Text>
+          <Text style={styles.etaValue}>{etaDisplay}</Text>
         </View>
       </View>
-    </GlassSurface>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    padding: spacing.lg,
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.md,
     gap: spacing.sm,
   },
   headerRow: {
@@ -86,7 +97,7 @@ const styles = StyleSheet.create({
   titleText: {
     ...typography.captionBold,
     color: colors.textPrimary,
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
   },
   statusLive: {
     flexDirection: "row",
@@ -94,7 +105,7 @@ const styles = StyleSheet.create({
     gap: 4,
     backgroundColor: colors.statusDeliveredBg,
     paddingHorizontal: spacing.xs,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: radius.pill,
   },
   liveDot: {
@@ -106,33 +117,40 @@ const styles = StyleSheet.create({
   liveText: {
     ...typography.micro,
     color: colors.success,
+    fontWeight: "700",
   },
-  metricsGrid: {
+  metricsBox: {
     flexDirection: "row",
-    backgroundColor: "rgba(235, 245, 255, 0.76)",
-    borderRadius: radius.lg,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xs,
-    justifyContent: "space-around",
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.sm,
+    padding: spacing.md,
     alignItems: "center",
+    gap: spacing.md,
   },
   metricItem: {
     flex: 1,
-    alignItems: "center",
     gap: 2,
   },
-  metricValue: {
-    ...typography.subhead,
-    color: colors.textPrimary,
-    fontWeight: "700",
+  etaItem: {
+    alignItems: "flex-end",
+    gap: 2,
   },
   metricLabel: {
     ...typography.micro,
     color: colors.textSecondary,
   },
+  statusValue: {
+    ...typography.subheadBold,
+    color: colors.textPrimary,
+  },
+  etaValue: {
+    ...typography.title2,
+    color: colors.primary,
+    fontWeight: "700",
+  },
   metricDivider: {
     width: 1,
-    height: 24,
-    backgroundColor: colors.border,
+    height: 32,
+    backgroundColor: colors.borderSubtle,
   },
 });

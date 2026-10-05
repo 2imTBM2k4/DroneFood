@@ -8,8 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { colors, motion, radius, spacing, typography } from "../../theme/tokens";
-import { GlassSurface } from "./GlassSurface";
+import { colors, motion, radius, shadows, spacing, typography } from "../../theme/tokens";
 import { Icon } from "./Icon";
 
 export type ToastType = "info" | "success" | "warning" | "error";
@@ -149,7 +148,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               accessibilityRole="alert"
               style={[styles.animatedToast, { opacity, transform: [{ translateY }] }]}
             >
-              <GlassSurface tone="strong" elevated contentStyle={styles.toastContent}>
+              <View style={[styles.toastContent, shadows.floating]}>
                 <View style={[styles.accent, { backgroundColor: accent }]} />
                 <View style={styles.iconBadge}>
                   <Icon name={toast.type === "success" ? "check" : toast.type === "error" ? "close" : "sparkles"} size={18} color={accent} />
@@ -193,7 +192,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 >
                   <Icon name="close" size={17} color={colors.textSecondary} />
                 </Pressable>
-              </GlassSurface>
+              </View>
             </Animated.View>
           ) : null}
         </SafeAreaView>
@@ -236,6 +235,10 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: spacing.sm,
     overflow: "hidden",
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
   },
   accent: {
     position: "absolute",

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import {
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -7,14 +8,15 @@ import {
   Text,
   View,
 } from "react-native";
-import { colors, radius, spacing, typography } from "../../theme/tokens";
-import { formatVnd } from "../../api/client";
+import { colors, motion, radius, spacing, typography } from "../../theme/tokens";
+import { formatVnd, resolveMediaUrl } from "../../api/client";
 import { Badge } from "../../components/common/Badge";
 import { Button } from "../../components/common/Button";
 import { Header } from "../../components/common/Header";
 import { Input } from "../../components/common/Input";
-import { Icon, type IconName } from "../../components/common/Icon";
-import { GlassSurface } from "../../components/common/GlassSurface";
+import { Icon } from "../../components/common/Icon";
+import { InfoRow } from "../../components/common/InfoRow";
+import { Timeline } from "../../components/common/Timeline";
 import { useToast } from "../../components/common/ToastProvider";
 import { CargoUnlockModal } from "../../components/drone/CargoUnlockModal";
 import { DroneTelemetryHUD } from "../../components/drone/DroneTelemetryHUD";
@@ -66,10 +68,17 @@ export const DroneTrackingScreen: React.FC<DroneTrackingScreenProps> = ({
   const isDrone = order.deliveryMethod === "drone";
   const canCancel = order.orderStatus === "pending";
 
+  const calculatedItemsPrice = (order.orderItems || []).every(
+    (item) => typeof item.price === "number"
+  )
+    ? (order.orderItems || []).reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0)
+    : undefined;
+  const itemsPrice = order.itemsPrice ?? calculatedItemsPrice;
+
   const customerLat = order.shippingAddress?.lat || 10.7769;
   const customerLng = order.shippingAddress?.lng || 106.7009;
-  const restaurantLat = order.restaurantId?.lat || 10.7800;
-  const restaurantLng = order.restaurantId?.lng || 106.6950;
+  const restaurantLat = order.restaurantId?.lat || 10.78;
+  const restaurantLng = order.restaurantId?.lng || 106.695;
 
   // Drone simulated position between restaurant and customer
   const droneLat = (restaurantLat + customerLat) / 2;
@@ -82,30 +91,13 @@ export const DroneTrackingScreen: React.FC<DroneTrackingScreenProps> = ({
     longitudeDelta: Math.max(0.02, Math.abs(restaurantLng - customerLng) * 1.8),
   };
 
-  const steps: { key: string; label: string; icon: IconName }[] = [
-    { key: "pending", label: "Đã nhận đơn", icon: "check" },
-    { key: "preparing", label: "Quán đang nấu", icon: "utensils" },
-    {
-      key: "delivering",
-      label: isDrone ? "Drone đang bay" : "Shipper đang giao",
-      icon: isDrone ? "drone" : "motorcycle",
-    },
-    { key: "delivered", label: "Đã giao thành công", icon: "package" },
-  ];
-
-  const getStepStatus = (stepKey: string) => {
-    const orderSequence = ["pending", "preparing", "delivering", "delivered"];
-    const currentIndex = orderSequence.indexOf(order.orderStatus);
-    const stepIndex = orderSequence.indexOf(stepKey);
-
-    if (order.orderStatus === "cancelled") return "cancelled";
-    if (currentIndex >= stepIndex) return "completed";
-    return "pending";
-  };
-
   const handleConfirmCancel = async () => {
     if (!cancelReason.trim()) {
-      showToast({ type: "warning", title: "Thiếu lý do", message: "Vui lòng nhập lý do bạn muốn hủy đơn." });
+      showToast({
+        type: "warning",
+        title: "Thiếu lý do",
+        message: "Vui lòng nhập lý do bạn muốn hủy đơn.",
+      });
       return;
     }
     await onCancelOrder(order._id, cancelReason.trim());
@@ -146,8 +138,8 @@ export const DroneTrackingScreen: React.FC<DroneTrackingScreenProps> = ({
             {order.orderStatus === "delivering" && isDrone ? (
               <Marker
                 coordinate={{ latitude: droneLat, longitude: droneLng }}
-                title="Drone-04 đang bay"
-                description="Độ cao 65m • Tốc độ 38km/h"
+                title="Drone đang bay"
+                description="Đang di chuyển tới điểm giao"
               />
             ) : null}
 
@@ -165,73 +157,47 @@ export const DroneTrackingScreen: React.FC<DroneTrackingScreenProps> = ({
         </View>
 
         {/* Live Telemetry HUD (for Drone orders) */}
-        {isDrone && (order.orderStatus === "delivering" || order.orderStatus === "preparing") ? (
+        {isDrone &&
+        (order.orderStatus === "delivering" ||
+          order.orderStatus === "preparing" ||
+          order.orderStatus === "pending") ? (
           <DroneTelemetryHUD
             telemetry={order.droneTelemetry}
-            etaMinutes={order.orderStatus === "delivering" ? 4 : 12}
+            orderStatus={order.orderStatus}
+            dronePhase={order.dronePhase}
+            distanceKm={order.deliveryDistanceKm}
           />
         ) : null}
 
-        {/* Status Stepper Timeline */}
-        <GlassSurface tone="strong" contentStyle={styles.timelineCard}>
+        {/* Status Timeline */}
+        <View style={styles.card}>
           <View style={styles.timelineHeader}>
-            <Text style={styles.timelineTitle}>Tiến trình đơn hàng</Text>
+            <Text style={styles.sectionTitle}>Tiến trình đơn hàng</Text>
             <Badge status={order.orderStatus} />
           </View>
 
-          <View style={styles.stepper}>
-            {steps.map((step, idx) => {
-              const status = getStepStatus(step.key);
-              const isCompleted = status === "completed";
-              return (
-                <View key={step.key} style={styles.stepItem}>
-                  <View
-                    style={[
-                      styles.stepCircle,
-                      isCompleted && styles.stepCircleCompleted,
-                    ]}
-                  >
-                    <Icon
-                      name={step.icon}
-                      size={16}
-                      color={isCompleted ? colors.textWhite : colors.textSecondary}
-                    />
-                  </View>
-                  <Text
-                    style={[
-                      styles.stepLabel,
-                      isCompleted && styles.stepLabelCompleted,
-                    ]}
-                  >
-                    {step.label}
-                  </Text>
-                  {idx !== steps.length - 1 ? (
-                    <View
-                      style={[
-                        styles.stepLine,
-                        isCompleted && styles.stepLineCompleted,
-                      ]}
-                    />
-                  ) : null}
-                </View>
-              );
-            })}
-          </View>
+          <Timeline
+            deliveryMethod={order.deliveryMethod}
+            orderStatus={order.orderStatus}
+            dronePhase={order.dronePhase}
+          />
 
           {order.reason ? (
             <View style={styles.reasonBox}>
               <Text style={styles.reasonText}>Lý do hủy: {order.reason}</Text>
             </View>
           ) : null}
-        </GlassSurface>
+        </View>
 
         {/* Drone Cargo Unlock CTA (Only when Drone is actively delivering) */}
         {isDrone && order.orderStatus === "delivering" ? (
           <View style={styles.cargoSection}>
             <Button
               label="Mở khoang hàng & quét QR Drone"
-              icon={<Icon name="package" size={17} color={colors.textWhite} />}
+              icon={<Icon name="package" size={18} color={colors.textWhite} />}
               variant="primary"
+              size="lg"
+              fullWidth
               onPress={() => setCargoModalVisible(true)}
             />
           </View>
@@ -259,6 +225,8 @@ export const DroneTrackingScreen: React.FC<DroneTrackingScreenProps> = ({
           <Button
             label="Hủy đơn hàng"
             variant="danger"
+            size="lg"
+            fullWidth
             loading={working}
             onPress={() => setCancelModalVisible(true)}
           />
@@ -269,7 +237,7 @@ export const DroneTrackingScreen: React.FC<DroneTrackingScreenProps> = ({
           <View style={styles.reviewPromptCard}>
             {currentOrder?.reviewFlow?.complete ? (
               <View style={styles.reviewCompleteRow}>
-                <Icon name="check" size={17} color={colors.success} />
+                <Icon name="check" size={18} color={colors.success} />
                 <Text style={styles.reviewCompleteText}>
                   Đã gửi đánh giá cho đơn hàng này
                 </Text>
@@ -285,7 +253,12 @@ export const DroneTrackingScreen: React.FC<DroneTrackingScreenProps> = ({
                   </Text>
                 </View>
                 <Pressable
-                  style={styles.reviewPromptCardBtn}
+                  style={({ pressed }) => [
+                    styles.reviewPromptCardBtn,
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Đánh giá đơn hàng"
                   onPress={() => setReviewModalVisible(true)}
                 >
                   <Text style={styles.reviewPromptCardBtnText}>Đánh giá</Text>
@@ -296,43 +269,87 @@ export const DroneTrackingScreen: React.FC<DroneTrackingScreenProps> = ({
         )}
 
         {/* Order Details Breakdown Card */}
-        <GlassSurface tone="strong" contentStyle={styles.detailsCard}>
-          <Text style={styles.detailsTitle}>Chi tiết các món đã đặt</Text>
-          {(order.orderItems || []).map((item, index) => (
-            <View key={`${item.name}-${index}`} style={styles.itemRow}>
-              <View>
-                <Text style={styles.itemName}>
-                  {item.name} × {item.quantity}
-                </Text>
-                {item.selectedOptions?.map((opt) => (
-                  <Text
-                    key={`${opt.groupName}-${opt.optionName}`}
-                    style={styles.itemOpt}
-                  >
-                    • {opt.groupName}: {opt.optionName}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Chi tiết các món đã đặt</Text>
+          {(order.orderItems || []).map((item, index) => {
+            const foodImg = item.image || (typeof item.product === "object" && item.product?.image);
+            return (
+              <View key={`${item.name}-${index}`} style={styles.itemRow}>
+                {foodImg ? (
+                  <Image
+                    source={{ uri: resolveMediaUrl(foodImg) }}
+                    style={styles.foodThumb}
+                    resizeMode="cover"
+                    accessibilityLabel={`Hình món ${item.name}`}
+                  />
+                ) : (
+                  <View style={styles.foodThumbFallback}>
+                    <Icon name="utensils" size={14} color={colors.primary} />
+                  </View>
+                )}
+                <View style={styles.itemTextWrap}>
+                  <Text style={styles.itemName}>
+                    {item.name} × {item.quantity}
                   </Text>
-                ))}
+                  {item.selectedOptions?.map((opt) => (
+                    <Text
+                      key={`${opt.groupName}-${opt.optionName}`}
+                      style={styles.itemOpt}
+                    >
+                      • {opt.groupName}: {opt.optionName}
+                    </Text>
+                  ))}
+                </View>
+                {item.price ? (
+                  <Text style={styles.itemPrice}>
+                    {formatVnd(item.price * item.quantity)}
+                  </Text>
+                ) : null}
               </View>
-              {item.price ? (
-                <Text style={styles.itemPrice}>
-                  {formatVnd(item.price * item.quantity)}
-                </Text>
-              ) : null}
-            </View>
-          ))}
+            );
+          })}
 
           <View style={styles.divider} />
 
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Tổng tiền thanh toán</Text>
-            <Text style={styles.totalPriceText}>
-              {formatVnd(order.totalPrice)}
-            </Text>
-          </View>
+          <Text style={styles.sectionTitle}>Chi tiết thanh toán</Text>
+          {itemsPrice != null ? <InfoRow label="Tổng tạm tính" value={formatVnd(itemsPrice)} /> : null}
+          <InfoRow
+            label="Phí áp dụng (Giao bằng drone)"
+            value={formatVnd(order.shippingPrice)}
+            subValue={order.deliveryDistanceKm ? `${order.deliveryDistanceKm.toFixed(1)} km` : undefined}
+          />
+          {order.serviceFee != null && order.serviceFee > 0 ? (
+            <InfoRow label="Phí dịch vụ" value={formatVnd(order.serviceFee)} />
+          ) : null}
+          {order.discountAmount != null && order.discountAmount > 0 ? (
+            order.vouchers && order.vouchers.length > 0 ? (
+              order.vouchers.map((voucher, vIdx) => (
+                <InfoRow
+                  key={`voucher-${voucher.code}-${vIdx}`}
+                  label={`Giảm ${formatVnd(voucher.discountAmount)} (${voucher.code})`}
+                  value={`-${formatVnd(voucher.discountAmount)}`}
+                  valueStyle={styles.discountValue}
+                />
+              ))
+            ) : (
+              <InfoRow
+                label={`Giảm ${formatVnd(order.discountAmount)} voucher`}
+                value={`-${formatVnd(order.discountAmount)}`}
+                valueStyle={styles.discountValue}
+              />
+            )
+          ) : null}
+
+          <View style={styles.divider} />
+
+          <InfoRow label="Tổng cộng" value={formatVnd(order.totalPrice)} isTotal />
           <Text style={styles.paymentMethodLabel}>
-            Hình thức: {order.paymentMethod === "PAYOS" ? "Thanh toán Online PayOS" : "Tiền mặt COD"}
+            Hình thức:{" "}
+            {order.paymentMethod === "PAYOS"
+              ? "Thanh toán Online PayOS"
+              : "Tiền mặt COD"}
           </Text>
-        </GlassSurface>
+        </View>
       </ScrollView>
 
       {/* QR & Cargo Bay Unlock Modal */}
@@ -366,17 +383,21 @@ export const DroneTrackingScreen: React.FC<DroneTrackingScreenProps> = ({
               multiline
             />
 
-            <Button
-              label="Xác nhận hủy đơn"
-              variant="danger"
-              loading={working}
-              onPress={handleConfirmCancel}
-            />
-            <Button
-              label="Quay lại"
-              variant="outline"
-              onPress={() => setCancelModalVisible(false)}
-            />
+            <View style={styles.dialogActions}>
+              <Button
+                label="Xác nhận hủy đơn"
+                variant="danger"
+                fullWidth
+                loading={working}
+                onPress={handleConfirmCancel}
+              />
+              <Button
+                label="Quay lại"
+                variant="outline"
+                fullWidth
+                onPress={() => setCancelModalVisible(false)}
+              />
+            </View>
           </View>
         </View>
       </Modal>
@@ -398,207 +419,12 @@ export const DroneTrackingScreen: React.FC<DroneTrackingScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "transparent",
+    backgroundColor: colors.bg,
   },
   scrollContent: {
-    padding: spacing.md,
+    padding: spacing.screenPadding,
     gap: spacing.md,
     paddingBottom: 110,
-  },
-  mapContainer: {
-    height: 252,
-    borderRadius: radius.xl,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.94)",
-    backgroundColor: colors.surfaceSubtle,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.1,
-    shadowRadius: 28,
-    elevation: 4,
-  },
-  map: {
-    width: "100%",
-    height: "100%",
-  },
-  timelineCard: {
-    padding: spacing.lg,
-    gap: spacing.md,
-  },
-  timelineHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  timelineTitle: {
-    ...typography.subhead,
-    color: colors.textPrimary,
-  },
-  stepper: {
-    flexDirection: "column",
-    position: "relative",
-    paddingTop: spacing.xxs,
-  },
-  stepItem: {
-    minHeight: 58,
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.sm,
-    position: "relative",
-  },
-  stepCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.surfaceSubtle,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-    zIndex: 2,
-  },
-  stepCircleCompleted: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  stepLabel: {
-    ...typography.body,
-    color: colors.textSecondary,
-    flex: 1,
-  },
-  stepLabelCompleted: {
-    color: colors.primary,
-    fontWeight: "700",
-  },
-  stepLine: {
-    position: "absolute",
-    top: 31,
-    left: 15,
-    width: 2,
-    height: 28,
-    backgroundColor: colors.border,
-    zIndex: 1,
-  },
-  stepLineCompleted: {
-    backgroundColor: colors.primary,
-  },
-  reasonBox: {
-    backgroundColor: colors.statusCancelledBg,
-    padding: spacing.sm,
-    borderRadius: radius.md,
-  },
-  reasonText: {
-    ...typography.caption,
-    color: colors.statusCancelledText,
-  },
-  cargoSection: {
-    marginVertical: spacing.xxs,
-  },
-  deliveredSuccessBox: {
-    backgroundColor: colors.statusDeliveredBg,
-    borderWidth: 1,
-    borderColor: colors.statusDeliveredText,
-    borderRadius: radius.xl,
-    padding: spacing.md,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    marginVertical: spacing.xs,
-  },
-  deliveredSuccessIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.72)",
-  },
-  deliveredSuccessTextWrap: {
-    flex: 1,
-    gap: 2,
-  },
-  deliveredSuccessTitle: {
-    ...typography.subhead,
-    color: colors.statusDeliveredText,
-    fontWeight: "700",
-  },
-  deliveredSuccessSub: {
-    ...typography.caption,
-    color: colors.statusDeliveredText,
-    lineHeight: 18,
-  },
-  detailsCard: {
-    padding: spacing.lg,
-    gap: spacing.sm,
-  },
-  detailsTitle: {
-    ...typography.subhead,
-    color: colors.textPrimary,
-  },
-  itemRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-  },
-  itemName: {
-    ...typography.bodySecondary,
-    color: colors.textPrimary,
-  },
-  itemOpt: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginLeft: spacing.xs,
-  },
-  itemPrice: {
-    ...typography.bodySecondary,
-    color: colors.textPrimary,
-    fontWeight: "600",
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: spacing.xs,
-  },
-  priceRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  priceLabel: {
-    ...typography.subhead,
-    color: colors.textPrimary,
-  },
-  totalPriceText: {
-    ...typography.title2,
-    color: colors.primary,
-    fontWeight: "700",
-  },
-  paymentMethodLabel: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  dialogBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.48)",
-    justifyContent: "center",
-    padding: spacing.xl,
-  },
-  dialogCard: {
-    backgroundColor: "rgba(255, 255, 255, 0.96)",
-    borderRadius: radius.xl,
-    padding: spacing.lg,
-    gap: spacing.md,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.98)",
-  },
-  dialogTitle: {
-    ...typography.title2,
-    color: colors.textPrimary,
-  },
-  dialogSubtitle: {
-    ...typography.bodySecondary,
-    color: colors.textSecondary,
   },
   emptyContainer: {
     flex: 1,
@@ -610,55 +436,211 @@ const styles = StyleSheet.create({
     ...typography.bodySecondary,
     color: colors.textSecondary,
   },
-  reviewPromptCard: {
-    backgroundColor: "rgba(235, 245, 255, 0.86)",
-    borderRadius: radius.xl,
-    padding: spacing.md,
+  mapContainer: {
+    height: 250,
+    borderRadius: radius.lg,
+    overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.94)",
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
   },
-  reviewCompleteRow: {
+  map: {
+    width: "100%",
+    height: "100%",
+  },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.sm,
+    shadowColor: "#003366",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  timelineHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.xs,
+  },
+  sectionTitle: {
+    ...typography.subheadBold,
+    color: colors.textPrimary,
+  },
+  reasonBox: {
+    marginTop: spacing.xs,
+    padding: spacing.sm,
+    backgroundColor: colors.statusCancelledBg,
+    borderRadius: radius.sm,
+  },
+  reasonText: {
+    ...typography.caption,
+    color: colors.danger,
+  },
+  cargoSection: {
+    marginTop: spacing.xxs,
+  },
+  deliveredSuccessBox: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: spacing.md,
+    backgroundColor: colors.statusDeliveredBg,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
   },
-  reviewCompleteText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: colors.success,
+  deliveredSuccessIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deliveredSuccessTextWrap: {
+    flex: 1,
+  },
+  deliveredSuccessTitle: {
+    ...typography.subheadBold,
+    color: colors.statusDeliveredText,
+  },
+  deliveredSuccessSub: {
+    ...typography.caption,
+    color: colors.statusDeliveredText,
+    marginTop: 2,
+    lineHeight: 18,
+  },
+  reviewPromptCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.md,
   },
   reviewPromptRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: spacing.sm,
+    gap: spacing.md,
   },
   reviewPromptCardTitle: {
-    fontSize: 14,
-    fontWeight: "800",
+    ...typography.subheadBold,
     color: colors.textPrimary,
   },
   reviewPromptCardSub: {
-    fontSize: 12,
+    ...typography.caption,
     color: colors.textSecondary,
     marginTop: 2,
   },
   reviewPromptCardBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
     minHeight: 44,
     justifyContent: "center",
-    backgroundColor: colors.primary,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 2,
-    borderRadius: radius.pill,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
+    alignItems: "center",
   },
   reviewPromptCardBtnText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "800",
+    ...typography.captionBold,
+    color: colors.textWhite,
+  },
+  reviewCompleteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  reviewCompleteText: {
+    ...typography.subheadBold,
+    color: colors.success,
+  },
+  itemRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: spacing.xs,
+    gap: spacing.sm,
+  },
+  foodThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  foodThumbFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.sm,
+    backgroundColor: colors.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  itemTextWrap: {
+    flex: 1,
+  },
+  itemName: {
+    ...typography.body,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  itemOpt: {
+    ...typography.micro,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  itemPrice: {
+    ...typography.body,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    marginTop: 2,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.borderSubtle,
+    marginVertical: spacing.xs,
+  },
+  paymentMethodLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
+  dialogBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: spacing.xl,
+  },
+  dialogCard: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.xl,
+    gap: spacing.md,
+  },
+  dialogTitle: {
+    ...typography.title2,
+    color: colors.textPrimary,
+  },
+  dialogSubtitle: {
+    ...typography.bodySecondary,
+    color: colors.textSecondary,
+  },
+  dialogActions: {
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  pressed: {
+    opacity: motion.pressedOpacity,
+    transform: [{ scale: motion.pressedScale }],
+  },
+  discountValue: {
+    color: colors.success,
+    fontWeight: "700",
   },
 });

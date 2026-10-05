@@ -2,15 +2,20 @@ import { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, MapPin } from "lucide-react";
 import { StoreContext } from "../../context/StoreContext";
+import { CURRENT_LOCATION_ID } from "../../lib/deliveryLocation";
 import "./Header.css";
 
 const Header = () => {
   const navigate = useNavigate();
-  const { user, liveLocation, liveAddress, activeAddressId } = useContext(StoreContext);
+  const { user, liveLocation, liveAddress, restaurantLocationId } = useContext(StoreContext);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const selectedSavedAddress = (user?.addressBook || []).find((entry) => String(entry.id || entry._id) === activeAddressId);
-  const addr = selectedSavedAddress || liveAddress || user?.address;
+  const selectedSavedAddress = (user?.addressBook || []).find(
+    (entry) => String(entry.id || entry._id) === restaurantLocationId
+  );
+  const addr = restaurantLocationId === CURRENT_LOCATION_ID
+    ? liveAddress
+    : selectedSavedAddress || user?.address;
   const deliveryAddress = addr
     ? addr.formatted || [addr.address || addr.street, addr.city].filter(Boolean).join(", ")
     : liveLocation

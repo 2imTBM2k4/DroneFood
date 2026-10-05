@@ -78,11 +78,32 @@ const userSchema = new mongoose.Schema(
     balance: { type: Number, default: 0 },
     resetPasswordToken: { type: String, default: null, select: false },
     resetPasswordExpires: { type: Date, default: null, select: false },
+    lastResetPasswordToken: { type: String, default: null, select: false },
+    // Missing means "verified" for accounts created before mandatory email
+    // verification was introduced. New registrations explicitly persist false.
+    emailVerified: { type: Boolean, default: undefined },
+    emailVerifiedAt: { type: Date, default: null },
+    emailVerificationToken: { type: String, default: null, select: false },
+    emailVerificationExpires: { type: Date, default: null, select: false },
+    lastEmailVerificationToken: { type: String, default: null, select: false },
+    pendingEmail: { type: String, lowercase: true, trim: true, select: false },
+    pendingEmailVerificationToken: { type: String, default: null, select: false },
+    pendingEmailVerificationExpires: { type: Date, default: null, select: false },
+    lastPendingEmailVerificationToken: { type: String, default: null, select: false },
     refreshToken: { type: String, default: null, select: false },
+    // Every access/refresh JWT carries the value current at issue time. A
+    // password change increments it so already-issued tokens are rejected by
+    // both HTTP and Socket.IO authentication immediately.
+    authVersion: { type: Number, default: 0, min: 0, select: false },
   },
   {
     timestamps: true,
   }
 );
+
+// Two users must never reserve the same pending identity email. The primary
+// email keeps its existing unique index; service-level checks also prevent a
+// pending address from colliding with an existing primary address.
+userSchema.index({ pendingEmail: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.models.User || mongoose.model("User", userSchema);

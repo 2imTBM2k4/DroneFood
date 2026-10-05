@@ -19,7 +19,6 @@ import { Button } from "../../components/common/Button";
 import { Header } from "../../components/common/Header";
 import { Input } from "../../components/common/Input";
 import { Icon, type IconName } from "../../components/common/Icon";
-import { GlassSurface } from "../../components/common/GlassSurface";
 import { useToast } from "../../components/common/ToastProvider";
 import { AddressEditorModal } from "../../components/address/AddressEditorModal";
 import type {
@@ -35,6 +34,7 @@ interface ProfileScreenProps {
   loading: boolean;
   onUpdateProfile: (name: string, phone: string) => Promise<void>;
   onUpdateAvatar: (asset: ImagePicker.ImagePickerAsset) => Promise<void>;
+  onChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   onLogout: () => void;
   savedAddress?: Address;
   addressBook: AddressBookEntry[];
@@ -53,6 +53,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   loading,
   onUpdateProfile,
   onUpdateAvatar,
+  onChangePassword,
   onLogout,
   savedAddress,
   addressBook = [],
@@ -76,6 +77,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [phone, setPhone] = useState(profile?.phone || "");
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
 
   // Address Editor Modal state
   const [addressEditorVisible, setAddressEditorVisible] = useState(false);
@@ -133,6 +138,29 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       showToast({ type: "error", title: "Không thể cập nhật ảnh", message: err?.message || "Vui lòng thử lại." });
     } finally {
       setUploadingAvatar(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (newPassword.length < 8) {
+      showToast({ type: "warning", title: "Mật khẩu quá ngắn", message: "Mật khẩu mới phải có ít nhất 8 ký tự." });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showToast({ type: "warning", title: "Mật khẩu chưa khớp", message: "Vui lòng nhập lại đúng mật khẩu mới." });
+      return;
+    }
+    try {
+      setSavingPassword(true);
+      await onChangePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      showToast({ type: "success", title: "Đã đổi mật khẩu", message: "Các phiên đăng nhập cũ đã được đóng. Hãy đăng nhập lại bằng mật khẩu mới." });
+    } catch (err: any) {
+      showToast({ type: "error", title: "Không thể đổi mật khẩu", message: err?.message || "Vui lòng kiểm tra mật khẩu hiện tại và thử lại." });
+    } finally {
+      setSavingPassword(false);
     }
   };
 
@@ -245,7 +273,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         keyboardDismissMode="interactive"
       >
         {/* User Profile Overview Card */}
-        <GlassSurface tone="soft" contentStyle={[styles.userCard, compact && styles.userCardCompact]}>
+        <View style={[styles.userCard, compact && styles.userCardCompact]}>
           <View style={styles.avatarWrap}>
             {profile?.avatar ? (
               <Image
@@ -282,10 +310,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               <View style={styles.phoneRow}><Icon name="phone" size={14} color={colors.textSecondary} /><Text style={styles.userPhone}>{profile.phone}</Text></View>
             ) : null}
           </View>
-        </GlassSurface>
+        </View>
 
         {/* Function Menu Group List (Apple Style) */}
-        <GlassSurface tone="strong" contentStyle={styles.menuGroupCard}>
+        <View style={styles.menuGroupCard}>
           {/* Item 1: Hồ sơ */}
           <Pressable
             style={styles.menuRow}
@@ -370,7 +398,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             </View>
             <Icon name="chevron-right" size={19} color={colors.textSecondary} />
           </Pressable>
-        </GlassSurface>
+        </View>
       </ScrollView>
 
       {/* Modal 1: Edit Profile */}
@@ -635,6 +663,41 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>Bảo mật tài khoản</Text>
+              <Input
+                label="Mật khẩu hiện tại"
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+                isPassword
+                autoComplete="current-password"
+                textContentType="password"
+              />
+              <Input
+                label="Mật khẩu mới"
+                value={newPassword}
+                onChangeText={setNewPassword}
+                isPassword
+                autoComplete="new-password"
+                textContentType="newPassword"
+                hint="Ít nhất 8 ký tự; có thể dán từ trình quản lý mật khẩu."
+              />
+              <Input
+                label="Xác nhận mật khẩu mới"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                isPassword
+                autoComplete="new-password"
+                textContentType="newPassword"
+              />
+              <Button
+                label="Đổi mật khẩu"
+                loading={savingPassword}
+                disabled={!currentPassword || !newPassword || !confirmPassword}
+                onPress={handleChangePassword}
+              />
+            </View>
+
+            <View style={styles.sectionCard}>
               <Text style={styles.sectionTitle}>Thông tin ứng dụng</Text>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Phiên bản</Text>
@@ -666,10 +729,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "transparent",
+    backgroundColor: colors.bg,
   },
   scrollContent: {
-    padding: spacing.md,
+    padding: spacing.screenPadding,
     gap: spacing.md,
     paddingBottom: 110,
   },
@@ -677,13 +740,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   userCard: {
-    padding: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.md,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
   },
   userCardCompact: {
-    padding: spacing.md,
+    padding: spacing.sm,
     gap: spacing.sm,
   },
   avatarWrap: {
@@ -727,6 +794,10 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   menuGroupCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
     overflow: "hidden",
   },
   avatarImage: {

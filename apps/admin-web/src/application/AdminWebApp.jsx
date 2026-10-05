@@ -14,6 +14,7 @@ import Vouchers from "../pages/Vouchers/Vouchers";
 import Refunds from "../pages/Refunds/Refunds";
 import Withdrawals from "../pages/Withdrawals/Withdrawals";
 import Finance from "../pages/Finance/Finance";
+import Security from "../pages/Security/Security";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import "@drone-food/web-ui/toast.css";
@@ -85,6 +86,7 @@ const AdminWebApp = () => {
               <Route path="/refunds" element={<Refunds url={url} />} />
               <Route path="/withdrawals" element={<Withdrawals url={url} />} />
               <Route path="/audit" element={<AuditLog url={url} />} />
+              <Route path="/security" element={<Security url={url} />} />
             </Routes>
           </PageTransition>
         </div>

@@ -36,6 +36,7 @@ export type Food = {
   image?: string;
   category?: string;
   optionGroups?: OptionGroup[];
+  restaurantId?: string;
 };
 
 export type CartLineOption = {
@@ -142,6 +143,8 @@ export type OrderItem = {
   name: string;
   quantity: number;
   price?: number;
+  image?: string;
+  product?: string | { _id?: string; image?: string; name?: string };
   selectedOptions?: { groupName: string; optionName: string }[];
   note?: string;
 };
@@ -214,6 +217,8 @@ export type Order = {
     image?: string;
   };
   droneTelemetry?: DroneTelemetry;
+  dronePhase?: string;
+  deliveryDistanceKm?: number;
   tracking?: ShipperTracking;
   shipperId?: { _id?: string; name?: string; phone?: string };
   reviewFlow?: ReviewFlow;
@@ -306,6 +311,7 @@ export type UserProfile = {
 
 export type ScreenName =
   | "home"
+  | "search"
   | "restaurant"
   | "cart"
   | "cart-detail"

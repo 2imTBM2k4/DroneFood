@@ -152,6 +152,42 @@ export const OptionGroupModal: React.FC<OptionGroupModalProps> = ({
       onClose={onClose}
       title={food.name}
       subtitle={food.description}
+      footer={(
+        <View style={styles.modalFooterContent}>
+          <View style={styles.quantitySection}>
+            <Text style={styles.quantityLabel}>Số lượng</Text>
+            <View style={styles.quantityControls}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Giảm số lượng"
+                style={[styles.qtyBtn, quantity <= 1 && styles.qtyBtnDisabled]}
+                disabled={quantity <= 1}
+                onPress={() => setQuantity((q) => Math.max(1, q - 1))}
+              >
+                <Text style={styles.qtyBtnText}>−</Text>
+              </Pressable>
+              <Text style={styles.qtyText}>{quantity}</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Tăng số lượng"
+                style={styles.qtyBtn}
+                onPress={() => setQuantity((q) => q + 1)}
+              >
+                <Text style={styles.qtyBtnText}>+</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          <Button
+            label={submitLabel || `Thêm vào giỏ hàng • ${formatVnd(unitPrice * quantity)}`}
+            loading={loading}
+            onPress={handleAdd}
+            size="md"
+            fullWidth
+            style={styles.submitBtn}
+          />
+        </View>
+      )}
     >
       {food.image ? (
         <Image
@@ -224,32 +260,6 @@ export const OptionGroupModal: React.FC<OptionGroupModalProps> = ({
           </View>
         );
       })}
-
-      <View style={styles.quantitySection}>
-        <Text style={styles.quantityLabel}>Số lượng</Text>
-        <View style={styles.quantityControls}>
-          <Pressable
-            style={[styles.qtyBtn, quantity <= 1 && styles.qtyBtnDisabled]}
-            disabled={quantity <= 1}
-            onPress={() => setQuantity((q) => Math.max(1, q - 1))}
-          >
-            <Text style={styles.qtyBtnText}>−</Text>
-          </Pressable>
-          <Text style={styles.qtyText}>{quantity}</Text>
-          <Pressable
-            style={styles.qtyBtn}
-            onPress={() => setQuantity((q) => q + 1)}
-          >
-            <Text style={styles.qtyBtnText}>+</Text>
-          </Pressable>
-        </View>
-      </View>
-
-      <Button
-        label={submitLabel || `Thêm vào giỏ hàng • ${formatVnd(unitPrice * quantity)}`}
-        loading={loading}
-        onPress={handleAdd}
-      />
     </ModalContainer>
   );
 };
@@ -287,12 +297,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: spacing.sm,
+    minHeight: 44,
+    paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceCard,
+    borderColor: colors.borderSubtle,
+    backgroundColor: colors.surface,
   },
   optionRowSelected: {
     borderColor: colors.primary,
@@ -353,24 +364,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.xxs,
   },
   quantityLabel: {
-    ...typography.subhead,
+    ...typography.subheadBold,
     color: colors.textPrimary,
+    fontSize: 14,
   },
   quantityControls: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   qtyBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSubtle,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -378,14 +390,23 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   qtyBtnText: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "600",
     color: colors.textPrimary,
-    lineHeight: 22,
+    lineHeight: 20,
   },
   qtyText: {
-    ...typography.title2,
+    ...typography.subheadBold,
+    fontSize: 16,
     minWidth: 24,
     textAlign: "center",
+    color: colors.textPrimary,
+  },
+  modalFooterContent: {
+    gap: spacing.xs,
+  },
+  submitBtn: {
+    minHeight: 44,
+    borderRadius: radius.pill,
   },
 });

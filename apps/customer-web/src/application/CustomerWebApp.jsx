@@ -22,6 +22,7 @@ import FloatingCartBar from "../components/FloatingCartBar/FloatingCartBar";
 import ResetPassword from "../pages/ResetPassword/ResetPassword";
 import OrderDetail from "../pages/OrderDetail/OrderDetail";
 import ActiveOrderBar from "../components/ActiveOrderBar/ActiveOrderBar";
+import VerifyEmail from "../pages/VerifyEmail/VerifyEmail";
 
 const PageTransition = ({ children }) => {
   const location = useLocation();
@@ -59,12 +60,13 @@ const PageTransition = ({ children }) => {
 const CustomerWebApp = () => {
   const { showLogin, setShowLogin } = useContext(StoreContext);
   const location = useLocation();
-  const isMyOrdersPage = location.pathname === "/myorders";
+  const isOrdersPage =
+    location.pathname === "/myorders" || location.pathname.startsWith("/myorders/");
 
   return (
     <>
       {showLogin && <LoginPopup setShowLogin={setShowLogin} />}
-      <div className={`main-content${isMyOrdersPage ? " main-content--my-orders" : ""}`}>
+      <div className={`main-content${isOrdersPage ? " main-content--my-orders" : ""}`}>
         <Navbar setShowLogin={setShowLogin} />
         <PageTransition>
           <Routes>
@@ -83,6 +85,8 @@ const CustomerWebApp = () => {
             <Route path="/profile" element={<Profile />} />
             <Route path="/product/:id" element={<ProductDetail />} />
             <Route path="/reset-password/:token" element={<ResetPassword />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
+            <Route path="/verify-email/:token" element={<VerifyEmail />} />
             {/* The old three-route flow (Cart → PlaceOrder → Payment) is now
                 one page; keep the old paths working for saved links. */}
             <Route path="/order" element={<Navigate to="/cart" replace />} />
@@ -97,7 +101,7 @@ const CustomerWebApp = () => {
           </Routes>
         </PageTransition>
       </div>
-      <Footer compactTop={isMyOrdersPage} />
+      <Footer compactTop={isOrdersPage} />
       <FloatingCartBar />
       <ActiveOrderBar />
       <ToastContainer position="bottom-center" pauseOnHover={false} />

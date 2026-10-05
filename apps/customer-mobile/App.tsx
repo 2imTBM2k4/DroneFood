@@ -61,6 +61,7 @@ import { registerPushNotifications, unregisterPushNotifications } from "./src/pu
 // Screens
 import { AuthScreen } from "./src/screens/auth/AuthScreen";
 import { HomeScreen } from "./src/screens/home/HomeScreen";
+import { SearchScreen } from "./src/screens/search/SearchScreen";
 import { RestaurantDetailScreen } from "./src/screens/restaurant/RestaurantDetailScreen";
 import { CartScreen } from "./src/screens/cart/CartScreen";
 import { CartIndexScreen } from "./src/screens/cart/CartIndexScreen";
@@ -126,6 +127,7 @@ function CustomerApp() {
   const [selectedFoodForModal, setSelectedFoodForModal] = useState<Food | null>(null);
   const [editingCartLine, setEditingCartLine] = useState<CartLine | null>(null);
   const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
+  const [searchInitialQuery, setSearchInitialQuery] = useState("");
 
   const [address, setAddress] = useState<Address>(defaultAddress);
   const [selectedAddressId, setSelectedAddressId] = useState<string | undefined>(undefined);
@@ -980,9 +982,29 @@ function CustomerApp() {
             hasLocation={Boolean(customerLocation)}
             currentAddressText={address.address}
             onOpenAddressBook={() => setAddressPickerOpen(true)}
+            onNavigateSearch={(keyword) => {
+              setSearchInitialQuery(keyword || "");
+              setScreen("search");
+            }}
             onSelectRestaurant={(r) => {
               setSelectedRestaurant(r);
               setScreen("restaurant");
+            }}
+          />
+        )}
+
+        {screen === "search" && (
+          <SearchScreen
+            restaurants={nearbyRestaurants}
+            initialQuery={searchInitialQuery}
+            onBack={() => setScreen("home")}
+            onSelectRestaurant={(r) => {
+              setSelectedRestaurant(r);
+              setScreen("restaurant");
+            }}
+            onSelectFood={(food, restaurant) => {
+              if (restaurant) setSelectedRestaurant(restaurant);
+              setSelectedFoodForModal(food);
             }}
           />
         )}
@@ -1111,6 +1133,10 @@ function CustomerApp() {
               await userApi.updateAvatar(asset);
               await profileQuery.refetch();
             }}
+            onChangePassword={async (currentPassword, newPassword) => {
+              await userApi.changePassword(currentPassword, newPassword);
+              await handleLogout();
+            }}
             transactions={transactionsQuery.data?.transactions || []}
             transactionsLoading={transactionsQuery.isLoading}
             onRefreshTransactions={() => transactionsQuery.refetch()}
@@ -1131,14 +1157,16 @@ function CustomerApp() {
       ) : null}
 
       {/* Bottom Tab Bar */}
-      <TabBar
-        currentTab={screen}
-        onTabChange={(tab) => {
-          if (tab === "home") setSelectedRestaurant(null);
-          setScreen(tab);
-        }}
-        cartCount={cartCount}
-      />
+      {screen !== "search" ? (
+        <TabBar
+          currentTab={screen}
+          onTabChange={(tab) => {
+            if (tab === "home") setSelectedRestaurant(null);
+            setScreen(tab);
+          }}
+          cartCount={cartCount}
+        />
+      ) : null}
 
       {/* Option Group Modal for custom food toppings/sizes */}
       <OptionGroupModal

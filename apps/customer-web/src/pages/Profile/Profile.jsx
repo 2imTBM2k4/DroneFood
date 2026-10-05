@@ -14,14 +14,17 @@ const TABS = [
 ];
 
 const Profile = () => {
-  const { token, customerApi, user, setUser, setShowLogin } = useContext(StoreContext);
+  const { token, customerApi, user, setUser, setShowLogin, logoutCustomer } = useContext(StoreContext);
   const [activeTab, setActiveTab] = useState("info");
   const fileInputRef = useRef(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   // Each section owns its own form state and saving flag.
-  const [info, setInfo] = useState({ name: "", email: "", phone: "" });
+  const [info, setInfo] = useState({ name: "", phone: "" });
   const [savingInfo, setSavingInfo] = useState(false);
+  const [emailChange, setEmailChange] = useState({ email: "", currentPassword: "" });
+  const [requestingEmailChange, setRequestingEmailChange] = useState(false);
+  const [emailChangeStatus, setEmailChangeStatus] = useState("");
 
   const [password, setPassword] = useState({
     currentPassword: "",
@@ -36,7 +39,6 @@ const Profile = () => {
     if (!user) return;
     setInfo({
       name: user.name || "",
-      email: user.email || "",
       phone: user.phone || "",
     });
   }, [user]);
@@ -81,7 +83,10 @@ const Profile = () => {
     e.preventDefault();
     try {
       setSavingInfo(true);
-      const res = await customerApi.put("/api/user/profile", info);
+      const res = await customerApi.put("/api/user/profile", {
+        name: info.name,
+        phone: info.phone,
+      });
       if (res.data.success) {
         setUser(res.data.data);
         toast.success("Profile updated");
@@ -92,6 +97,28 @@ const Profile = () => {
       toast.error(err.response?.data?.message || "Update failed");
     } finally {
       setSavingInfo(false);
+    }
+  };
+
+  const handleEmailChange = async (event) => {
+    event.preventDefault();
+    setEmailChangeStatus("");
+    try {
+      setRequestingEmailChange(true);
+      const res = await customerApi.put("/api/user/request-email-change", {
+        email: emailChange.email.trim(),
+        currentPassword: emailChange.currentPassword,
+      });
+      if (!res.data.success) {
+        setEmailChangeStatus(res.data.message || "Không thể gửi yêu cầu đổi email.");
+        return;
+      }
+      setEmailChangeStatus(res.data.message || `Hãy xác nhận địa chỉ ${res.data.email || emailChange.email}.`);
+      setEmailChange({ email: "", currentPassword: "" });
+    } catch (error) {
+      setEmailChangeStatus(error.response?.data?.message || "Không thể gửi yêu cầu đổi email. Vui lòng thử lại.");
+    } finally {
+      setRequestingEmailChange(false);
     }
   };
 
@@ -112,12 +139,14 @@ const Profile = () => {
         newPassword: password.newPassword,
       });
       if (res.data.success) {
-        toast.success(res.data.message || "Password changed");
+        toast.success("Đã đổi mật khẩu. Vui lòng đăng nhập lại.");
         setPassword({
           currentPassword: "",
           newPassword: "",
           confirmPassword: "",
         });
+        logoutCustomer();
+        setShowLogin(true);
       } else {
         toast.error(res.data.message || "Change failed");
       }
@@ -194,6 +223,7 @@ const Profile = () => {
 
       <div className="profile-panel">
         {activeTab === "info" && (
+          <div className="profile-form-stack">
           <form className="profile-form" onSubmit={handleSaveInfo}>
             <div className="profile-field">
               <label htmlFor="pf-name">Full name</label>
@@ -203,17 +233,20 @@ const Profile = () => {
                 value={info.name}
                 onChange={(e) => setInfo({ ...info, name: e.target.value })}
                 placeholder="Your name"
+                autoComplete="name"
+                required
               />
             </div>
             <div className="profile-field">
-              <label htmlFor="pf-email">Email</label>
+              <label htmlFor="pf-current-email">Email hiện tại</label>
               <input
-                id="pf-email"
+                id="pf-current-email"
                 type="email"
-                value={info.email}
-                onChange={(e) => setInfo({ ...info, email: e.target.value })}
-                placeholder="you@example.com"
+                value={user?.email || ""}
+                readOnly
+                aria-readonly="true"
               />
+              <span className="profile-field-help">Đổi email cần xác nhận qua địa chỉ mới.</span>
             </div>
             <div className="profile-field">
               <label htmlFor="pf-phone">Phone</label>
@@ -223,12 +256,46 @@ const Profile = () => {
                 value={info.phone}
                 onChange={(e) => setInfo({ ...info, phone: e.target.value })}
                 placeholder="Phone number"
+                autoComplete="tel"
               />
             </div>
             <button type="submit" className="profile-save" disabled={savingInfo}>
               {savingInfo ? "Saving..." : "Save changes"}
             </button>
           </form>
+          <form className="profile-form profile-email-change" onSubmit={handleEmailChange}>
+            <div className="profile-form-heading">
+              <h3>Đổi địa chỉ email</h3>
+              <p>Email hiện tại chỉ thay đổi sau khi bạn mở liên kết xác nhận gửi tới email mới.</p>
+            </div>
+            <div className="profile-field">
+              <label htmlFor="pf-new-email">Email mới</label>
+              <input
+                id="pf-new-email"
+                type="email"
+                value={emailChange.email}
+                onChange={(event) => setEmailChange((current) => ({ ...current, email: event.target.value }))}
+                autoComplete="email"
+                required
+              />
+            </div>
+            <div className="profile-field">
+              <label htmlFor="pf-email-password">Mật khẩu hiện tại</label>
+              <input
+                id="pf-email-password"
+                type="password"
+                value={emailChange.currentPassword}
+                onChange={(event) => setEmailChange((current) => ({ ...current, currentPassword: event.target.value }))}
+                autoComplete="current-password"
+                required
+              />
+            </div>
+            {emailChangeStatus ? <p className="profile-form-status" role="status">{emailChangeStatus}</p> : null}
+            <button type="submit" className="profile-save" disabled={requestingEmailChange}>
+              {requestingEmailChange ? "Đang gửi…" : "Gửi email xác nhận"}
+            </button>
+          </form>
+          </div>
         )}
 
         {activeTab === "address" && (

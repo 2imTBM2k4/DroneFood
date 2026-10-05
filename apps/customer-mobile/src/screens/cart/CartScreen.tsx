@@ -2,9 +2,9 @@ import React from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { formatVnd, resolveMediaUrl } from "../../api/client";
 import { Button } from "../../components/common/Button";
-import { GlassSurface } from "../../components/common/GlassSurface";
 import { Header } from "../../components/common/Header";
 import { Icon } from "../../components/common/Icon";
+import { InfoRow } from "../../components/common/InfoRow";
 import { useToast } from "../../components/common/ToastProvider";
 import { colors, radius, spacing, typography } from "../../theme/tokens";
 import type { Cart, CartLine } from "../../types";
@@ -19,7 +19,15 @@ interface CartScreenProps {
   onBack: () => void;
 }
 
-export const CartScreen: React.FC<CartScreenProps> = ({ cart, loading, onUpdateQuantity, onClearCart, onProceedCheckout, onExploreFood, onBack }) => {
+export const CartScreen: React.FC<CartScreenProps> = ({
+  cart,
+  loading,
+  onUpdateQuantity,
+  onClearCart,
+  onProceedCheckout,
+  onExploreFood,
+  onBack,
+}) => {
   const { showToast } = useToast();
   const { width } = useWindowDimensions();
   const compact = width < 380;
@@ -28,34 +36,61 @@ export const CartScreen: React.FC<CartScreenProps> = ({ cart, loading, onUpdateQ
   const count = items.reduce((sum, item) => sum + item.quantity, 0);
   const closed = cart?.restaurant?.isOpen === false;
 
-  const confirmClear = () => showToast({
-    type: "warning",
-    title: "Xóa giỏ hàng?",
-    message: "Bạn muốn xóa toàn bộ món trong giỏ?",
-    duration: 8000,
-    secondaryAction: { label: "Giữ lại" },
-    primaryAction: { label: "Xóa hết", destructive: true, onPress: onClearCart },
-  });
+  const confirmClear = () =>
+    showToast({
+      type: "warning",
+      title: "Xóa giỏ hàng?",
+      message: "Bạn muốn xóa toàn bộ món trong giỏ?",
+      duration: 8000,
+      secondaryAction: { label: "Giữ lại" },
+      primaryAction: { label: "Xóa hết", destructive: true, onPress: onClearCart },
+    });
 
-  if (!items.length) return (
-    <View style={styles.screen}>
-      <Header title="Chi tiết giỏ hàng" onBack={onBack} />
-      <View style={styles.emptyWrap}>
-        <GlassSurface tone="strong" contentStyle={styles.emptyCard}>
-          <View style={styles.emptyIcon}><Icon name="cart" size={34} color={colors.primary} /></View>
-          <Text style={styles.emptyTitle}>Giỏ hàng đang trống</Text>
-          <Text style={styles.emptyText}>Chọn món từ nhà hàng gần bạn để bắt đầu đơn hàng.</Text>
-          <Button label="Khám phá nhà hàng" onPress={onExploreFood} style={styles.emptyButton} />
-        </GlassSurface>
+  if (!items.length) {
+    return (
+      <View style={styles.screen}>
+        <Header title="Chi tiết giỏ hàng" onBack={onBack} />
+        <View style={styles.emptyWrap}>
+          <View style={styles.emptyCard}>
+            <View style={styles.emptyIcon}>
+              <Icon name="cart" size={34} color={colors.primary} />
+            </View>
+            <Text style={styles.emptyTitle}>Giỏ hàng đang trống</Text>
+            <Text style={styles.emptyText}>
+              Chọn món từ nhà hàng gần bạn để bắt đầu đơn hàng.
+            </Text>
+            <Button
+              label="Khám phá nhà hàng"
+              variant="primary"
+              onPress={onExploreFood}
+              style={styles.emptyButton}
+            />
+          </View>
+        </View>
       </View>
-    </View>
-  );
+    );
+  }
 
   return (
     <View style={styles.screen}>
-      <Header title="Chi tiết giỏ hàng" subtitle={`${count} món`} onBack={onBack} rightAction={<Pressable hitSlop={10} onPress={confirmClear}><Text style={styles.clear}>Xóa hết</Text></Pressable>} />
-      <ScrollView contentContainerStyle={[styles.content, compact && styles.contentCompact]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
-        <GlassSurface tone="strong" contentStyle={styles.restaurantCard}>
+      <Header
+        title="Chi tiết giỏ hàng"
+        subtitle={`${count} món`}
+        onBack={onBack}
+        rightAction={
+          <Pressable hitSlop={12} onPress={confirmClear}>
+            <Text style={styles.clear}>Xóa hết</Text>
+          </Pressable>
+        }
+      />
+      <ScrollView
+        contentContainerStyle={[styles.content, compact && styles.contentCompact]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
+        {/* Restaurant Header Card */}
+        <View style={styles.restaurantCard}>
           {cart?.restaurant?.image ? (
             <Image
               source={{ uri: resolveMediaUrl(cart.restaurant.image) }}
@@ -69,110 +104,384 @@ export const CartScreen: React.FC<CartScreenProps> = ({ cart, loading, onUpdateQ
             </View>
           )}
           <View style={styles.restaurantCopy}>
-            <Text numberOfLines={2} style={styles.restaurantName}>{cart?.restaurant?.name || "Nhà hàng"}</Text>
+            <Text numberOfLines={2} style={styles.restaurantName}>
+              {cart?.restaurant?.name || "Nhà hàng"}
+            </Text>
             <Text style={[styles.restaurantStatus, closed && styles.restaurantStatusClosed]}>
               {closed ? "Quán đang đóng cửa" : "Đang nhận đơn"}
             </Text>
           </View>
-        </GlassSurface>
+        </View>
+
         {closed ? (
-          <GlassSurface tone="soft" contentStyle={styles.closedCard}>
+          <View style={styles.closedCard}>
             <Icon name="clock" size={18} color={colors.danger} />
-            <Text style={styles.closedText}>Quán đang đóng cửa. Bạn vẫn có thể sửa hoặc xóa món nhưng chưa thể đặt hàng.</Text>
-          </GlassSurface>
+            <Text style={styles.closedText}>
+              Quán đang đóng cửa. Bạn vẫn có thể sửa hoặc xóa món nhưng chưa thể đặt hàng.
+            </Text>
+          </View>
         ) : null}
-        <GlassSurface tone="strong" contentStyle={[styles.itemsCard, compact && styles.itemsCardCompact]}>
+
+        {/* Order Items List Card */}
+        <View style={[styles.itemsCard, compact && styles.itemsCardCompact]}>
           {items.map((line, index) => (
-            <View key={line.lineKey} style={[styles.item, index < items.length - 1 && styles.itemBorder]}>
+            <View
+              key={line.lineKey}
+              style={[styles.item, index < items.length - 1 && styles.itemBorder]}
+            >
               {line.image ? (
-                <Image source={{ uri: resolveMediaUrl(line.image) }} style={[styles.itemImage, compact && styles.itemImageCompact]} resizeMode="cover" accessibilityLabel={`Hình món ${line.name}`} />
+                <Image
+                  source={{ uri: resolveMediaUrl(line.image) }}
+                  style={[styles.itemImage, compact && styles.itemImageCompact]}
+                  resizeMode="cover"
+                  accessibilityLabel={`Hình món ${line.name}`}
+                />
               ) : (
-                <View style={[styles.itemImageFallback, compact && styles.itemImageCompact]}><Icon name="utensils" size={compact ? 23 : 27} color={colors.textSecondary} /></View>
+                <View style={[styles.itemImageFallback, compact && styles.itemImageCompact]}>
+                  <Icon name="utensils" size={compact ? 23 : 27} color={colors.primary} />
+                </View>
               )}
               <View style={styles.itemInfo}>
-                <Text numberOfLines={2} style={styles.itemName}>{line.name}</Text>
-                {line.selectedOptions?.map((option) => <Text numberOfLines={1} key={`${option.groupName}-${option.optionName}`} style={styles.option}>{option.groupName}: {option.optionName}{option.priceDelta ? ` · +${formatVnd(option.priceDelta)}` : ""}</Text>)}
+                <Text numberOfLines={2} style={styles.itemName}>
+                  {line.name}
+                </Text>
+                {line.selectedOptions?.map((option) => (
+                  <Text
+                    numberOfLines={1}
+                    key={`${option.groupName}-${option.optionName}`}
+                    style={styles.option}
+                  >
+                    {option.groupName}: {option.optionName}
+                    {option.priceDelta ? ` · +${formatVnd(option.priceDelta)}` : ""}
+                  </Text>
+                ))}
                 <View style={styles.itemFooter}>
-                  <Text style={styles.itemPrice}>{formatVnd(line.unitPrice * line.quantity)}</Text>
+                  <Text style={styles.itemPrice}>
+                    {formatVnd(line.unitPrice * line.quantity)}
+                  </Text>
+                  {/* Stepper with >= 44x44 touch targets */}
                   <View style={styles.quantity}>
-                    <Pressable style={styles.qtyButton} accessibilityRole="button" accessibilityLabel={line.quantity === 1 ? `Xóa ${line.name}` : `Giảm ${line.name}`} onPress={() => onUpdateQuantity(line, line.quantity - 1)}>
-                      {line.quantity === 1 ? <Icon name="trash" size={15} color={colors.textSecondary} /> : <Text style={styles.qtyButtonText}>−</Text>}
+                    <Pressable
+                      style={styles.qtyButton}
+                      accessibilityRole="button"
+                      accessibilityLabel={line.quantity === 1 ? `Xóa ${line.name}` : `Giảm ${line.name}`}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      onPress={() => onUpdateQuantity(line, line.quantity - 1)}
+                    >
+                      {line.quantity === 1 ? (
+                        <Icon name="trash" size={15} color={colors.textSecondary} />
+                      ) : (
+                        <Text style={styles.qtyButtonText}>−</Text>
+                      )}
                     </Pressable>
                     <Text style={styles.qty}>{line.quantity}</Text>
-                    <Pressable style={[styles.qtyButton, styles.qtyAdd]} accessibilityRole="button" accessibilityLabel={`Tăng ${line.name}`} onPress={() => onUpdateQuantity(line, line.quantity + 1)}><Text style={[styles.qtyButtonText, styles.qtyAddText]}>+</Text></Pressable>
+                    <Pressable
+                      style={[styles.qtyButton, styles.qtyAdd]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Tăng ${line.name}`}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      onPress={() => onUpdateQuantity(line, line.quantity + 1)}
+                    >
+                      <Text style={[styles.qtyButtonText, styles.qtyAddText]}>+</Text>
+                    </Pressable>
                   </View>
                 </View>
               </View>
             </View>
           ))}
-        </GlassSurface>
+        </View>
 
-        <GlassSurface tone="soft" contentStyle={styles.noteCard}>
+        {/* Note Card */}
+        <View style={styles.noteCard}>
           <Icon name="sparkles" size={18} color={colors.primary} />
-          <Text style={styles.noteText}>Phí giao hàng được tính theo địa chỉ và phương thức giao ở bước tiếp theo.</Text>
-        </GlassSurface>
+          <Text style={styles.noteText}>
+            Phí giao hàng được tính theo địa chỉ và phương thức giao ở bước tiếp theo.
+          </Text>
+        </View>
 
-        <GlassSurface tone="strong" contentStyle={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>Tóm tắt</Text>
-          <View style={styles.summaryRow}><Text style={styles.summaryLabel}>Tạm tính</Text><Text style={styles.summaryValue}>{formatVnd(subtotal)}</Text></View>
-          <View style={styles.summaryRow}><Text style={styles.summaryLabel}>Phí giao hàng</Text><Text style={styles.summaryMuted}>Tính khi thanh toán</Text></View>
+        {/* Order Summary Card */}
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryTitle}>Tóm tắt đơn hàng</Text>
+          <InfoRow label="Tạm tính" value={formatVnd(subtotal)} />
+          <InfoRow label="Phí giao hàng" value="Tính khi thanh toán" />
           <View style={styles.divider} />
-          <View style={styles.summaryRow}><Text style={styles.totalLabel}>Tổng tạm tính</Text><Text style={styles.total}>{formatVnd(subtotal)}</Text></View>
-        </GlassSurface>
+          <InfoRow label="Tổng tạm tính" value={formatVnd(subtotal)} isTotal />
+        </View>
 
-        <Button label={closed ? "Quán đang đóng cửa" : `Tiếp tục thanh toán · ${formatVnd(subtotal)}`} loading={loading} disabled={closed} onPress={onProceedCheckout} />
+        {/* Sticky Action Button */}
+        <Button
+          label={closed ? "Quán đang đóng cửa" : `Tiếp tục thanh toán · ${formatVnd(subtotal)}`}
+          loading={loading}
+          disabled={closed}
+          variant="primary"
+          size="lg"
+          fullWidth
+          onPress={onProceedCheckout}
+        />
       </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "transparent" },
-  content: { padding: spacing.md, paddingBottom: 132, gap: spacing.md },
-  contentCompact: { paddingHorizontal: spacing.sm, paddingTop: spacing.sm },
-  clear: { ...typography.captionBold, color: colors.danger },
-  restaurantCard: { minHeight: 84, padding: spacing.sm, flexDirection: "row", alignItems: "center", gap: spacing.md },
-  restaurantAvatar: { width: 64, height: 64, borderRadius: radius.pill, backgroundColor: colors.surfaceSubtle },
-  restaurantAvatarFallback: { width: 64, height: 64, borderRadius: radius.pill, backgroundColor: colors.primaryLight, alignItems: "center", justifyContent: "center" },
-  restaurantCopy: { flex: 1, minWidth: 0, gap: spacing.xxs },
-  restaurantName: { ...typography.subheadBold, color: colors.textPrimary },
-  restaurantStatus: { ...typography.captionBold, color: colors.success },
-  restaurantStatusClosed: { color: colors.danger },
-  closedCard: { padding: spacing.md, flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  closedText: { ...typography.captionBold, color: colors.danger, flex: 1 },
-  emptyWrap: { flex: 1, padding: spacing.md, justifyContent: "center" },
-  emptyCard: { padding: spacing.xl, alignItems: "center", gap: spacing.sm },
-  emptyIcon: { width: 68, height: 68, borderRadius: 34, backgroundColor: colors.primaryLight, alignItems: "center", justifyContent: "center" },
-  emptyTitle: { ...typography.title1, color: colors.textPrimary, textAlign: "center" },
-  emptyText: { ...typography.bodySecondary, color: colors.textSecondary, textAlign: "center", maxWidth: 280 },
-  emptyButton: { marginTop: spacing.sm, alignSelf: "stretch" },
-  itemsCard: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  itemsCardCompact: { paddingHorizontal: spacing.sm },
-  item: { minHeight: 120, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.md },
-  itemBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  itemImage: { width: 86, height: 86, borderRadius: radius.md, backgroundColor: colors.surfaceSubtle },
-  itemImageCompact: { width: 70, height: 70, borderRadius: radius.sm },
-  itemImageFallback: { width: 86, height: 86, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: colors.primaryLight },
-  itemInfo: { flex: 1, gap: 3 },
-  itemName: { ...typography.subheadBold, color: colors.textPrimary },
-  option: { ...typography.caption, color: colors.textSecondary },
-  itemPrice: { ...typography.captionBold, color: colors.primary, marginTop: 3 },
-  itemFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.xs, marginTop: spacing.xxs },
-  quantity: { flexDirection: "row", alignItems: "center", gap: 4, padding: 3, borderRadius: radius.pill, backgroundColor: colors.surfaceSubtle, borderWidth: 1, borderColor: colors.border },
-  qtyButton: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  qtyAdd: { backgroundColor: colors.primary },
-  qtyButtonText: { fontSize: 18, fontWeight: "700", color: colors.textPrimary },
-  qtyAddText: { color: colors.textWhite },
-  qty: { ...typography.subheadBold, color: colors.textPrimary, minWidth: 22, textAlign: "center" },
-  noteCard: { padding: spacing.md, flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
-  noteText: { ...typography.caption, color: colors.textSecondary, flex: 1, lineHeight: 18 },
-  summaryCard: { padding: spacing.lg, gap: spacing.sm },
-  summaryTitle: { ...typography.title2, color: colors.textPrimary, marginBottom: spacing.xxs },
-  summaryRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },
-  summaryLabel: { ...typography.bodySecondary, color: colors.textSecondary },
-  summaryValue: { ...typography.body, color: colors.textPrimary, fontWeight: "700" },
-  summaryMuted: { ...typography.caption, color: colors.textSecondary },
-  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.xs },
-  totalLabel: { ...typography.subheadBold, color: colors.textPrimary },
-  total: { ...typography.title1, color: colors.primary },
+  screen: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+  content: {
+    padding: spacing.screenPadding,
+    paddingBottom: 132,
+    gap: spacing.md,
+  },
+  contentCompact: {
+    paddingHorizontal: spacing.sm,
+  },
+  clear: {
+    ...typography.caption,
+    fontWeight: "700",
+    color: colors.danger,
+  },
+  restaurantCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    minHeight: 80,
+    padding: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    shadowColor: "#003366",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  restaurantAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  restaurantAvatarFallback: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  restaurantCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  restaurantName: {
+    ...typography.subheadBold,
+    color: colors.textPrimary,
+  },
+  restaurantStatus: {
+    ...typography.caption,
+    fontWeight: "600",
+    color: colors.success,
+  },
+  restaurantStatusClosed: {
+    color: colors.danger,
+  },
+  closedCard: {
+    backgroundColor: colors.statusCancelledBg,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  closedText: {
+    ...typography.caption,
+    fontWeight: "600",
+    color: colors.danger,
+    flex: 1,
+  },
+  emptyWrap: {
+    flex: 1,
+    padding: spacing.screenPadding,
+    justifyContent: "center",
+  },
+  emptyCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.xl,
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyTitle: {
+    ...typography.screenTitle,
+    fontSize: 20,
+    color: colors.textPrimary,
+    textAlign: "center",
+  },
+  emptyText: {
+    ...typography.body,
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: "center",
+    maxWidth: 280,
+  },
+  emptyButton: {
+    marginTop: spacing.sm,
+    alignSelf: "stretch",
+  },
+  itemsCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    shadowColor: "#003366",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  itemsCardCompact: {
+    paddingHorizontal: spacing.sm,
+  },
+  item: {
+    minHeight: 110,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  itemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+  },
+  itemImage: {
+    width: 80,
+    height: 80,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  itemImageCompact: {
+    width: 68,
+    height: 68,
+  },
+  itemImageFallback: {
+    width: 80,
+    height: 80,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.primaryLight,
+  },
+  itemInfo: {
+    flex: 1,
+    gap: 3,
+  },
+  itemName: {
+    ...typography.foodTitle,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  option: {
+    ...typography.micro,
+    color: colors.textSecondary,
+  },
+  itemPrice: {
+    ...typography.price,
+    fontSize: 14,
+    color: colors.primary,
+    marginTop: 2,
+  },
+  itemFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.xs,
+    marginTop: spacing.xxs,
+  },
+  quantity: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    padding: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+  },
+  qtyButton: {
+    width: 38,
+    height: 34,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  qtyAdd: {
+    backgroundColor: colors.primary,
+  },
+  qtyButtonText: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  qtyAddText: {
+    color: colors.textWhite,
+  },
+  qty: {
+    ...typography.price,
+    fontSize: 14,
+    color: colors.textPrimary,
+    minWidth: 22,
+    textAlign: "center",
+  },
+  noteCard: {
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+  },
+  noteText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    flex: 1,
+    lineHeight: 18,
+  },
+  summaryCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.sm,
+    shadowColor: "#003366",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  summaryTitle: {
+    ...typography.sectionTitle,
+    fontSize: 16,
+    color: colors.textPrimary,
+    marginBottom: spacing.xxs,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.borderSubtle,
+    marginVertical: spacing.xxs,
+  },
 });

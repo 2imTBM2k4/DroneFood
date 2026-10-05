@@ -469,14 +469,14 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   defaultBadge: {
-    backgroundColor: "#FEF3C7",
+    backgroundColor: colors.statusPendingBg,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: radius.pill,
   },
   defaultBadgeText: {
     ...typography.captionBold,
-    color: "#B45309",
+    color: colors.statusPendingText,
     fontSize: 11,
   },
   radioCircle: {
@@ -509,7 +509,7 @@ const styles = StyleSheet.create({
   },
   coordsText: {
     ...typography.caption,
-    color: colors.droneBlue,
+    color: colors.primary,
     marginTop: 2,
   },
   coordsRow: {
@@ -540,7 +540,7 @@ const styles = StyleSheet.create({
   },
   deleteBtnText: {
     ...typography.captionBold,
-    color: "#EF4444",
+    color: colors.danger,
   },
   deleteAction: {
     flexDirection: "row",

@@ -377,6 +377,17 @@ function RestaurantAppContent() {
             restaurant={restaurantQuery.data}
             working={working}
             onUpdateProfile={handleUpdateRestaurantProfile}
+            onChangePassword={async (currentPassword, newPassword) => {
+              try {
+                setWorking(true);
+                await authApi.changePassword(currentPassword, newPassword);
+                await handleLogout();
+              } catch (cause) {
+                throw new Error(apiError(cause, "Không thể đổi mật khẩu."));
+              } finally {
+                setWorking(false);
+              }
+            }}
             onLogout={handleLogout}
           />
         )}

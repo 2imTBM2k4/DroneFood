@@ -78,7 +78,9 @@
   border: none;
   color: var(--apple-body-muted);
   cursor: pointer;
-  padding: 4px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   display: flex;
   align-items: center;
   transition: color 0.18s ease;
@@ -104,6 +106,31 @@
   margin-bottom: 24px;
 }
 
+.apple-modal-label {
+  color: var(--apple-ink);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: -8px;
+}
+
+.apple-modal-error {
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: -10px 0 14px;
+}
+
+.apple-text-link-button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  min-height: 44px;
+  padding: 0 4px;
+}
+
 /* Apple Input: 11px radius, hairline border, clean focus ring */
 .apple-modal-input {
   width: 100%;
@@ -126,6 +153,7 @@
 
 .apple-modal-input:focus {
   border-color: var(--apple-primary-focus);
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.18);
 }
 
 .apple-modal-input::placeholder {
@@ -138,6 +166,18 @@
   height: 44px;
   font-size: 15px !important;
   margin-bottom: 16px;
+}
+
+.apple-modal-action:disabled,
+.apple-text-link-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.apple-modal-action .spin-icon {
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: -3px;
 }
 
 .apple-forgot-link {
@@ -182,6 +222,38 @@
   font-size: 20px;
   font-weight: 600;
   color: var(--apple-ink);
+}
+
+.apple-forgot-desc {
+  color: var(--apple-body-muted);
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.apple-verification-email {
+  color: var(--apple-ink);
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.apple-modal-status {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: rgba(0, 102, 204, 0.08);
+  color: var(--apple-ink);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .apple-modal-overlay,
+  .apple-modal-card,
+  .spin-icon {
+    animation: none;
+  }
 }
 
 .spin-icon {

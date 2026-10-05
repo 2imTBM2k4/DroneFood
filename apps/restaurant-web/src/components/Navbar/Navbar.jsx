@@ -3,7 +3,7 @@ import "./Navbar.css";
 import { assets } from "../../assets/assets";
 import { AuthContext } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { Wallet, ChevronDown, LogOut, Settings, Sun, Moon } from "lucide-react";
+import { Wallet, ChevronDown, LogOut, Settings, Shield, Sun, Moon } from "lucide-react";
 import { io } from "socket.io-client";
 import { formatVND } from "@drone-food/web-ui/utils/money";
 import NotificationBell from "@drone-food/web-ui/components/NotificationBell";
@@ -91,6 +91,16 @@ const Navbar = () => {
                   >
                     <Settings size={16} />
                     <span>Profile</span>
+                  </button>
+                  <button
+                    className="dropdown-item"
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      navigate("/security");
+                    }}
+                  >
+                    <Shield size={16} />
+                    <span>Bảo mật</span>
                   </button>
                   <div className="dropdown-divider" />
                   <button

@@ -1,9 +1,11 @@
 // backend/repositories/userRepository.js
 import { User, Restaurant, Order } from "../models/index.cjs"; // Dùng index
 
+export const initializeIndexes = () => User.init();
+
 export const findByEmail = async (email) => {
   const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : email;
-  return await User.findOne({ email: normalizedEmail }).select("+password +role"); // Select hidden fields
+  return await User.findOne({ email: normalizedEmail }).select("+password +role +authVersion"); // Select hidden fields
 };
 
 export const findById = async (id, select = "-password -cart -wishlist") => {
@@ -52,18 +54,170 @@ export const findAdmin = async () => {
   return await User.findOne({ role: "admin" }).select("+password +balance");
 };
 
-export const findByResetToken = async (hashedToken) => {
-  return await User.findOne({
-    resetPasswordToken: hashedToken,
-    resetPasswordExpires: { $gt: Date.now() },
-  }).select("+resetPasswordToken +resetPasswordExpires");
+export const consumeResetToken = async (hashedToken, updates) => {
+  return await User.findOneAndUpdate(
+    {
+      resetPasswordToken: hashedToken,
+      resetPasswordExpires: { $gt: Date.now() },
+    },
+    {
+      $set: {
+        ...updates,
+        lastResetPasswordToken: hashedToken,
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+        refreshToken: null,
+      },
+      $inc: { authVersion: 1 },
+    },
+    { new: true, runValidators: true }
+  ).select("name email role +resetPasswordToken +resetPasswordExpires +refreshToken +authVersion");
 };
+
+export const wasResetPasswordTokenConsumed = async (tokenHash) => Boolean(
+  await User.exists({ lastResetPasswordToken: tokenHash })
+);
+
+export const isResetPasswordTokenValid = async (tokenHash) => Boolean(
+  await User.exists({
+    resetPasswordToken: tokenHash,
+    resetPasswordExpires: { $gt: Date.now() },
+  })
+);
+
+export const findByEmailOrPendingEmail = async (email) => {
+  const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : email;
+  return await User.findOne({
+    $or: [{ email: normalizedEmail }, { pendingEmail: normalizedEmail }],
+  }).select("email +pendingEmail");
+};
+
+export const updatePasswordAndRevokeSessions = async (userId, password) => {
+  return await User.findByIdAndUpdate(
+    userId,
+    {
+      $set: { password, refreshToken: null },
+      $inc: { authVersion: 1 },
+    },
+    { new: true, runValidators: true }
+  ).select("name email role +authVersion");
+};
+
+export const setPasswordResetToken = (userId, resetPasswordToken, resetPasswordExpires) =>
+  User.updateOne(
+    { _id: userId },
+    { $set: { resetPasswordToken, resetPasswordExpires } }
+  );
+
+export const hasActivePasswordResetToken = async (userId, resetPasswordToken) => Boolean(
+  await User.exists({
+    _id: userId,
+    resetPasswordToken,
+    resetPasswordExpires: { $gt: new Date() },
+  })
+);
+
+export const setEmailVerificationToken = (userId, tokenHash, expiresAt) =>
+  User.updateOne(
+    { _id: userId, emailVerified: false },
+    { $set: { emailVerificationToken: tokenHash, emailVerificationExpires: expiresAt } }
+  );
+
+export const hasActiveEmailVerificationToken = async (userId, tokenHash) => Boolean(
+  await User.exists({
+    _id: userId,
+    emailVerified: false,
+    emailVerificationToken: tokenHash,
+    emailVerificationExpires: { $gt: new Date() },
+  })
+);
+
+export const consumeEmailVerificationToken = (tokenHash) => User.findOneAndUpdate(
+  {
+    emailVerified: false,
+    emailVerificationToken: tokenHash,
+    emailVerificationExpires: { $gt: new Date() },
+  },
+  {
+    $set: {
+      emailVerified: true,
+      emailVerifiedAt: new Date(),
+      lastEmailVerificationToken: tokenHash,
+      emailVerificationToken: null,
+      emailVerificationExpires: null,
+    },
+  },
+  { new: true }
+).select("name email role emailVerified emailVerifiedAt");
+
+export const wasEmailVerificationTokenConsumed = async (tokenHash) => Boolean(
+  await User.exists({ lastEmailVerificationToken: tokenHash, emailVerified: true })
+);
+
+export const setPendingEmailVerification = (userId, pendingEmail, tokenHash, expiresAt) =>
+  User.findOneAndUpdate(
+    { _id: userId, emailVerified: { $ne: false } },
+    {
+      $set: {
+        pendingEmail,
+        pendingEmailVerificationToken: tokenHash,
+        pendingEmailVerificationExpires: expiresAt,
+      },
+    },
+    { new: true, runValidators: true }
+  ).select("name email role +pendingEmail +authVersion");
+
+export const hasActivePendingEmailToken = async (userId, tokenHash) => Boolean(
+  await User.exists({
+    _id: userId,
+    pendingEmailVerificationToken: tokenHash,
+    pendingEmailVerificationExpires: { $gt: new Date() },
+  })
+);
+
+export const consumePendingEmailToken = async (tokenHash) => {
+  const candidate = await User.findOne({
+    pendingEmailVerificationToken: tokenHash,
+    pendingEmailVerificationExpires: { $gt: new Date() },
+  }).select("+pendingEmail");
+  if (!candidate?.pendingEmail) return null;
+
+  const oldEmail = candidate.email;
+  const user = await User.findOneAndUpdate(
+    {
+      _id: candidate._id,
+      pendingEmail: candidate.pendingEmail,
+      pendingEmailVerificationToken: tokenHash,
+    },
+    {
+      $set: {
+        email: candidate.pendingEmail,
+        emailVerified: true,
+        emailVerifiedAt: new Date(),
+        lastPendingEmailVerificationToken: tokenHash,
+        refreshToken: null,
+      },
+      $unset: {
+        pendingEmail: 1,
+        pendingEmailVerificationToken: 1,
+        pendingEmailVerificationExpires: 1,
+      },
+      $inc: { authVersion: 1 },
+    },
+    { new: true }
+  ).select("name email role +authVersion");
+  return user ? { user, oldEmail } : null;
+};
+
+export const wasPendingEmailTokenConsumed = async (tokenHash) => Boolean(
+  await User.exists({ lastPendingEmailVerificationToken: tokenHash })
+);
 
 export const findByRefreshToken = async (userId, hashedToken) => {
   return await User.findOne({
     _id: userId,
     refreshToken: hashedToken,
-  }).select("+refreshToken");
+  }).select("+refreshToken +authVersion");
 };
 
 export const updateRestaurantForUser = async (userId, restaurantId) => {

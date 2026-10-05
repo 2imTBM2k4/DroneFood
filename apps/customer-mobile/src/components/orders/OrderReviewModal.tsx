@@ -380,12 +380,12 @@ const styles = StyleSheet.create({
   skipBtn: {
     flex: 1,
     height: 46,
-    borderRadius: radius.lg,
+    borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSubtle,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: colors.canvas,
+    backgroundColor: colors.surface,
   },
   skipBtnText: {
     fontSize: 15,
@@ -395,20 +395,15 @@ const styles = StyleSheet.create({
   submitBtn: {
     flex: 1.5,
     height: 46,
-    borderRadius: radius.lg,
+    borderRadius: radius.pill,
     backgroundColor: colors.primary,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 3,
   },
   submitBtnText: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: colors.textWhite,
   },
   btnDisabled: {
     opacity: 0.45,

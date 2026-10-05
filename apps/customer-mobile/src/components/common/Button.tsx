@@ -8,40 +8,58 @@ import {
   type TextStyle,
   type ViewStyle,
 } from "react-native";
-import { colors, motion, radius, shadows, spacing, typography } from "../../theme/tokens";
+import { colors, motion, radius, spacing, typography } from "../../theme/tokens";
 
-interface ButtonProps {
+export type ButtonVariant = "primary" | "secondary" | "danger" | "outline" | "ghost" | "glass";
+export type ButtonSize = "sm" | "md" | "lg";
+
+export interface ButtonProps {
   label: string;
   onPress: () => void;
-  variant?: "primary" | "secondary" | "danger" | "outline" | "ghost";
+  variant?: ButtonVariant;
+  size?: ButtonSize;
   disabled?: boolean;
   loading?: boolean;
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
   icon?: React.ReactNode;
+  accessibilityLabel?: string;
+  fullWidth?: boolean;
 }
 
 export const Button: React.FC<ButtonProps> = ({
   label,
   onPress,
   variant = "primary",
+  size = "md",
   disabled = false,
   loading = false,
   style,
   textStyle,
   icon,
+  accessibilityLabel,
+  fullWidth = false,
 }) => {
   const isSolid = variant === "primary" || variant === "danger";
+  const isGlass = variant === "glass";
+
+  const getSpinnerColor = () => {
+    if (isSolid || isGlass) return colors.textWhite;
+    return colors.primary;
+  };
 
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || label}
       accessibilityState={{ disabled: disabled || loading, busy: loading }}
+      hitSlop={size === "sm" ? { top: 4, bottom: 4, left: 4, right: 4 } : undefined}
       style={({ pressed }) => [
         styles.base,
         styles[variant],
-        isSolid && shadows.glass,
-        pressed && !disabled && styles.pressed,
+        styles[size],
+        fullWidth && styles.fullWidth,
+        pressed && !disabled && !loading && styles.pressed,
         (disabled || loading) && styles.disabled,
         style,
       ]}
@@ -49,11 +67,22 @@ export const Button: React.FC<ButtonProps> = ({
       onPress={onPress}
     >
       {loading ? (
-        <ActivityIndicator size="small" color={isSolid ? colors.textWhite : colors.primary} />
+        <ActivityIndicator size="small" color={getSpinnerColor()} />
       ) : (
         <>
-          {icon}
-          <Text style={[styles.baseText, styles[`${variant}Text`], textStyle]}>{label}</Text>
+          {icon ? <>{icon}</> : null}
+          <Text
+            style={[
+              styles.baseText,
+              styles[`${variant}Text`],
+              styles[`${size}Text`],
+              icon ? styles.textWithIcon : null,
+              textStyle,
+            ]}
+            numberOfLines={1}
+          >
+            {label}
+          </Text>
         </>
       )}
     </Pressable>
@@ -62,33 +91,101 @@ export const Button: React.FC<ButtonProps> = ({
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: 52,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm,
-    flexDirection: "row",
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    gap: spacing.xs,
+    flexDirection: "row",
+    minHeight: 44, // WCAG AA Touch Target Minimum
+  },
+  fullWidth: {
+    width: "100%",
+  },
+  // Sizes
+  sm: {
+    minHeight: 40,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+  },
+  md: {
+    minHeight: 48,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xl,
+  },
+  lg: {
+    minHeight: 54,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xxl,
+  },
+  // Variants
+  primary: {
+    backgroundColor: colors.primary,
+  },
+  secondary: {
+    backgroundColor: colors.surface,
     borderWidth: 1,
+    borderColor: colors.border,
   },
-  baseText: {
-    ...typography.subheadBold,
-    textAlign: "center",
+  glass: {
+    backgroundColor: colors.glassBg,
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
   },
-  primary: { backgroundColor: colors.primary, borderColor: colors.primary },
-  primaryText: { color: colors.textWhite },
-  secondary: { backgroundColor: colors.glassFillStrong, borderColor: colors.glassBorder },
-  secondaryText: { color: colors.primary },
-  danger: { backgroundColor: colors.danger, borderColor: colors.danger },
-  dangerText: { color: colors.textWhite },
-  outline: { backgroundColor: colors.glassFill, borderColor: colors.border },
-  outlineText: { color: colors.textPrimary },
-  ghost: { backgroundColor: "transparent", borderColor: "transparent" },
-  ghostText: { color: colors.primary },
+  outline: {
+    backgroundColor: "transparent",
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+  },
+  ghost: {
+    backgroundColor: "transparent",
+  },
+  danger: {
+    backgroundColor: colors.danger,
+  },
+  // States
   pressed: {
     opacity: motion.pressedOpacity,
     transform: [{ scale: motion.pressedScale }],
   },
-  disabled: { opacity: 0.45 },
+  disabled: {
+    opacity: 0.45,
+  },
+  // Typography per variant
+  baseText: {
+    ...typography.body,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  smText: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  mdText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  lgText: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  primaryText: {
+    color: colors.textWhite,
+  },
+  secondaryText: {
+    color: colors.textPrimary,
+  },
+  glassText: {
+    color: colors.glassText,
+  },
+  outlineText: {
+    color: colors.primary,
+  },
+  ghostText: {
+    color: colors.primary,
+  },
+  dangerText: {
+    color: colors.textWhite,
+  },
+  textWithIcon: {
+    marginLeft: spacing.xs,
+  },
 });

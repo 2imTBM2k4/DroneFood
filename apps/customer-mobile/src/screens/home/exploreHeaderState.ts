@@ -11,6 +11,6 @@ export const exploreHeaderMetrics = (progress: number, compactDevice = false) =>
     controlMinHeight: interpolate(48, 44),
     verticalPadding: interpolate(compactDevice ? 10 : 14, 6),
     blurIntensity: interpolate(72, 18),
-    backgroundColor: value === 1 ? "#F8FAFC" : `rgba(248, 250, 252, ${0.18 + value * 0.82})`,
+    backgroundColor: value === 1 ? "#F4F8FD" : `rgba(244, 248, 253, ${0.18 + value * 0.82})`,
   };
 };
