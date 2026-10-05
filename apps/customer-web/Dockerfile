@@ -1,6 +1,6 @@
 # --- Build stage ---
 FROM node:22.13-alpine AS build
-ARG VITE_API_URL=http://localhost:4000
+ARG VITE_API_URL=https://api.dronefood.io.vn
 ENV VITE_API_URL=$VITE_API_URL
 WORKDIR /app
 COPY packages/web-ui/ ./packages/web-ui/
