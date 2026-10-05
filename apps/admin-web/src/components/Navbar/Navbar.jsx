@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect, useCallback } from "react";
 import "./Navbar.css";
-import { Sun, Moon } from "lucide-react";
+import { Shield, Sun, Moon } from "lucide-react";
 import { io } from "socket.io-client";
 import { useNavigate } from "react-router-dom";
 import { assets } from "../../assets/assets";
@@ -53,6 +53,9 @@ const Navbar = () => {
             Balance: {formatVND(user.walletBalance)}
           </span>
         )}
+        <button type="button" className="security-btn" onClick={() => navigate("/security")}>
+          <Shield size={16} aria-hidden="true" /> Bảo mật
+        </button>
         <img className="profile" src={assets.profile_image} alt="Profile" />
         <button onClick={handleLogout} className="logout-btn">
           Logout

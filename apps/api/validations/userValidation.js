@@ -86,6 +86,45 @@ export const changePasswordSchema = Joi.object({
   }),
 });
 
+export const forgotPasswordSchema = Joi.object({
+  email: Joi.string().trim().lowercase().email().required().messages({
+    "string.email": "Email không hợp lệ",
+    "string.empty": "Vui lòng nhập email",
+    "any.required": "Email là bắt buộc",
+  }),
+});
+
+export const resetPasswordSchema = Joi.object({
+  token: Joi.string().trim().hex().length(64).required().messages({
+    "string.hex": "Liên kết đặt lại mật khẩu không hợp lệ",
+    "string.length": "Liên kết đặt lại mật khẩu không hợp lệ",
+    "string.empty": "Liên kết đặt lại mật khẩu không hợp lệ",
+    "any.required": "Liên kết đặt lại mật khẩu không hợp lệ",
+  }),
+  password: Joi.string().min(8).max(128).required().messages({
+    "string.min": "Mật khẩu mới phải có ít nhất 8 ký tự",
+    "string.empty": "Vui lòng nhập mật khẩu mới",
+    "any.required": "Mật khẩu mới là bắt buộc",
+  }),
+});
+
+export const verifyEmailSchema = Joi.object({
+  token: Joi.string().trim().hex().length(64).required().messages({
+    "string.hex": "Liên kết xác minh email không hợp lệ",
+    "string.length": "Liên kết xác minh email không hợp lệ",
+    "any.required": "Thiếu mã xác minh email",
+  }),
+});
+
+export const resendEmailVerificationSchema = Joi.object({
+  email: Joi.string().trim().lowercase().email().required(),
+});
+
+export const requestEmailChangeSchema = Joi.object({
+  email: Joi.string().trim().lowercase().email().required(),
+  currentPassword: Joi.string().required(),
+});
+
 export const updateProfileSchema = Joi.object({
   name: Joi.string().trim().min(2).max(50).messages({
     "string.min": "Tên phải có ít nhất 2 ký tự",

@@ -41,6 +41,7 @@ const OrderReview = require("./orderReviewModel.cjs");
 const Notification = require("./notificationModel.cjs");
 const ExpoPushToken = require("./expoPushTokenModel.cjs");
 const PlatformVoucherFundingLedger = require("./platformVoucherFundingLedgerModel.cjs");
+const AccountEmailJob = require("./accountEmailJobModel.cjs");
 
 module.exports = {
   User,
@@ -66,4 +67,5 @@ module.exports = {
   Notification,
   ExpoPushToken,
   PlatformVoucherFundingLedger,
+  AccountEmailJob,
 };

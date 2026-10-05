@@ -1133,6 +1133,10 @@ function CustomerApp() {
               await userApi.updateAvatar(asset);
               await profileQuery.refetch();
             }}
+            onChangePassword={async (currentPassword, newPassword) => {
+              await userApi.changePassword(currentPassword, newPassword);
+              await handleLogout();
+            }}
             transactions={transactionsQuery.data?.transactions || []}
             transactionsLoading={transactionsQuery.isLoading}
             onRefreshTransactions={() => transactionsQuery.refetch()}

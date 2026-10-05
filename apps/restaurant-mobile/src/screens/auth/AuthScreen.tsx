@@ -11,11 +11,22 @@ import {
 import { colors, radius, spacing, typography } from "../../theme/tokens";
 import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
-import { apiError, authApi, setStoredToken } from "../../api/client";
+import {
+  apiError,
+  authApi,
+  getEmailVerificationRequirement,
+  setStoredToken,
+} from "../../api/client";
 
 interface AuthScreenProps {
   onSuccess: (token: string) => void;
 }
+
+type VerificationState = {
+  rawEmail: string;
+  displayEmail: string;
+  source: "login" | "register";
+};
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -32,11 +43,60 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
 
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
-  const [registerSuccessMsg, setRegisterSuccessMsg] = useState("");
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
+  const [verification, setVerification] = useState<VerificationState | null>(null);
+  const [verificationMessage, setVerificationMessage] = useState("");
+
+  const showVerification = (
+    rawEmail: string,
+    displayEmail: string | undefined,
+    source: VerificationState["source"]
+  ) => {
+    setVerification({
+      rawEmail: rawEmail.trim().toLowerCase(),
+      displayEmail: displayEmail || rawEmail.trim(),
+      source,
+    });
+    setVerificationMessage("");
+    setError("");
+  };
+
+  const handleResendVerification = async () => {
+    if (!verification) return;
+    try {
+      setWorking(true);
+      setError("");
+      const response = await authApi.resendVerification(verification.rawEmail);
+      setVerificationMessage(
+        response.message || "Nếu tài khoản đang chờ xác minh, email mới đã được gửi."
+      );
+    } catch (cause) {
+      setError(apiError(cause, "Không thể gửi lại email xác minh. Vui lòng thử lại."));
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    setError("");
+    if (!email.trim()) {
+      setError("Vui lòng nhập email tài khoản.");
+      return;
+    }
+    try {
+      setWorking(true);
+      await authApi.forgotPassword(email);
+      setForgotSent(true);
+    } catch (cause) {
+      setError(apiError(cause, "Không thể gửi yêu cầu. Vui lòng thử lại."));
+    } finally {
+      setWorking(false);
+    }
+  };
 
   const handleSubmit = async () => {
     setError("");
-    setRegisterSuccessMsg("");
 
     if (!email.trim() || !password.trim()) {
       setError("Vui lòng nhập đầy đủ Email và Mật khẩu.");
@@ -55,7 +115,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
           return;
         }
 
-        const token = await authApi.registerRestaurant({
+        const response = await authApi.registerRestaurant({
           name: ownerName,
           email,
           password,
@@ -64,10 +124,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
           address,
         });
 
-        await setStoredToken(token);
-        onSuccess(token);
+        showVerification(email, response.email, "register");
       }
     } catch (cause) {
+      const requirement = getEmailVerificationRequirement(cause);
+      if (mode === "login" && requirement) {
+        showVerification(email, requirement.email, "login");
+        return;
+      }
       setError(apiError(cause, mode === "login" ? "Đăng nhập thất bại." : "Đăng ký quán thất bại."));
     } finally {
       setWorking(false);
@@ -93,12 +157,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
           </Text>
         </View>
 
-        <View style={styles.segmentedControl}>
+        {!forgotMode && !verification ? <View style={styles.segmentedControl}>
           <Pressable
+            accessibilityRole="tab"
+            accessibilityState={{ selected: mode === "login" }}
             style={[styles.segmentBtn, mode === "login" && styles.segmentBtnActive]}
             onPress={() => {
               setMode("login");
               setError("");
+              setForgotSent(false);
             }}
           >
             <Text
@@ -111,10 +178,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
             </Text>
           </Pressable>
           <Pressable
+            accessibilityRole="tab"
+            accessibilityState={{ selected: mode === "register" }}
             style={[styles.segmentBtn, mode === "register" && styles.segmentBtnActive]}
             onPress={() => {
               setMode("register");
               setError("");
+              setForgotSent(false);
             }}
           >
             <Text
@@ -126,10 +196,85 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
               Đăng ký mở quán
             </Text>
           </Pressable>
-        </View>
+        </View> : null}
 
         <View style={styles.formCard}>
-          {mode === "register" ? (
+          {verification ? (
+            <>
+              <Text accessibilityRole="header" style={styles.verificationTitle}>
+                Kiểm tra email để tiếp tục
+              </Text>
+              <Text style={styles.forgotDescription}>
+                Drone Food đã gửi liên kết xác minh đến {verification.displayEmail}. Hãy mở email bằng trình duyệt, hoàn tất xác minh rồi quay lại ứng dụng để đăng nhập.
+              </Text>
+              {verification.source === "register" ? (
+                <View style={styles.approvalNotice}>
+                  <Text style={styles.approvalNoticeText}>
+                    Xác minh email và duyệt nhà hàng là hai bước riêng biệt. Sau khi xác minh email, hồ sơ nhà hàng vẫn cần Admin phê duyệt trước khi hoạt động.
+                  </Text>
+                </View>
+              ) : null}
+              {verificationMessage ? (
+                <View style={styles.successBox}>
+                  <Text accessibilityRole="alert" style={styles.successText}>{verificationMessage}</Text>
+                </View>
+              ) : null}
+              {error ? (
+                <View style={styles.errorBox}>
+                  <Text accessibilityRole="alert" style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
+              <Button label="Gửi lại email xác minh" loading={working} onPress={handleResendVerification} />
+              <Button
+                label="Thay đổi email"
+                variant="outline"
+                disabled={working}
+                onPress={() => {
+                  const source = verification.source;
+                  setVerification(null);
+                  setVerificationMessage("");
+                  setError("");
+                  setMode(source);
+                }}
+              />
+              <Button
+                label="Quay lại đăng nhập"
+                variant="outline"
+                disabled={working}
+                onPress={() => {
+                  setVerification(null);
+                  setVerificationMessage("");
+                  setError("");
+                  setMode("login");
+                }}
+              />
+            </>
+          ) : forgotMode ? (
+            <>
+              <Text style={styles.formSectionTitle}>Khôi phục mật khẩu</Text>
+              <Text style={styles.forgotDescription}>
+                Nếu email tồn tại trong hệ thống, Drone Food sẽ gửi liên kết đặt lại mật khẩu dùng một lần trong 15 phút.
+              </Text>
+              <Input
+                label="Email đăng nhập"
+                placeholder="restaurant@example.com"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                autoComplete="email"
+                textContentType="emailAddress"
+                value={email}
+                onChangeText={setEmail}
+              />
+              {forgotSent ? (
+                <View style={styles.successBox}>
+                  <Text accessibilityRole="alert" style={styles.successText}>Hãy kiểm tra hộp thư và thư rác. Phản hồi này không xác nhận email có tồn tại.</Text>
+                </View>
+              ) : null}
+              {error ? <View style={styles.errorBox}><Text accessibilityRole="alert" style={styles.errorText}>{error}</Text></View> : null}
+              <Button label={forgotSent ? "Gửi lại hướng dẫn" : "Gửi hướng dẫn đặt lại"} loading={working} onPress={handleForgotPassword} />
+              <Button label="Quay lại đăng nhập" variant="outline" disabled={working} onPress={() => { setForgotMode(false); setForgotSent(false); setError(""); }} />
+            </>
+          ) : mode === "register" ? (
             <>
               <Text style={styles.formSectionTitle}>Thông tin chủ quán:</Text>
               <Input
@@ -162,6 +307,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
             </>
           ) : null}
 
+          {!forgotMode && !verification ? <>
           <Input
             label="Email đăng nhập *"
             placeholder="restaurant@example.com"
@@ -169,6 +315,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
             keyboardType="email-address"
             value={email}
             onChangeText={setEmail}
+            autoComplete="email"
+            textContentType="emailAddress"
           />
 
           <Input
@@ -177,26 +325,27 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
             secureTextEntry
             value={password}
             onChangeText={setPassword}
+            autoComplete={mode === "login" ? "current-password" : "new-password"}
+            textContentType={mode === "login" ? "password" : "newPassword"}
           />
+          </> : null}
 
-          {error ? (
+          {!forgotMode && !verification && mode === "login" ? (
+            <Button label="Quên mật khẩu?" variant="outline" disabled={working} onPress={() => { setForgotMode(true); setForgotSent(false); setError(""); }} />
+          ) : null}
+
+          {!forgotMode && !verification && error ? (
             <View style={styles.errorBox}>
               <Text style={styles.errorText}>{error}</Text>
             </View>
           ) : null}
 
-          {registerSuccessMsg ? (
-            <View style={styles.successBox}>
-              <Text style={styles.successText}>{registerSuccessMsg}</Text>
-            </View>
-          ) : null}
-
-          <Button
+          {!forgotMode && !verification ? <Button
             label={mode === "login" ? "Đăng nhập ngay" : "Gửi thông tin đăng ký quán"}
             loading={working}
             onPress={handleSubmit}
             style={styles.submitBtn}
-          />
+          /> : null}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -301,6 +450,28 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.success,
     textAlign: "center",
+  },
+  forgotDescription: {
+    ...typography.bodySecondary,
+    color: colors.textSecondary,
+    lineHeight: 22,
+  },
+  verificationTitle: {
+    ...typography.title1,
+    color: colors.textPrimary,
+    textAlign: "center",
+  },
+  approvalNotice: {
+    backgroundColor: colors.warningLight,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.warning,
+    padding: spacing.sm,
+    borderRadius: radius.sm,
+  },
+  approvalNoticeText: {
+    ...typography.bodySecondary,
+    color: colors.primaryDark,
+    lineHeight: 20,
   },
   submitBtn: {
     marginTop: spacing.xs,

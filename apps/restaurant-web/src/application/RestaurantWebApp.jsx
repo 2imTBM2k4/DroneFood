@@ -9,6 +9,7 @@ import EditRestaurant from '../pages/EditRestaurant/EditRestaurant';
 import Login from '../pages/Login/Login';
 import Register from '../pages/Register/Register';
 import Withdrawals from '../pages/Withdrawals/Withdrawals';
+import Security from '../pages/Security/Security';
 import ProtectedRoute from '../components/ProtectedRoute';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -74,6 +75,7 @@ const RestaurantWebApp = () => {
           <Route path="/edit-restaurant" element={<EditRestaurant url={url} />} />
           <Route path="/withdrawals" element={<Navigate to="/wallet" replace />} />
           <Route path="/wallet" element={<Withdrawals url={url} />} />
+          <Route path="/security" element={<Security url={url} />} />
         </Route>
       </Routes>
     </div>

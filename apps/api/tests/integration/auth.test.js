@@ -14,7 +14,8 @@ describe("Auth API", () => {
       });
 
       expect(res.body.success).toBe(true);
-      expect(res.body.token).toBeDefined();
+      expect(res.body.verificationRequired).toBe(true);
+      expect(res.body.token).toBeUndefined();
     });
 
     it("should reject duplicate email", async () => {
@@ -61,6 +62,7 @@ describe("Auth API", () => {
         email: "loginuser@test.com",
         password: "password123",
       });
+      await User.updateOne({ email: "loginuser@test.com" }, { emailVerified: true });
     });
 
     it("should login with valid credentials", async () => {
@@ -72,6 +74,18 @@ describe("Auth API", () => {
       expect(res.body.success).toBe(true);
       expect(res.body.token).toBeDefined();
       expect(res.body.role).toBe("user");
+    });
+
+    it("should reject login when email is unverified", async () => {
+      await User.updateOne({ email: "loginuser@test.com" }, { emailVerified: false });
+      const res = await request(app).post("/api/user/login").send({
+        email: "loginuser@test.com",
+        password: "password123",
+      });
+
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.code).toBe("EMAIL_VERIFICATION_REQUIRED");
     });
 
     it("should reject wrong password", async () => {

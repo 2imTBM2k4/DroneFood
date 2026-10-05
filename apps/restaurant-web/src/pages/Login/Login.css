@@ -33,6 +33,11 @@
   margin-bottom: 8px;
 }
 
+.login-form label { color: var(--text-color); font-size: 14px; font-weight: 600; }
+.login-form .login-link-button { min-height: 44px; padding: 8px; background: transparent; color: var(--accent-color); }
+.login-form .login-link-button:hover { background: var(--accent-light); transform: none; }
+.login-status { padding: 10px; border-radius: 8px; background: var(--accent-light); line-height: 1.5; }
+
 .login-form input {
   padding: 12px 16px;
   border: 1.5px solid var(--border-color);

@@ -1,5 +1,21 @@
 import * as userService from "../services/userService.js";
 import { geocodeAddress, reverseGeocode as reverseGeocodeAddress } from "../utils/geocode.js";
+import { disconnectUserSessions } from "../utils/socketSessions.js";
+
+const sendPasswordMutationResult = (req, res, result) => {
+  const { sessionUserId, ...publicResult } = result;
+  disconnectUserSessions(req.app.get("io"), sessionUserId);
+  res.json(publicResult);
+};
+
+const sendOperationalError = (res, error) => res
+  .status(error.statusCode || 500)
+  .json({
+    success: false,
+    message: error.message,
+    ...(error.code && { code: error.code }),
+    ...(error.details || {}),
+  });
 
 export const loginUser = async (req, res) => {
   try {
@@ -8,9 +24,7 @@ export const loginUser = async (req, res) => {
   } catch (error) {
     const { recordAudit } = await import("../utils/auditLog.js");
     await recordAudit({ action: "auth.login_failed", targetType: "authentication", category: "authentication", outcome: "failure", ip: req.ip, userAgent: req.get("user-agent") || "", metadata: { email: String(req.body?.email || "").replace(/^(.{2}).*(@.*)$/, "$1***$2") } });
-    res
-      .status(error.statusCode || 500)
-      .json({ success: false, message: error.message });
+    sendOperationalError(res, error);
   }
 };
 
@@ -19,9 +33,7 @@ export const registerUser = async (req, res) => {
     const result = await userService.registerUser(req.body);
     res.json(result);
   } catch (error) {
-    res
-      .status(error.statusCode || 500)
-      .json({ success: false, message: error.message });
+    sendOperationalError(res, error);
   }
 };
 
@@ -93,7 +105,7 @@ export const changePassword = async (req, res) => {
       req.body.currentPassword,
       req.body.newPassword
     );
-    res.json(result);
+    sendPasswordMutationResult(req, res, result);
   } catch (error) {
     res
       .status(error.statusCode || 500)
@@ -171,9 +183,41 @@ export const refreshToken = async (req, res) => {
     const result = await userService.refreshAccessToken(req.body.refreshToken);
     res.json(result);
   } catch (error) {
-    res
-      .status(error.statusCode || 500)
-      .json({ success: false, message: error.message });
+    sendOperationalError(res, error);
+  }
+};
+
+export const resendEmailVerification = async (req, res) => {
+  try {
+    res.json(await userService.resendEmailVerification(req.body.email));
+  } catch (error) {
+    sendOperationalError(res, error);
+  }
+};
+
+export const requestEmailChange = async (req, res) => {
+  try {
+    res.json(await userService.requestEmailChange(
+      req.user._id,
+      req.body.currentPassword,
+      req.body.email
+    ));
+  } catch (error) {
+    sendOperationalError(res, error);
+  }
+};
+
+export const verifyEmail = async (req, res) => {
+  try {
+    const result = await userService.verifyEmail(req.body.token);
+    if (result.sessionUserId) {
+      const { sessionUserId, ...publicResult } = result;
+      disconnectUserSessions(req.app.get("io"), sessionUserId);
+      return res.json(publicResult);
+    }
+    return res.json(result);
+  } catch (error) {
+    return sendOperationalError(res, error);
   }
 };
 
@@ -191,11 +235,18 @@ export const forgotPassword = async (req, res) => {
 export const resetPassword = async (req, res) => {
   try {
     const result = await userService.resetPassword(req.body.token, req.body.password);
+    sendPasswordMutationResult(req, res, result);
+  } catch (error) {
+    sendOperationalError(res, error);
+  }
+};
+
+export const verifyResetToken = async (req, res) => {
+  try {
+    const result = await userService.verifyResetToken(req.params.token);
     res.json(result);
   } catch (error) {
-    res
-      .status(error.statusCode || 500)
-      .json({ success: false, message: error.message });
+    sendOperationalError(res, error);
   }
 };
 

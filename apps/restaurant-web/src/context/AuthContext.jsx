@@ -1,8 +1,15 @@
 import React, { createContext, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { toast } from "react-toastify";
 
 export const AuthContext = createContext();
+
+const apiError = (payload, fallback) => {
+  const error = new Error(payload?.message || fallback);
+  error.code = payload?.code;
+  error.email = payload?.email;
+  error.canResend = payload?.canResend;
+  return error;
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -116,45 +123,27 @@ export const AuthProvider = ({ children }) => {
         body: JSON.stringify({ email, password }),
       });
       const data = await response.json();
-      if (data.success) {
-        const token = data.data?.token || data.token;
-        if (!token) {
-          throw new Error("Token missing in login response");
-        }
-        localStorage.setItem("token", token);
-        const fetchedUser = await fetchUserInfo(token);
-        // SỬA: Check user từ return value thay vì state (vì state update async)
-        if (fetchedUser && fetchedUser._id) {
-          // Delay navigation để toast kịp hiển thị
-          setTimeout(() => {
-            navigate("/dashboard");
-          }, 500);
-        } else {
-          // User không tồn tại hoặc bị lock (đã được handle trong fetchUserInfo hoặc backend)
-          toast.error(
-            "Login failed: Account pending admin approval. Please wait."
-          );
-          localStorage.removeItem("token");
-          localStorage.removeItem("restaurantId");
-          setUser(null);
-        }
-      } else {
-        // SỬA: Specific toast từ backend message
-        const msg = data.message || "Login failed";
-        toast.error(
-          msg.includes("pending") ? "Your restaurant is pending approval." : msg
-        );
+      if (!response.ok || !data.success) {
+        throw apiError(data, "Đăng nhập thất bại.");
       }
+      const token = data.data?.token || data.token;
+      if (!token) throw new Error("Token missing in login response");
+      localStorage.setItem("token", token);
+      const fetchedUser = await fetchUserInfo(token);
+      if (!fetchedUser?._id) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("restaurantId");
+        setUser(null);
+        throw new Error("Tài khoản nhà hàng đang chờ quản trị viên phê duyệt.");
+      }
+      setTimeout(() => navigate("/dashboard"), 500);
+      return data;
     } catch (error) {
       console.error("Login error:", error);
-      toast.error(
-        error.message.includes("pending") || error.message.includes("locked")
-          ? "Your restaurant account is pending admin approval."
-          : "Error during login. Please try again."
-      );
       localStorage.removeItem("token");
       localStorage.removeItem("restaurantId");
       setUser(null);
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -171,16 +160,15 @@ export const AuthProvider = ({ children }) => {
         }),
       });
       const data = await response.json();
-      if (data.success) {
+      if (response.ok && data.success) {
         return data; // Success, không throw
       } else {
-        // SỬA: Throw với message cụ thể
-        throw new Error(data.message || "Register failed");
+        throw apiError(data, "Đăng ký thất bại.");
       }
     } catch (error) {
       console.error("Register error:", error);
       // SỬA: Re-throw với detail
-      throw new Error(error.message || "Error during register");
+      throw error;
     } finally {
       setIsLoading(false);
     }

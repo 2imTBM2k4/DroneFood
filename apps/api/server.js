@@ -6,10 +6,14 @@ import connectDB from "./config/db.js";
 import { Server } from "socket.io";
 import http from "http";
 import { v2 as cloudinary } from "cloudinary";
-import jwt from "jsonwebtoken";
-import User from "./models/userModel.cjs";
 import { startShipperExpiryScheduler } from "./services/shipperService.js";
+import { startAccountEmailWorker, stopAccountEmailWorker } from "./services/accountEmailOutboxService.js";
+import { authenticateSocket } from "./middleware/socketAuth.js";
+import { joinUserSessionRoom } from "./utils/socketSessions.js";
 import { logger } from "./utils/logger.js";
+import { shutdownDeadlineMs } from "./utils/shutdownTiming.js";
+import { initializeIndexes as initializeAccountEmailJobIndexes } from "./repositories/accountEmailJobRepository.js";
+import { initializeIndexes as initializeUserIndexes } from "./repositories/userRepository.js";
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -37,22 +41,10 @@ app.use((req, res, next) => {
   next();
 });
 
-io.use(async (socket, next) => {
-  try {
-    const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace("Bearer ", "");
-    if (!token) return next(new Error("Authentication required"));
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (decoded.type === "refresh") return next(new Error("Access token required"));
-    const user = await User.findById(decoded.id).select("role restaurantId locked").lean();
-    if (!user || user.locked) return next(new Error("Unauthorized"));
-    socket.user = user;
-    next();
-  } catch {
-    next(new Error("Unauthorized"));
-  }
-});
+io.use(authenticateSocket);
 
 io.on("connection", (socket) => {
+  joinUserSessionRoom(socket);
   socket.on("joinRestaurant", (restaurantId) => {
     if (socket.user.role === "restaurant_owner" && String(socket.user.restaurantId) === String(restaurantId)) {
       socket.join(`restaurant_${restaurantId}`);
@@ -73,8 +65,30 @@ io.on("connection", (socket) => {
 const PORT = process.env.PORT || 4000;
 
 await connectDB();
-startShipperExpiryScheduler();
+await Promise.all([initializeAccountEmailJobIndexes(), initializeUserIndexes()]);
+const shipperExpiryTimer = startShipperExpiryScheduler();
+startAccountEmailWorker();
 
 server.listen(PORT, () => {
   logger.info({ port: PORT, env: process.env.NODE_ENV || "development" }, `Server running on port ${PORT}`);
 });
+
+let shuttingDown = false;
+const shutdown = async (signal) => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info({ signal }, "Stopping server");
+  const forceExit = setTimeout(() => process.exit(1), shutdownDeadlineMs());
+  forceExit.unref?.();
+  clearInterval(shipperExpiryTimer);
+  const socketsClosed = new Promise((resolve) => io.close(resolve));
+  await Promise.all([stopAccountEmailWorker(), socketsClosed]);
+  if (server.listening) {
+    await new Promise((resolve) => server.close(resolve));
+  }
+  clearTimeout(forceExit);
+  process.exit(0);
+};
+
+process.once("SIGTERM", () => void shutdown("SIGTERM"));
+process.once("SIGINT", () => void shutdown("SIGINT"));

@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import userModel from "../models/userModel.cjs";
 import Restaurant from "../models/restaurantModel.cjs";
+import { isTokenVersionCurrent } from "../utils/authTokens.js";
 
 const protect = async (req, res, next) => {
   let token;
@@ -38,13 +39,25 @@ const protect = async (req, res, next) => {
 
     const user = await userModel
       .findById(decoded.id)
-      .select("name email role restaurantId phone address locked balance")
+      .select("name email role restaurantId phone address locked balance emailVerified +authVersion")
       .lean();
 
     if (!user) {
       return res
         .status(404)
         .json({ success: false, message: "User not found" });
+    }
+
+    if (!isTokenVersionCurrent(decoded, user)) {
+      return res.status(401).json({ success: false, message: "Phiên đăng nhập không còn hiệu lực" });
+    }
+
+    if (user.emailVerified === false) {
+      return res.status(403).json({
+        success: false,
+        code: "EMAIL_VERIFICATION_REQUIRED",
+        message: "Bạn cần xác minh email trước khi tiếp tục.",
+      });
     }
 
     if (user.locked) {
@@ -111,10 +124,10 @@ const optionalAuth = async (req, res, next) => {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       const user = await userModel
         .findById(decoded.id)
-        .select("name email role restaurantId phone address locked balance")
+        .select("name email role restaurantId phone address locked balance emailVerified +authVersion")
         .lean();
 
-      if (user && !user.locked) {
+      if (user && user.emailVerified !== false && !user.locked && decoded.type !== "refresh" && isTokenVersionCurrent(decoded, user)) {
         // Check restaurant lock for restaurant owners
         if (user.role === "restaurant_owner" && user.restaurantId) {
           const restaurant = await Restaurant.findById(user.restaurantId)

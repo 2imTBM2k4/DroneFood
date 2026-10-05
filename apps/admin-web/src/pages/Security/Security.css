@@ -1,0 +1,9 @@
+.security-page { width: min(100%, 640px); color: var(--text-color); }
+.security-page > p { color: var(--text-secondary); line-height: 1.6; }
+.security-card { margin-top: 24px; padding: 24px; display: grid; gap: 18px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 14px; }
+.security-field { display: grid; gap: 8px; font-weight: 600; }
+.security-field input { min-height: 46px; padding: 10px 14px; border: 1.5px solid var(--border-color); border-radius: 8px; color: var(--text-color); background: var(--body-color); font: inherit; }
+.security-field input:focus { outline: none; border-color: var(--accent-color); box-shadow: 0 0 0 3px var(--accent-light); }
+.security-card button { min-height: 46px; border: 0; border-radius: 8px; background: var(--accent-color); color: white; font-weight: 700; cursor: pointer; }
+.security-card button:disabled { opacity: .55; cursor: not-allowed; }
+.security-error { margin: 0; color: var(--danger); line-height: 1.5; }

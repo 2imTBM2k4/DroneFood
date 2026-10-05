@@ -17,7 +17,11 @@ import {
   updateAvatar,
   forgotPassword,
   resetPassword,
+  verifyResetToken,
   refreshToken,
+  resendEmailVerification,
+  requestEmailChange,
+  verifyEmail,
   getUserTransactions,
 } from "../controllers/userController.js";
 
@@ -32,6 +36,11 @@ import {
   geocodeAddressQuerySchema,
   updateProfileSchema,
   changePasswordSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  verifyEmailSchema,
+  resendEmailVerificationSchema,
+  requestEmailChangeSchema,
   lockUserSchema,
   updateByAdminSchema,
   deleteUserSchema,
@@ -45,15 +54,26 @@ const authLimiter = rateLimit({
   message: { success: false, message: "Too many attempts, please try again after 15 minutes" },
 });
 
+const verificationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Vui lòng chờ trước khi yêu cầu thêm email xác minh." },
+});
+
 const userRouter = express.Router();
 
 // ============ PUBLIC ROUTES ============
 userRouter.post("/register", authLimiter, validate(registerSchema), registerUser);
 userRouter.post("/login", authLimiter, validate(loginSchema), loginUser);
 userRouter.post("/logout", logoutUser);
-userRouter.post("/forgot-password", authLimiter, forgotPassword);
-userRouter.post("/reset-password", authLimiter, resetPassword);
+userRouter.post("/forgot-password", authLimiter, validate(forgotPasswordSchema), forgotPassword);
+userRouter.get("/verify-reset-token/:token", authLimiter, verifyResetToken);
+userRouter.post("/reset-password", authLimiter, validate(resetPasswordSchema), resetPassword);
 userRouter.post("/refresh-token", authLimiter, refreshToken);
+userRouter.post("/resend-verification", verificationLimiter, validate(resendEmailVerificationSchema), resendEmailVerification);
+userRouter.post("/verify-email", verificationLimiter, validate(verifyEmailSchema), verifyEmail);
 
 // ============ PROTECTED ROUTES ============
 userRouter.get("/me", protect, getMe);
@@ -62,6 +82,7 @@ userRouter.get("/reverse-geocode", protect, validate(reverseGeocodeQuerySchema, 
 userRouter.get("/geocode", protect, validate(geocodeAddressQuerySchema, "query"), geocodeUserAddress);
 userRouter.put("/update-address", protect, validate(updateAddressSchema), updateUserAddress);
 userRouter.put("/profile", protect, validate(updateProfileSchema), updateProfile);
+userRouter.put("/request-email-change", protect, verificationLimiter, validate(requestEmailChangeSchema), requestEmailChange);
 userRouter.put("/change-password", protect, validate(changePasswordSchema), changePassword);
 userRouter.put("/avatar", protect, uploadMiddleware.single("avatar"), updateAvatar);
 

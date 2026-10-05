@@ -75,6 +75,7 @@ export const Input: React.FC<InputProps> = ({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={hidePassword ? "Hiện mật khẩu" : "Ẩn mật khẩu"}
+            accessibilityState={{ selected: !hidePassword }}
             hitSlop={10}
             onPress={() => setHidePassword((prev) => !prev)}
             style={styles.rightIcon}
@@ -147,6 +148,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   rightIcon: {
+    minWidth: 48,
+    minHeight: 48,
     marginLeft: spacing.xs,
     justifyContent: "center",
     alignItems: "center",

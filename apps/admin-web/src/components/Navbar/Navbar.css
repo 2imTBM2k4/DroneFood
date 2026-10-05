@@ -89,6 +89,26 @@
   transition: all 0.2s ease;
 }
 
+.security-btn {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  color: var(--text-color);
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.security-btn:hover,
+.security-btn:focus-visible {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
 .logout-btn:hover {
   background-color: var(--danger);
   color: #fff;

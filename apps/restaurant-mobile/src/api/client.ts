@@ -32,6 +32,20 @@ export const getApiUrl = () => {
 export const API_URL = getApiUrl();
 const TOKEN_KEY = "restaurantAccessToken";
 
+export type VerificationRequiredResponse = {
+  success: true;
+  verificationRequired: true;
+  email: string;
+  message: string;
+};
+
+type EmailVerificationErrorPayload = {
+  code?: string;
+  email?: string;
+  message?: string;
+  canResend?: boolean;
+};
+
 export const storage = {
   async getItem(key: string): Promise<string | null> {
     if (Platform.OS === "web") {
@@ -78,7 +92,17 @@ export const removeStoredToken = () => storage.deleteItem(TOKEN_KEY);
 export const apiError = (error: unknown, fallback = "Có lỗi xảy ra") =>
   axios.isAxiosError(error)
     ? error.response?.data?.message || fallback
-    : fallback;
+    : error instanceof Error && error.message
+      ? error.message
+      : fallback;
+
+export const getEmailVerificationRequirement = (error: unknown) => {
+  if (!axios.isAxiosError<EmailVerificationErrorPayload>(error)) return null;
+  const data = error.response?.data;
+  return data?.code === "EMAIL_VERIFICATION_REQUIRED"
+    ? { email: data.email, message: data.message, canResend: data.canResend !== false }
+    : null;
+};
 
 export const formatVnd = (value = 0) =>
   `${Math.round(value).toLocaleString("vi-VN")} ₫`;
@@ -86,6 +110,7 @@ export const formatVnd = (value = 0) =>
 export const api = axios.create({
   baseURL: API_URL,
 });
+const publicApi = axios.create({ baseURL: API_URL });
 
 api.interceptors.request.use(async (config) => {
   const token = await getStoredToken();
@@ -98,13 +123,34 @@ api.interceptors.request.use(async (config) => {
 // API Functions
 export const authApi = {
   login: async (email: string, password: string) => {
-    const res = await api.post<{ token: string; role: string }>("/api/user/login", {
+    const res = await publicApi.post<{ token: string; role: string }>("/api/user/login", {
       email: email.trim(),
       password,
     });
     if (res.data.role !== "restaurant_owner" && res.data.role !== "admin") {
       throw new Error("Tài khoản này không phải tài khoản Nhà hàng.");
     }
+    return res.data;
+  },
+  forgotPassword: async (email: string) => {
+    const res = await publicApi.post<{ success: boolean; message: string }>(
+      "/api/user/forgot-password",
+      { email: email.trim() }
+    );
+    return res.data;
+  },
+  resendVerification: async (email: string) => {
+    const res = await publicApi.post<{ success: boolean; message: string }>(
+      "/api/user/resend-verification",
+      { email: email.trim() }
+    );
+    return res.data;
+  },
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    const res = await api.put<{ success: boolean; message: string }>(
+      "/api/user/change-password",
+      { currentPassword, newPassword }
+    );
     return res.data;
   },
   registerRestaurant: async (data: {
@@ -114,33 +160,17 @@ export const authApi = {
     phone: string;
     restaurantName: string;
     address: string;
-    lat?: number;
-    lng?: number;
   }) => {
-    // 1. Create owner user
-    const userRes = await api.post<{ token: string; user: { _id: string } }>("/api/user/register", {
-      name: data.name,
-      email: data.email,
+    const response = await publicApi.post<VerificationRequiredResponse>("/api/user/register", {
+      name: data.name.trim(),
+      email: data.email.trim(),
       password: data.password,
-      phone: data.phone,
+      phone: data.phone.trim(),
+      role: "restaurant_owner",
+      restaurantName: data.restaurantName.trim(),
+      address: data.address.trim(),
     });
-    const token = userRes.data.token;
-    // 2. Submit restaurant profile
-    const form = new FormData();
-    form.append("name", data.restaurantName);
-    form.append("address", data.address);
-    form.append("phone", data.phone);
-    form.append("email", data.email);
-    if (data.lat) form.append("lat", String(data.lat));
-    if (data.lng) form.append("lng", String(data.lng));
-
-    await axios.post(`${API_URL}/api/restaurant`, form, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "multipart/form-data",
-      },
-    });
-    return token;
+    return response.data;
   },
   getMe: async () => {
     const res = await api.get<{ data: User }>("/api/user/me");

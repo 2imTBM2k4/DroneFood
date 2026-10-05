@@ -23,6 +23,7 @@ interface AccountScreenProps {
     email: string;
     description: string;
   }) => Promise<void>;
+  onChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   onLogout: () => void;
 }
 
@@ -30,10 +31,17 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
   restaurant,
   working,
   onUpdateProfile,
+  onChangePassword,
   onLogout,
 }) => {
   const isOpen = restaurant?.isOpen !== false;
   const [editModalVisible, setEditModalVisible] = useState(false);
+  const [securityModalVisible, setSecurityModalVisible] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [securityError, setSecurityError] = useState("");
+  const [securitySuccess, setSecuritySuccess] = useState("");
 
   // Form states for editing restaurant
   const [name, setName] = useState(restaurant?.name || "");
@@ -79,6 +87,22 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
     ]);
   };
 
+  const handleChangePassword = async () => {
+    setSecurityError("");
+    setSecuritySuccess("");
+    if (newPassword.length < 8) return setSecurityError("Mật khẩu mới phải có ít nhất 8 ký tự.");
+    if (newPassword !== confirmPassword) return setSecurityError("Hai mật khẩu mới chưa khớp.");
+    try {
+      await onChangePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setSecuritySuccess("Đã đổi mật khẩu. Các phiên đăng nhập cũ đã được đóng.");
+    } catch (error) {
+      setSecurityError(error instanceof Error ? error.message : "Không thể đổi mật khẩu.");
+    }
+  };
+
   return (
     <ScrollView
       contentContainerStyle={styles.scrollContent}
@@ -119,6 +143,12 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
       </View>
 
       {/* System info */}
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>Bảo mật tài khoản</Text>
+        <Text style={styles.sectionHint}>Đổi mật khẩu đăng nhập của chủ nhà hàng.</Text>
+        <Button label="Đổi mật khẩu" variant="outline" onPress={() => { setSecurityError(""); setSecuritySuccess(""); setSecurityModalVisible(true); }} />
+      </View>
+
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Hệ thống vận hành</Text>
         <View style={styles.infoRow}>
@@ -204,6 +234,28 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
                 disabled={working}
                 onPress={() => setEditModalVisible(false)}
               />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={securityModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSecurityModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Đổi mật khẩu</Text>
+            <Input label="Mật khẩu hiện tại" value={currentPassword} onChangeText={setCurrentPassword} secureTextEntry autoComplete="current-password" textContentType="password" />
+            <Input label="Mật khẩu mới" value={newPassword} onChangeText={setNewPassword} secureTextEntry autoComplete="new-password" textContentType="newPassword" hint="Ít nhất 8 ký tự; có thể dán từ trình quản lý mật khẩu." />
+            <Input label="Xác nhận mật khẩu mới" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry autoComplete="new-password" textContentType="newPassword" />
+            {securityError ? <Text accessibilityRole="alert" style={styles.errorText}>{securityError}</Text> : null}
+            {securitySuccess ? <Text accessibilityRole="alert" style={styles.successText}>{securitySuccess}</Text> : null}
+            <View style={styles.modalButtons}>
+              <Button label="Đổi mật khẩu" loading={working} disabled={!currentPassword || !newPassword || !confirmPassword} onPress={handleChangePassword} />
+              <Button label="Đóng" variant="outline" disabled={working} onPress={() => setSecurityModalVisible(false)} />
             </View>
           </View>
         </View>
@@ -310,5 +362,15 @@ const styles = StyleSheet.create({
   modalButtons: {
     gap: spacing.xs,
     marginTop: spacing.xs,
+  },
+  errorText: {
+    ...typography.caption,
+    color: colors.danger,
+    lineHeight: 19,
+  },
+  successText: {
+    ...typography.caption,
+    color: colors.success,
+    lineHeight: 19,
   },
 });

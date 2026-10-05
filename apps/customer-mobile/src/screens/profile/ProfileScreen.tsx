@@ -34,6 +34,7 @@ interface ProfileScreenProps {
   loading: boolean;
   onUpdateProfile: (name: string, phone: string) => Promise<void>;
   onUpdateAvatar: (asset: ImagePicker.ImagePickerAsset) => Promise<void>;
+  onChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   onLogout: () => void;
   savedAddress?: Address;
   addressBook: AddressBookEntry[];
@@ -52,6 +53,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   loading,
   onUpdateProfile,
   onUpdateAvatar,
+  onChangePassword,
   onLogout,
   savedAddress,
   addressBook = [],
@@ -75,6 +77,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [phone, setPhone] = useState(profile?.phone || "");
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
 
   // Address Editor Modal state
   const [addressEditorVisible, setAddressEditorVisible] = useState(false);
@@ -132,6 +138,29 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       showToast({ type: "error", title: "Không thể cập nhật ảnh", message: err?.message || "Vui lòng thử lại." });
     } finally {
       setUploadingAvatar(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (newPassword.length < 8) {
+      showToast({ type: "warning", title: "Mật khẩu quá ngắn", message: "Mật khẩu mới phải có ít nhất 8 ký tự." });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showToast({ type: "warning", title: "Mật khẩu chưa khớp", message: "Vui lòng nhập lại đúng mật khẩu mới." });
+      return;
+    }
+    try {
+      setSavingPassword(true);
+      await onChangePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      showToast({ type: "success", title: "Đã đổi mật khẩu", message: "Các phiên đăng nhập cũ đã được đóng. Hãy đăng nhập lại bằng mật khẩu mới." });
+    } catch (err: any) {
+      showToast({ type: "error", title: "Không thể đổi mật khẩu", message: err?.message || "Vui lòng kiểm tra mật khẩu hiện tại và thử lại." });
+    } finally {
+      setSavingPassword(false);
     }
   };
 
@@ -633,6 +662,41 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             contentContainerStyle={styles.fullModalScroll}
             showsVerticalScrollIndicator={false}
           >
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>Bảo mật tài khoản</Text>
+              <Input
+                label="Mật khẩu hiện tại"
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+                isPassword
+                autoComplete="current-password"
+                textContentType="password"
+              />
+              <Input
+                label="Mật khẩu mới"
+                value={newPassword}
+                onChangeText={setNewPassword}
+                isPassword
+                autoComplete="new-password"
+                textContentType="newPassword"
+                hint="Ít nhất 8 ký tự; có thể dán từ trình quản lý mật khẩu."
+              />
+              <Input
+                label="Xác nhận mật khẩu mới"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                isPassword
+                autoComplete="new-password"
+                textContentType="newPassword"
+              />
+              <Button
+                label="Đổi mật khẩu"
+                loading={savingPassword}
+                disabled={!currentPassword || !newPassword || !confirmPassword}
+                onPress={handleChangePassword}
+              />
+            </View>
+
             <View style={styles.sectionCard}>
               <Text style={styles.sectionTitle}>Thông tin ứng dụng</Text>
               <View style={styles.infoRow}>

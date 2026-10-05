@@ -8,7 +8,18 @@ import * as userRepo from "../repositories/userRepository.js";
 import * as restaurantRepo from "../repositories/restaurantRepository.js";
 import AppError from "../utils/AppError.js";
 import { isZeroPayableVoucherOrder } from "../utils/zeroPayableVoucher.js";
-import sendEmail from "../utils/sendEmail.js";
+import {
+  activatePasswordResetEmail,
+  activateEmailVerificationEmail,
+  cancelEmailVerificationEmail,
+  cancelPasswordResetEmail,
+  prepareEmailVerificationEmail,
+  preparePasswordResetEmail,
+  queueEmailChangeNotice,
+  queuePasswordChangedEmail,
+  queueWelcomeEmail,
+} from "./accountEmailService.js";
+import { createAccessToken, createRefreshToken, isTokenVersionCurrent } from "../utils/authTokens.js";
 import { geocodeAddress } from "../utils/geocode.js";
 import { recordAudit } from "../utils/auditLog.js";
 import { ShipperProfile } from "../models/index.cjs";
@@ -18,12 +29,63 @@ const maskEmail = (email = "") => {
   return domain ? `${local.slice(0, 2)}***@${domain}` : "";
 };
 
-const createAccessToken = (id) => {
-  return jwt.sign({ id, type: "access" }, process.env.JWT_SECRET, { expiresIn: "30m" });
-};
+const securityAuditActor = (user) => user ? {
+  _id: user._id,
+  role: user.role,
+} : undefined;
 
-const createRefreshToken = (id) => {
-  return jwt.sign({ id, type: "refresh" }, process.env.JWT_SECRET, { expiresIn: "7d" });
+const VERIFICATION_TOKEN_LIFETIME_MS = (Number(process.env.EMAIL_VERIFICATION_TOKEN_LIFETIME_MS) || 15 * 60) * 1000;
+const genericVerificationResult = {
+  success: true,
+  message: "Nếu tài khoản cần xác minh, một liên kết mới đã được gửi tới email.",
+};
+const isEmailVerified = (user) => user?.emailVerified !== false;
+const accountSecurityBaseUrl = () => String(
+  process.env.ACCOUNT_SECURITY_URL
+    || process.env.FRONTEND_URL
+    || "http://localhost:5173"
+).replace(/\/$/, "");
+
+const issueVerificationEmail = async ({ user, to, purpose = "registration" }) => {
+  const rawToken = crypto.randomBytes(32).toString("hex");
+  const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+  const expiresAt = new Date(Date.now() + VERIFICATION_TOKEN_LIFETIME_MS);
+  let emailJob;
+  try {
+    emailJob = await prepareEmailVerificationEmail({
+      userId: user._id,
+      to,
+      name: user.name,
+      verificationUrl: `${accountSecurityBaseUrl()}/verify-email/${rawToken}`,
+      verificationTokenHash: tokenHash,
+      verificationTokenExpiresAt: expiresAt,
+      purpose,
+    });
+  } catch {
+    return { queued: false };
+  }
+
+  try {
+    const updated = purpose === "email_change"
+      ? await userRepo.setPendingEmailVerification(user._id, to, tokenHash, expiresAt)
+      : await userRepo.setEmailVerificationToken(user._id, tokenHash, expiresAt);
+    const stored = purpose === "email_change" ? Boolean(updated) : updated.matchedCount === 1;
+    if (!stored) {
+      await cancelEmailVerificationEmail(emailJob._id, tokenHash).catch(() => undefined);
+      return { queued: false };
+    }
+  } catch (error) {
+    await cancelEmailVerificationEmail(emailJob._id, tokenHash).catch(() => undefined);
+    throw error;
+  }
+
+  await activateEmailVerificationEmail({
+    jobId: emailJob._id,
+    userId: user._id,
+    verificationTokenHash: tokenHash,
+    purpose,
+  });
+  return { queued: true };
 };
 
 export const loginUser = async ({ email, password }) => {
@@ -39,6 +101,15 @@ export const loginUser = async ({ email, password }) => {
     throw new AppError("Invalid credentials", 401);
   }
 
+  if (!isEmailVerified(user)) {
+    throw new AppError(
+      "Bạn cần xác minh email trước khi đăng nhập.",
+      403,
+      "EMAIL_VERIFICATION_REQUIRED",
+      { email: maskEmail(user.email), canResend: true }
+    );
+  }
+
   if (user.role === "restaurant_owner" && user.restaurantId) {
     const restaurant = await restaurantRepo.findById(user.restaurantId);
     if (!restaurant) {
@@ -52,8 +123,8 @@ export const loginUser = async ({ email, password }) => {
     }
   }
 
-  const token = createAccessToken(user._id);
-  const refreshToken = createRefreshToken(user._id);
+  const token = createAccessToken(user);
+  const refreshToken = createRefreshToken(user);
 
   const hashedRefreshToken = crypto.createHash("sha256").update(refreshToken).digest("hex");
   await userRepo.updateById(user._id, { refreshToken: hashedRefreshToken }, "+refreshToken");
@@ -95,6 +166,7 @@ export const registerUser = async (userData) => {
     email,
     password: hash,
     role: role || "user",
+    emailVerified: false,
     phone,
     address: {
       fullName: name,
@@ -103,12 +175,6 @@ export const registerUser = async (userData) => {
     },
   };
   let newUser = await userRepo.create(newUserData);
-  const token = createAccessToken(newUser._id);
-  const refreshToken = createRefreshToken(newUser._id);
-
-  const hashedRefreshToken = crypto.createHash("sha256").update(refreshToken).digest("hex");
-  await userRepo.updateById(newUser._id, { refreshToken: hashedRefreshToken }, "+refreshToken");
-
   if (role === "restaurant_owner") {
     // Geocode the address here too: signing up is the other way a restaurant
     // gets created, and without coordinates it never shows up in the
@@ -140,7 +206,22 @@ export const registerUser = async (userData) => {
     }
   }
 
-  return { success: true, token, refreshToken };
+  await recordAudit({
+    actor: securityAuditActor(newUser),
+    action: "auth.register_succeeded",
+    targetType: "user",
+    targetId: newUser._id,
+    category: "authentication",
+    metadata: { role: newUser.role || role || "user" },
+  });
+  await issueVerificationEmail({ user: newUser, to: newUser.email || email });
+
+  return {
+    success: true,
+    verificationRequired: true,
+    email: maskEmail(newUser.email || email),
+    message: "Tài khoản đã được tạo. Hãy kiểm tra hộp thư để xác minh email trước khi đăng nhập.",
+  };
 };
 
 export const lockUser = async (actor, userId, lock) => {
@@ -222,23 +303,21 @@ export const listUsers = async ({ page, limit } = {}) => {
 
 export const updateProfile = async (userId, currentEmail, updates) => {
   const { name, email, phone } = updates;
-  if (email && email !== currentEmail) {
-    const existing = await userRepo.findByEmail(email);
-    if (existing) {
-      throw new AppError("Email already exists", 409);
-    }
+  if (email && email.trim().toLowerCase() !== String(currentEmail).toLowerCase()) {
+    throw new AppError(
+      "Hãy dùng quy trình xác minh để thay đổi email đăng nhập.",
+      409,
+      "EMAIL_CHANGE_VERIFICATION_REQUIRED"
+    );
   }
-  const user = await userRepo.updateById(userId, { name, email, phone });
-  if (email && email !== currentEmail) {
-    await recordAudit({ actor: user, action: "email.updated", targetType: "user", targetId: userId, category: "email", metadata: { emailBefore: maskEmail(currentEmail), emailAfter: maskEmail(email) } });
-  }
+  const user = await userRepo.updateById(userId, { name, phone });
   return { success: true, data: user };
 };
 
 export const changePassword = async (userId, currentPassword, newPassword) => {
   // findById hides the password by default; ask for it explicitly so we can
   // verify the current one before overwriting.
-  const user = await userRepo.findById(userId, "+password");
+  const user = await userRepo.findById(userId, "+password +authVersion");
   if (!user) {
     throw new AppError("User not found", 404);
   }
@@ -251,9 +330,16 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
     throw new AppError("Mật khẩu mới phải khác mật khẩu hiện tại", 400);
   }
   const hash = await bcrypt.hash(newPassword, 10);
-  await userRepo.updateById(userId, { password: hash });
-  await recordAudit({ actor: user, action: "password.changed", targetType: "user", targetId: userId, category: "password" });
-  return { success: true, message: "Đổi mật khẩu thành công" };
+  const updatedUser = await userRepo.updatePasswordAndRevokeSessions(userId, hash);
+  await recordAudit({ actor: securityAuditActor(user), action: "password.changed", targetType: "user", targetId: userId, category: "password" });
+  await queuePasswordChangedEmail({
+    userId,
+    to: updatedUser.email,
+    name: updatedUser.name,
+    source: "authenticated_change",
+    authVersion: updatedUser.authVersion,
+  });
+  return { success: true, message: "Đổi mật khẩu thành công", sessionUserId: String(userId) };
 };
 
 export const updateAvatar = async (userId, file) => {
@@ -360,43 +446,267 @@ export const refreshAccessToken = async (refreshToken) => {
   const hashedToken = crypto.createHash("sha256").update(refreshToken).digest("hex");
   const user = await userRepo.findByRefreshToken(decoded.id, hashedToken);
 
-  if (!user) {
+  if (!user || !isTokenVersionCurrent(decoded, user)) {
     throw new AppError("Invalid refresh token", 401);
   }
 
-  const newAccessToken = createAccessToken(user._id);
+  if (!isEmailVerified(user)) {
+    throw new AppError(
+      "Bạn cần xác minh email trước khi làm mới phiên đăng nhập.",
+      403,
+      "EMAIL_VERIFICATION_REQUIRED",
+      { email: maskEmail(user.email), canResend: true }
+    );
+  }
+
+  const newAccessToken = createAccessToken(user);
   return { success: true, token: newAccessToken };
 };
 
-export const forgotPassword = async (email) => {
-  const user = await userRepo.findByEmail(email);
-  if (!user) {
-    throw new AppError("No account with that email address", 404);
+export const resendEmailVerification = async (email) => {
+  const startedAt = Date.now();
+  const minimumResponseMs = Math.max(
+    0,
+    Number(process.env.EMAIL_VERIFICATION_MIN_RESPONSE_MS) || 350
+  );
+  try {
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    const identity = await userRepo.findByEmailOrPendingEmail(normalizedEmail);
+    if (identity) {
+      const user = await userRepo.findById(
+        identity._id,
+        "name email role emailVerified +pendingEmail"
+      );
+      if (user?.emailVerified === false && user.email === normalizedEmail) {
+        await issueVerificationEmail({ user, to: user.email, purpose: "registration" });
+        await recordAudit({
+          actor: securityAuditActor(user),
+          action: "email.verification_resent",
+          targetType: "user",
+          targetId: user._id,
+          category: "email",
+        });
+      } else if (user?.pendingEmail === normalizedEmail) {
+        await issueVerificationEmail({ user, to: normalizedEmail, purpose: "email_change" });
+        await recordAudit({
+          actor: securityAuditActor(user),
+          action: "email.change_verification_resent",
+          targetType: "user",
+          targetId: user._id,
+          category: "email",
+        });
+      }
+    }
+    return genericVerificationResult;
+  } finally {
+    const remainingMs = minimumResponseMs - (Date.now() - startedAt);
+    if (remainingMs > 0) await new Promise((resolve) => setTimeout(resolve, remainingMs));
+  }
+};
+
+export const requestEmailChange = async (userId, currentPassword, email) => {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  if (!validator.isEmail(normalizedEmail)) {
+    throw new AppError("Email không hợp lệ", 400);
   }
 
+  const user = await userRepo.findById(
+    userId,
+    "+password +pendingEmail +authVersion"
+  );
+  if (!user) throw new AppError("User not found", 404);
+  if (!await bcrypt.compare(currentPassword, user.password)) {
+    throw new AppError("Mật khẩu hiện tại không đúng", 400, "CURRENT_PASSWORD_INVALID");
+  }
+  if (normalizedEmail === String(user.email).toLowerCase()) {
+    throw new AppError("Email mới phải khác email hiện tại", 400);
+  }
+
+  const existing = await userRepo.findByEmailOrPendingEmail(normalizedEmail);
+  if (existing && String(existing._id) !== String(user._id)) {
+    throw new AppError("Email đã được sử dụng", 409, "EMAIL_ALREADY_EXISTS");
+  }
+
+  try {
+    await issueVerificationEmail({ user, to: normalizedEmail, purpose: "email_change" });
+  } catch (error) {
+    if (error?.code === 11000) {
+      throw new AppError("Email đã được sử dụng", 409, "EMAIL_ALREADY_EXISTS");
+    }
+    throw error;
+  }
+
+  await queueEmailChangeNotice({
+    userId: user._id,
+    to: user.email,
+    name: user.name,
+    completed: false,
+    authVersion: user.authVersion,
+  });
+  await recordAudit({
+    actor: securityAuditActor(user),
+    action: "email.change_requested",
+    targetType: "user",
+    targetId: user._id,
+    category: "email",
+    metadata: { emailBefore: maskEmail(user.email), emailAfter: maskEmail(normalizedEmail) },
+  });
+
+  return {
+    success: true,
+    verificationRequired: true,
+    email: maskEmail(normalizedEmail),
+    message: "Hãy kiểm tra email mới và mở liên kết xác nhận trong 15 phút.",
+  };
+};
+
+export const verifyEmail = async (token) => {
+  const tokenHash = crypto.createHash("sha256").update(String(token || "")).digest("hex");
+  const verified = await userRepo.consumeEmailVerificationToken(tokenHash);
+  if (verified) {
+    await recordAudit({
+      actor: securityAuditActor(verified),
+      action: "email.verified",
+      targetType: "user",
+      targetId: verified._id,
+      category: "email",
+    });
+    await queueWelcomeEmail({ userId: verified._id, to: verified.email, name: verified.name });
+    return {
+      success: true,
+      type: "registration",
+      message: "Email đã được xác minh. Bạn có thể đăng nhập.",
+    };
+  }
+
+  try {
+    const changed = await userRepo.consumePendingEmailToken(tokenHash);
+    if (changed) {
+      const { user, oldEmail } = changed;
+      await recordAudit({
+        actor: securityAuditActor(user),
+        action: "email.changed",
+        targetType: "user",
+        targetId: user._id,
+        category: "email",
+        metadata: { emailBefore: maskEmail(oldEmail), emailAfter: maskEmail(user.email) },
+      });
+      await queueEmailChangeNotice({
+        userId: user._id,
+        to: oldEmail,
+        name: user.name,
+        completed: true,
+        authVersion: user.authVersion,
+      });
+      return {
+        success: true,
+        type: "email_change",
+        message: "Email đăng nhập đã được thay đổi. Các phiên cũ đã đóng; hãy đăng nhập lại.",
+        sessionUserId: String(user._id),
+      };
+    }
+  } catch (error) {
+    if (error?.code === 11000) {
+      throw new AppError("Email đã được sử dụng", 409, "EMAIL_ALREADY_EXISTS");
+    }
+    throw error;
+  }
+
+  if (
+    await userRepo.wasEmailVerificationTokenConsumed(tokenHash)
+    || await userRepo.wasPendingEmailTokenConsumed(tokenHash)
+  ) {
+    throw new AppError(
+      "Liên kết xác minh đã được sử dụng.",
+      400,
+      "EMAIL_VERIFICATION_ALREADY_USED"
+    );
+  }
+  throw new AppError(
+    "Liên kết xác minh không hợp lệ hoặc đã hết hạn.",
+    400,
+    "EMAIL_VERIFICATION_INVALID_OR_EXPIRED"
+  );
+};
+
+export const forgotPassword = async (email) => {
+  const startedAt = Date.now();
+  const minimumResponseMs = Math.max(0, Number(process.env.FORGOT_PASSWORD_MIN_RESPONSE_MS) || 350);
+  const genericResult = {
+    success: true,
+    message: "Nếu email này tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi.",
+  };
+  // Perform the same token generation/hashing work before the account branch.
+  // Together with the response floor this removes the practical SMTP/DB timing
+  // signal without delaying on the mail provider.
   const resetToken = crypto.randomBytes(32).toString("hex");
   const hashedToken = crypto.createHash("sha256").update(resetToken).digest("hex");
 
-  await userRepo.updateById(user._id, {
-    resetPasswordToken: hashedToken,
-    resetPasswordExpires: Date.now() + 15 * 60 * 1000,
-  }, "+resetPasswordToken +resetPasswordExpires");
+  try {
+    const user = await userRepo.findByEmail(email);
+    if (user) {
+      const securityBaseUrl = String(
+        process.env.ACCOUNT_SECURITY_URL
+          || process.env.FRONTEND_URL
+          || "http://localhost:5173"
+      ).replace(/\/$/, "");
+      const resetUrl = `${securityBaseUrl}/reset-password/${resetToken}`;
+      const resetTokenExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+      const emailJob = await preparePasswordResetEmail({
+        userId: user._id,
+        to: user.email,
+        name: user.name,
+        resetUrl,
+        resetTokenHash: hashedToken,
+        resetTokenExpiresAt,
+      });
+      let tokenStored = false;
+      try {
+        const update = await userRepo.setPasswordResetToken(
+          user._id,
+          hashedToken,
+          resetTokenExpiresAt
+        );
+        tokenStored = update.matchedCount === 1;
+      } catch (error) {
+        await cancelPasswordResetEmail(emailJob._id, hashedToken).catch(() => undefined);
+        throw error;
+      }
 
-  const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:5173"}/reset-password/${resetToken}`;
+      if (!tokenStored) {
+        await cancelPasswordResetEmail(emailJob._id, hashedToken).catch(() => undefined);
+        return genericResult;
+      }
 
-  await sendEmail({
-    to: email,
-    subject: "Password Reset - Drone Food",
-    html: `
-      <h2>Password Reset Request</h2>
-      <p>You requested a password reset. Click the link below to set a new password:</p>
-      <a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background:#ff6b35;color:#fff;text-decoration:none;border-radius:6px;">Reset Password</a>
-      <p>This link expires in 15 minutes.</p>
-      <p>If you did not request this, please ignore this email.</p>
-    `,
-  });
+      // If activation is interrupted, the durable pending job is reconciled
+      // against the stored User token by the worker before delivery.
+      await activatePasswordResetEmail({
+        jobId: emailJob._id,
+        userId: user._id,
+        resetTokenHash: hashedToken,
+      });
 
-  return { success: true, message: "Password reset email sent" };
+      await recordAudit({
+        actor: securityAuditActor(user),
+        action: "password.reset_requested",
+        targetType: "user",
+        targetId: user._id,
+        category: "password",
+        outcome: "success",
+      });
+    } else {
+      await recordAudit({
+        action: "password.reset_requested",
+        targetType: "authentication",
+        category: "password",
+        outcome: "success",
+      });
+    }
+    return genericResult;
+  } finally {
+    const remainingMs = minimumResponseMs - (Date.now() - startedAt);
+    if (remainingMs > 0) await new Promise((resolve) => setTimeout(resolve, remainingMs));
+  }
 };
 
 export const resetPassword = async (token, newPassword) => {
@@ -405,22 +715,45 @@ export const resetPassword = async (token, newPassword) => {
   }
 
   const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
-  const user = await userRepo.findByResetToken(hashedToken);
-
-  if (!user) {
-    throw new AppError("Invalid or expired reset token", 400);
-  }
-
   const salt = await bcrypt.genSalt(10);
   const hash = await bcrypt.hash(newPassword, salt);
+  const user = await userRepo.consumeResetToken(hashedToken, { password: hash });
 
-  await userRepo.updateById(user._id, {
-    password: hash,
-    resetPasswordToken: null,
-    resetPasswordExpires: null,
-  }, "+password");
+  if (!user) {
+    if (await userRepo.wasResetPasswordTokenConsumed(hashedToken)) {
+      throw new AppError("Liên kết đặt lại mật khẩu này đã được sử dụng.", 400, "RESET_TOKEN_ALREADY_USED");
+    }
+    throw new AppError("Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn", 400, "RESET_TOKEN_INVALID_OR_EXPIRED");
+  }
 
-  return { success: true, message: "Password has been reset successfully" };
+  await recordAudit({
+    actor: securityAuditActor(user),
+    action: "password.reset_succeeded",
+    targetType: "user",
+    targetId: user._id,
+    category: "password",
+  });
+  await queuePasswordChangedEmail({
+    userId: user._id,
+    to: user.email,
+    name: user.name,
+    source: "reset",
+    authVersion: user.authVersion,
+  });
+
+  return { success: true, message: "Đặt lại mật khẩu thành công", sessionUserId: String(user._id) };
+};
+
+export const verifyResetToken = async (token) => {
+  const hashedToken = crypto.createHash("sha256").update(String(token || "")).digest("hex");
+  const isValid = await userRepo.isResetPasswordTokenValid(hashedToken);
+  if (isValid) {
+    return { success: true, message: "Liên kết hợp lệ." };
+  }
+  if (await userRepo.wasResetPasswordTokenConsumed(hashedToken)) {
+    throw new AppError("Liên kết đặt lại mật khẩu này đã được sử dụng.", 400, "RESET_TOKEN_ALREADY_USED");
+  }
+  throw new AppError("Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.", 400, "RESET_TOKEN_INVALID_OR_EXPIRED");
 };
 
 export const getStats = async (period = "day") => {

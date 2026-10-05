@@ -22,6 +22,7 @@ import FloatingCartBar from "../components/FloatingCartBar/FloatingCartBar";
 import ResetPassword from "../pages/ResetPassword/ResetPassword";
 import OrderDetail from "../pages/OrderDetail/OrderDetail";
 import ActiveOrderBar from "../components/ActiveOrderBar/ActiveOrderBar";
+import VerifyEmail from "../pages/VerifyEmail/VerifyEmail";
 
 const PageTransition = ({ children }) => {
   const location = useLocation();
@@ -84,6 +85,8 @@ const CustomerWebApp = () => {
             <Route path="/profile" element={<Profile />} />
             <Route path="/product/:id" element={<ProductDetail />} />
             <Route path="/reset-password/:token" element={<ResetPassword />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
+            <Route path="/verify-email/:token" element={<VerifyEmail />} />
             {/* The old three-route flow (Cart → PlaceOrder → Payment) is now
                 one page; keep the old paths working for saved links. */}
             <Route path="/order" element={<Navigate to="/cart" replace />} />
