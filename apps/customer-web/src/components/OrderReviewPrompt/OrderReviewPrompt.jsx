@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Star } from "lucide-react";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import { StoreContext } from "../../context/StoreContext";
 import "./OrderReviewPrompt.css";
 
@@ -46,10 +46,21 @@ const OrderReviewPrompt = ({ order, onFlowChanged }) => {
       setComment("");
       if (nextFlow.complete) {
         setIsOpen(false);
-        toast.success("Cảm ơn bạn đã phản hồi.");
+        notificationService.success("Cảm ơn bạn đã phản hồi.", undefined, { audience: "user" });
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || "Chưa thể lưu đánh giá");
+      notificationService.error(
+        "Chưa thể lưu đánh giá",
+        error.response?.data?.message || "Vui lòng thử gửi lại đánh giá của bạn.",
+        {
+          audience: "user",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `order-review-${order._id}-${nextTarget.targetId}`,
+          actions: [{ label: "Thử lại", onClick: () => submit("rated") }],
+        }
+      );
     } finally {
       setIsSaving(false);
     }

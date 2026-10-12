@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import {
   MapContainer,
   TileLayer,
@@ -328,7 +328,15 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
           console.error("Error updating order status:", error);
         }
 
-        toast.error("Hết thời gian nhận hàng. Đơn hàng đã bị hủy.");
+        notificationService.error(
+          "Hết thời gian nhận hàng",
+          "Đơn hàng đã tự động bị hủy do quá thời gian chờ nhận.",
+          {
+            audience: "user",
+            priority: "high",
+            key: `drone-delivery-timeout-${order._id}`,
+          }
+        );
         window.location.reload();
       }, remainingCountdown * 1000);
     }
@@ -371,7 +379,7 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
         } catch (e) {
           console.error("Auto confirm delivery error:", e);
         }
-        toast.success("Đã hoàn tất nhận hàng từ Drone!");
+        notificationService.success("Đã hoàn tất nhận hàng từ Drone!", undefined, { audience: "user" });
         window.dispatchEvent(new Event("order-updated"));
         if (onDeliveryComplete) onDeliveryComplete();
       }, 5000);
@@ -425,7 +433,15 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
         console.error("Error updating order status:", error);
       }
 
-      toast.error("Hết thời gian nhận hàng. Đơn hàng đã bị hủy.");
+      notificationService.error(
+        "Hết thời gian nhận hàng",
+        "Đơn hàng đã tự động bị hủy do quá thời gian chờ nhận.",
+        {
+          audience: "user",
+          priority: "high",
+          key: `drone-delivery-timeout-${order._id}`,
+        }
+      );
       window.location.reload();
     }, 300000);
   };
@@ -476,7 +492,7 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
             console.error("Error confirming delivery automatically:", e);
           }
 
-          toast.success("Đã hoàn tất nhận hàng từ Drone! Đơn hàng đã giao thành công.");
+          notificationService.success("Đã hoàn tất nhận hàng từ Drone!", "Đơn hàng đã giao thành công.", { audience: "user" });
 
           // Dọn dẹp storage
           localStorage.removeItem(storageKeyArrived);
@@ -488,11 +504,31 @@ const DroneDelivery = ({ order, onDeliveryComplete }) => {
           }
         }, 5000);
       } else {
-        toast.error(data.message || "Xác nhận mã QR thất bại");
+        notificationService.error(
+          "Xác nhận mã QR không thành công",
+          data.message || "Mã QR không khớp. Vui lòng thử quét lại.",
+          {
+            audience: "user",
+            priority: "high",
+            key: `drone-qr-scan-${order._id}`,
+            actions: [{ label: "Quét lại", onClick: () => handleScanQR() }],
+          }
+        );
       }
     } catch (error) {
       console.error("Error scanning QR:", error);
-      toast.error("Xác nhận mã QR thất bại");
+      notificationService.error(
+        "Không thể xác nhận mã QR",
+        error.message || "Lỗi kết nối khi xác thực mã QR. Vui lòng thử lại.",
+        {
+          audience: "user",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `drone-qr-scan-${order._id}`,
+          actions: [{ label: "Thử lại", onClick: () => handleScanQR() }],
+        }
+      );
     }
   };
 

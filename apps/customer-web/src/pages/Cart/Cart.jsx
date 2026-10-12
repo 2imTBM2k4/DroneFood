@@ -2,7 +2,7 @@ import { useState, useContext, useEffect } from "react";
 import "./Cart.css";
 import { StoreContext } from "../../context/StoreContext";
 import { useNavigate, useParams } from "react-router-dom";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import { ShoppingCart, Store, Trash2, Plus, Minus } from "lucide-react";
 import { EmptyState } from "@drone-food/web-ui/components/StateBlock";
 import ItemOptionsSheet from "../../components/ItemOptionsSheet/ItemOptionsSheet";
@@ -74,7 +74,7 @@ const Cart = () => {
     try {
       const removed = await removeLine(cartId, pendingRemoval.lineKey);
       if (removed) {
-        toast.success("Item removed from cart");
+        notificationService.success("Đã xóa món", "Món ăn đã được xóa khỏi giỏ hàng.", { audience: "user" });
         setPendingRemoval(null);
       }
     } finally {
@@ -99,16 +99,28 @@ const Cart = () => {
 
   const handleProceedCheckout = () => {
     if (!token) {
-      toast.error("Please sign in to continue");
+      notificationService.warning(
+        "Vui lòng đăng nhập",
+        "Bạn cần đăng nhập để tiếp tục thanh toán.",
+        { audience: "user", key: "cart-auth-required" }
+      );
       setShowLogin(true);
       return;
     }
     if (cartLines.length === 0) {
-      toast.error("Your cart is empty");
+      notificationService.warning(
+        "Giỏ hàng trống",
+        "Vui lòng chọn món trước khi tiến hành thanh toán.",
+        { audience: "user", key: `cart-empty-${cartId}` }
+      );
       return;
     }
     if (restaurant?.isOpen === false) {
-      toast.error("This restaurant is currently closed");
+      notificationService.warning(
+        "Cửa hàng tạm đóng",
+        "Nhà hàng này hiện đang tạm đóng cửa và không thể nhận đơn mới.",
+        { audience: "user", key: `cart-closed-restaurant-${restaurant?.id || cartId}` }
+      );
       return;
     }
     navigate(`/checkout/${cartId}`);
@@ -337,7 +349,7 @@ const CartLineEditor = ({ cartId, editing, onClose }) => {
       note
     );
     if (added) {
-      toast.success("Item updated");
+      notificationService.success("Đã cập nhật món", "Thông tin món trong giỏ hàng đã được cập nhật.", { audience: "user" });
       if (added.cartId !== cartId) navigate(`/cart/${added.cartId}`, { replace: true });
     }
     return added;

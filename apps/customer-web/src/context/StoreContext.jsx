@@ -1,6 +1,6 @@
 import axios from "axios";
 import { createContext, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import { clearCustomerAuthStorage, createCustomerClient } from "../api/customerClient";
 import { API_URL } from "../config/api";
 import { reverseGeocode } from "../lib/trackasia";
@@ -119,6 +119,15 @@ const StoreContextProvider = (props) => {
     setCartDetails({});
   }, []);
 
+  const logoutCustomer = useCallback(() => {
+    clearCustomerAuthStorage();
+    setToken("");
+    setUser(null);
+    clearLocalCarts();
+    localStorage.removeItem("cartItems");
+    localStorage.removeItem("cartRestaurantId");
+  }, [clearLocalCarts]);
+
   const loadCartData = useCallback(async () => {
     try {
       const res = await customerApi.get("/api/cart", {
@@ -156,11 +165,23 @@ const StoreContextProvider = (props) => {
   const fetchUserInfo = useCallback(async () => {
     try {
       const res = await customerApi.get("/api/user/me");
-      if (res.data.success) setUser(res.data.data);
+      if (res.data.success) {
+        const userData = res.data.data;
+        if (userData && userData.role && userData.role !== "user") {
+          logoutCustomer();
+          notificationService.warning(
+            "Phiên đăng nhập không hợp lệ",
+            "Tài khoản Quản trị hoặc Nhà hàng không thể sử dụng giao diện Khách hàng.",
+            { audience: "user", key: "invalid-role-customer" }
+          );
+          return;
+        }
+        setUser(userData);
+      }
     } catch (err) {
       console.error(err);
     }
-  }, [customerApi]);
+  }, [customerApi, logoutCustomer]);
 
   /**
    * Add a dish, optionally with option picks and a kitchen note. The server
@@ -174,7 +195,11 @@ const StoreContextProvider = (props) => {
     note = ""
   ) => {
     if (!token) {
-      toast.warning("Please sign in to continue!");
+      notificationService.warning(
+        "Cần đăng nhập để thêm món",
+        "Vui lòng đăng nhập trước khi thêm món vào giỏ hàng.",
+        { audience: "user", key: `add-to-cart-auth-${itemId}` }
+      );
       setShowLogin(true);
       return false;
     }
@@ -186,8 +211,19 @@ const StoreContextProvider = (props) => {
       await loadCartData();
       return res.data;
     } catch (err) {
-      const msg = err?.response?.data?.message || err.message || "";
-      toast.error(msg || "Failed to add to cart");
+      const msg = err?.response?.data?.message || err.message || "Không thể thêm món vào giỏ hàng.";
+      notificationService.error(
+        "Không thể thêm món vào giỏ hàng",
+        msg,
+        {
+          audience: "user",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `cart-add-${itemId}`,
+          actions: [{ label: "Thử lại", onClick: () => addToCart(itemId, quantity, selectedOptions, note) }],
+        }
+      );
       return false;
     }
   };
@@ -202,7 +238,18 @@ const StoreContextProvider = (props) => {
       await loadCartData();
       return true;
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to update cart");
+      notificationService.error(
+        "Không thể cập nhật giỏ hàng",
+        err?.response?.data?.message || "Vui lòng thử cập nhật lại món trong giỏ hàng.",
+        {
+          audience: "user",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `cart-update-${cartId}-${lineKey}`,
+          actions: [{ label: "Thử lại", onClick: () => updateLine(cartId, lineKey, quantity) }],
+        }
+      );
       return false;
     }
   };
@@ -224,7 +271,18 @@ const StoreContextProvider = (props) => {
       await loadCartData();
       return true;
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to remove item");
+      notificationService.error(
+        "Không thể xóa món khỏi giỏ hàng",
+        err?.response?.data?.message || "Vui lòng thử xóa món lại.",
+        {
+          audience: "user",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `cart-remove-${cartId}-${lineKey}`,
+          actions: [{ label: "Thử lại", onClick: () => removeLine(cartId, lineKey) }],
+        }
+      );
       return false;
     }
   };
@@ -362,14 +420,6 @@ const StoreContextProvider = (props) => {
     };
   }, []);
 
-  const logoutCustomer = useCallback(() => {
-    clearCustomerAuthStorage();
-    setToken("");
-    setUser(null);
-    clearLocalCarts();
-    localStorage.removeItem("cartItems");
-    localStorage.removeItem("cartRestaurantId");
-  }, [clearLocalCarts]);
 
   useEffect(() => {
     let notified = false;
@@ -378,7 +428,11 @@ const StoreContextProvider = (props) => {
       notified = true;
       logoutCustomer();
       setShowLogin(true);
-      toast.info("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+      notificationService.warning(
+        "Phiên đăng nhập đã hết hạn",
+        "Vui lòng đăng nhập lại để tiếp tục sử dụng dịch vụ.",
+        { audience: "user", key: "customer-session-expired" }
+      );
     });
     return () => customerClient.setSessionExpiredHandler(null);
   }, [customerClient, logoutCustomer]);

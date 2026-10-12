@@ -4,7 +4,7 @@
 
 .order-detail-page {
   width: 100%;
-  min-height: 80vh;
+  min-height: calc(100vh - 54px);
   background-color: var(--apple-canvas-parchment, #f5f5f7);
   padding: 24px var(--container-pad, 20px) 90px;
   color: var(--apple-ink, #1d1d1f);
@@ -346,17 +346,17 @@
   height: 40px;
   border-radius: 12px;
   flex-shrink: 0;
-  background: #f4f4f5;
-  color: #18181b;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: var(--apple-surface-pearl, #f4f4f5);
+  color: var(--apple-ink, #18181b);
+  border: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.06));
 }
 
 .card-header-icon.drone-bg,
 .card-header-icon.shipper-bg,
 .card-header-icon.timeline-bg,
 .card-header-icon.items-bg {
-  background: #f4f4f5;
-  color: #18181b;
+  background: var(--apple-surface-pearl, #f4f4f5);
+  color: var(--apple-ink, #18181b);
 }
 
 .card-header-line h2 {
@@ -799,15 +799,16 @@
   height: 32px;
   border-radius: 10px;
   flex-shrink: 0;
-  background: #f4f4f5;
-  color: #18181b;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: var(--apple-surface-pearl, #f4f4f5);
+  color: var(--apple-ink, #18181b);
+  border: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.06));
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .endpoint-icon-box.store-color,
 .endpoint-icon-box.dropoff-color {
-  background: #f4f4f5;
-  color: #18181b;
+  background: var(--apple-surface-pearl, #f4f4f5);
+  color: var(--apple-ink, #18181b);
 }
 
 .endpoint-details {
@@ -851,13 +852,14 @@
   margin-top: 18px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: #fafafa;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--apple-surface-pearl, #fafafc);
+  border: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.08));
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .assigned-delivery-box.drone-box {
-  background: #fafafa;
-  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 102, 204, 0.04);
+  border-color: rgba(0, 102, 204, 0.18);
 }
 
 .assigned-icon {
@@ -867,14 +869,17 @@
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: #f4f4f5;
-  color: #18181b;
+  background: var(--apple-canvas, #ffffff);
+  color: var(--apple-ink, #18181b);
   flex-shrink: 0;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--apple-hairline-soft, rgba(0, 0, 0, 0.06));
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .assigned-icon.drone-color {
-  color: #18181b;
+  background: rgba(0, 102, 204, 0.1);
+  color: var(--apple-primary, #0066cc);
+  border-color: rgba(0, 102, 204, 0.25);
 }
 
 .assigned-meta {
@@ -1187,3 +1192,178 @@
     width: 100%;
   }
 }
+
+/* ============================================================
+   Dark Mode Refinements for OrderDetail
+   ============================================================ */
+
+.dark-mode .assigned-delivery-box {
+  background: #232326;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark-mode .assigned-delivery-box.drone-box {
+  background: rgba(41, 151, 255, 0.1);
+  border-color: rgba(41, 151, 255, 0.25);
+}
+
+.dark-mode .assigned-icon {
+  background: #2c2c30;
+  color: #f5f5f7;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.dark-mode .assigned-icon.drone-color {
+  background: rgba(41, 151, 255, 0.2);
+  color: #2997ff;
+  border-color: rgba(41, 151, 255, 0.4);
+}
+
+.dark-mode .assigned-label {
+  color: var(--apple-body-muted, #a1a1a6);
+}
+
+.dark-mode .assigned-name {
+  color: var(--apple-ink, #f5f5f7);
+}
+
+.dark-mode .assigned-phone-link {
+  color: #2997ff;
+}
+
+.dark-mode .drone-id-tag {
+  color: #2997ff;
+}
+
+.dark-mode .endpoint-icon-box,
+.dark-mode .endpoint-icon-box.store-color,
+.dark-mode .endpoint-icon-box.dropoff-color {
+  background: #232326;
+  color: #f5f5f7;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark-mode .route-connector-line {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.dark-mode .card-header-icon,
+.dark-mode .card-header-icon.drone-bg,
+.dark-mode .card-header-icon.shipper-bg,
+.dark-mode .card-header-icon.timeline-bg,
+.dark-mode .card-header-icon.items-bg {
+  background: #232326;
+  color: #f5f5f7;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark-mode .meta-delivery-type.drone {
+  background: rgba(41, 151, 255, 0.15);
+  border-color: rgba(41, 151, 255, 0.3);
+  color: #2997ff;
+}
+
+.dark-mode .meta-delivery-type.shipper {
+  background: rgba(255, 149, 0, 0.15);
+  border-color: rgba(255, 149, 0, 0.3);
+  color: #ff9f0a;
+}
+
+.dark-mode .cancellation-locked-notice {
+  background: rgba(255, 149, 0, 0.14);
+  border-color: rgba(255, 149, 0, 0.32);
+  color: #ffb340;
+}
+
+.dark-mode .btn-refresh-status {
+  background: #232326;
+  color: #f5f5f7;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.dark-mode .shipper-wait-notice {
+  background: rgba(255, 149, 0, 0.15);
+  border-color: rgba(255, 149, 0, 0.35);
+  color: #ff9f0a;
+}
+
+.dark-mode .shipper-route-eta {
+  color: #30d158;
+  background: rgba(48, 209, 88, 0.15);
+  border-color: rgba(48, 209, 88, 0.35);
+}
+
+.dark-mode .shipper-route-pending {
+  color: #2997ff;
+  background: rgba(41, 151, 255, 0.15);
+  border-color: rgba(41, 151, 255, 0.35);
+}
+
+.dark-mode .shipper-arrival-guidance {
+  color: #64d2ff;
+  background: rgba(100, 210, 255, 0.15);
+  border-color: rgba(100, 210, 255, 0.35);
+}
+
+.dark-mode .shipper-location-updated {
+  color: var(--apple-body-muted, #a1a1a6);
+}
+
+.dark-mode .items-count-badge {
+  background: rgba(41, 151, 255, 0.15);
+  color: #2997ff;
+}
+
+.dark-mode .total-val {
+  color: #2997ff;
+}
+
+.dark-mode .paid-pill.paid {
+  background: rgba(48, 209, 88, 0.15);
+  color: #30d158;
+}
+
+.dark-mode .paid-pill.unpaid {
+  background: rgba(255, 149, 0, 0.15);
+  color: #ff9f0a;
+}
+
+.dark-mode .retry-payment-callout {
+  background: rgba(255, 149, 0, 0.12);
+  border-color: rgba(255, 149, 0, 0.35);
+}
+
+.dark-mode .retry-payment-callout strong {
+  color: #ff9f0a;
+}
+
+.dark-mode .retry-payment-callout p {
+  color: #a1a1a6;
+}
+
+.dark-mode .step-circle {
+  background: #232326;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #a1a1a6;
+}
+
+.dark-mode .step-connector {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.dark-mode .timeline-step.active .step-circle {
+  background: rgba(41, 151, 255, 0.2);
+  border-color: #2997ff;
+  color: #2997ff;
+}
+
+.dark-mode .skeleton-bar {
+  background: linear-gradient(90deg, #232326 25%, #2c2c30 37%, #232326 63%);
+}
+
+.dark-mode .order-detail-error-card {
+  background: #1e1e20;
+  border-color: rgba(255, 69, 58, 0.3);
+  color: #ff453a;
+}
+

@@ -1,79 +1,166 @@
+import "react-toastify/dist/ReactToastify.css";
 import React from "react";
-import { toast } from "react-toastify";
+import { toast as reactToastifyToast } from "react-toastify";
 import ToastNotification from "../components/ToastNotification";
+import {
+  createNotificationService,
+  notificationService,
+  resolvePosition,
+  DEFAULT_DURATIONS,
+  DEFAULT_TITLES,
+} from "../services/notificationService";
 
 /**
- * Normalizes input arguments so callers can provide either:
- * - A string: notify.info("Password contain letter from A to Z!")
- * - An object: notify.info({ title: "Must Have A-Z!", message: "...", actionText: "Learn More" })
- * - A string with options: notify.info("Message", { title: "Custom Title", actionText: "Action" })
+ * Normalizes input arguments for toast rendering
  */
-const renderToastContent = (type, content, options = {}) => {
-  let title = options.title;
-  let message = "";
-  let actionText = options.actionText;
-  let onAction = options.onAction;
-  let secondaryActionText = options.secondaryActionText;
-  let onSecondaryAction = options.onSecondaryAction;
-
-  if (typeof content === "string") {
-    message = content;
-  } else if (content && typeof content === "object") {
-    if (React.isValidElement(content)) {
-      return content;
-    }
-    title = content.title ?? title;
-    message = content.message ?? content.text ?? "";
-    actionText = content.actionText ?? actionText;
-    onAction = content.onAction ?? onAction;
-    secondaryActionText = content.secondaryActionText ?? secondaryActionText;
-    onSecondaryAction = content.onSecondaryAction ?? onSecondaryAction;
-  }
-
+const renderToastContent = (notification, options = {}) => {
   return ({ closeToast }) => (
     <ToastNotification
-      type={type}
-      title={title}
-      message={message}
-      actionText={actionText}
-      onAction={onAction}
-      secondaryActionText={secondaryActionText}
-      onSecondaryAction={onSecondaryAction}
+      type={notification.type}
+      title={notification.title}
+      message={notification.message}
+      actions={notification.actions}
+      actionText={notification.actionText || options.actionText}
+      onAction={notification.actions?.length ? options.onAction : notification.onAction || options.onAction}
+      secondaryActionText={notification.secondaryActionText || options.secondaryActionText}
+      onSecondaryAction={notification.onSecondaryAction || options.onSecondaryAction}
       closeToast={closeToast}
     />
   );
 };
 
-const createNotifyFunction = (type) => {
-  return (content, options = {}) => {
-    const isCustom = typeof content === "object" && !React.isValidElement(content);
-    const toastOpts = {
-      type,
-      position: options.position || "bottom-center",
-      icon: false, // We render the custom squircle badge inside ToastNotification
-      autoClose: options.autoClose ?? 4500,
-      hideProgressBar: options.hideProgressBar ?? false,
-      closeOnClick: options.closeOnClick ?? (isCustom && content.actionText ? false : true),
-      pauseOnHover: options.pauseOnHover ?? false,
-      draggable: options.draggable ?? true,
-      ...options,
-    };
+// Wire up the default toast adapter to react-toastify
+const createReactToastifyAdapter = () => {
+  return {
+    show: (notification, callbacks = {}) => {
+      const position = notification.position || resolvePosition(notification.audience);
+      const isPersistent = notification.persistent || notification.duration === false;
+      const autoClose = isPersistent ? false : (notification.duration ?? DEFAULT_DURATIONS[notification.type] ?? 4000);
 
-    return toast(renderToastContent(type, content, options), toastOpts);
+      const toastId = reactToastifyToast(
+        renderToastContent(notification, {
+          onAction: (action) => {
+            if (callbacks.onActionClick) {
+              callbacks.onActionClick(
+                action || notification.actions?.[0] || { label: notification.actionText }
+              );
+            }
+          },
+        }),
+        {
+          toastId: notification.key || notification.id,
+          type: notification.type,
+          position,
+          icon: false,
+          closeButton: false,
+          autoClose,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+          onClose: () => {
+            if (callbacks.onClose) callbacks.onClose();
+          },
+          role: notification.type === "error" || notification.type === "warning" ? "alert" : "status",
+        }
+      );
+
+      return toastId;
+    },
+    update: (id, notification, callbacks = {}) => {
+      const isPersistent = notification.persistent || notification.duration === false || notification.duration === 0;
+      const autoClose = isPersistent ? false : (notification.duration ?? DEFAULT_DURATIONS[notification.type] ?? 4000);
+      const content = renderToastContent(notification, {
+        onAction: (action) => {
+          if (callbacks.onActionClick) {
+            callbacks.onActionClick(
+              action || notification.actions?.[0] || { label: notification.actionText }
+            );
+          }
+        },
+      });
+
+      if (typeof reactToastifyToast.update === "function" && reactToastifyToast.isActive?.(id)) {
+        reactToastifyToast.update(id, {
+          render: content,
+          type: notification.type,
+          closeButton: false,
+          autoClose,
+          closeOnClick: true,
+        });
+      } else {
+        reactToastifyToast.dismiss(id);
+        reactToastifyToast(content, {
+          toastId: notification.key || notification.id,
+          type: notification.type,
+          position: notification.position || resolvePosition(notification.audience),
+          icon: false,
+          closeButton: false,
+          autoClose,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+          onClose: () => {
+            if (callbacks.onClose) callbacks.onClose();
+          },
+          role: notification.type === "error" || notification.type === "warning" ? "alert" : "status",
+        });
+      }
+    },
+    dismiss: (id) => reactToastifyToast.dismiss(id),
+    clearAll: () => reactToastifyToast.dismiss(),
   };
 };
 
+const defaultAdapter = createReactToastifyAdapter();
+notificationService.setAdapter(defaultAdapter);
+
+/**
+ * Unified notification helper that conforms to NTF-STD-001
+ */
 export const notify = (content, options = {}) => {
-  const type = options.type || (typeof content === "object" ? content.type : "info") || "info";
-  return createNotifyFunction(type)(content, options);
+  if (typeof content === "object" && !React.isValidElement(content)) {
+    return notificationService.show({ ...content, ...options });
+  }
+  const type = options.type || "info";
+  return notificationService.show({ type, title: options.title, message: content, ...options });
 };
 
-notify.info = createNotifyFunction("info");
-notify.success = createNotifyFunction("success");
-notify.warning = createNotifyFunction("warning");
-notify.warn = createNotifyFunction("warning");
-notify.error = createNotifyFunction("error");
-notify.dismiss = toast.dismiss;
+notify.info = (titleOrMsg, msgOrOpts, opts) => notificationService.info(titleOrMsg, msgOrOpts, opts);
+notify.success = (titleOrMsg, msgOrOpts, opts) => notificationService.success(titleOrMsg, msgOrOpts, opts);
+notify.warning = (titleOrMsg, msgOrOpts, opts) => notificationService.warning(titleOrMsg, msgOrOpts, opts);
+notify.warn = (titleOrMsg, msgOrOpts, opts) => notificationService.warning(titleOrMsg, msgOrOpts, opts);
+notify.error = (titleOrMsg, msgOrOpts, opts) => notificationService.error(titleOrMsg, msgOrOpts, opts);
+notify.dismiss = (id) => notificationService.dismiss(id);
+notify.clearAll = () => notificationService.clearAll();
 
-export { toast };
+/**
+ * Backward compatibility wrapper for callers importing `{ toast }` from web-ui
+ */
+export const toast = {
+  ...reactToastifyToast,
+  success: (titleOrMsg, msgOrOpts, opts) => notificationService.success(titleOrMsg, msgOrOpts, opts),
+  info: (titleOrMsg, msgOrOpts, opts) => notificationService.info(titleOrMsg, msgOrOpts, opts),
+  warning: (titleOrMsg, msgOrOpts, opts) => notificationService.warning(titleOrMsg, msgOrOpts, opts),
+  warn: (titleOrMsg, msgOrOpts, opts) => notificationService.warning(titleOrMsg, msgOrOpts, opts),
+  error: (titleOrMsg, msgOrOpts, opts) => notificationService.error(titleOrMsg, msgOrOpts, opts),
+  dismiss: (id) => notificationService.dismiss(id),
+  clearWaitingQueue: () => reactToastifyToast.clearWaitingQueue(),
+  isActive: (id) => reactToastifyToast.isActive(id),
+};
+
+export {
+  notificationService,
+  createNotificationService,
+  resolvePosition,
+  DEFAULT_DURATIONS,
+  DEFAULT_TITLES,
+};
+
+/**
+ * Re-exported host component so web apps do not import react-toastify directly.
+ */
+export { ToastContainer } from "react-toastify";
+
 export default notify;

@@ -27,8 +27,7 @@ const playSound = () => {
     oscillator.stop(context.currentTime + 0.24);
     oscillator.addEventListener("ended", () => context.close());
   } catch {
-    // Autoplay policies can reject audio until the user has interacted. The
-    // visual, persisted notification remains the reliable delivery channel.
+    // Autoplay policies can reject audio until the user has interacted.
   }
 };
 
@@ -38,9 +37,25 @@ const NotificationBell = ({ apiUrl, token, connectRealtime, navigate, soundForNe
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [liveMessage, setLiveMessage] = useState("");
+  const [announcement, setAnnouncement] = useState("");
   const rootRef = useRef(null);
+  const triggerBtnRef = useRef(null);
+  const panelRef = useRef(null);
   const audioUnlockedRef = useRef(false);
+  const announceTimer = useRef(null);
+
+  // NTF-020: Debounce live region >= 500ms and only announce when changed
+  useEffect(() => {
+    if (announceTimer.current) clearTimeout(announceTimer.current);
+    announceTimer.current = setTimeout(() => {
+      const msg = unreadCount > 0 ? `${unreadCount} thông báo chưa đọc` : "Không có thông báo chưa đọc";
+      setAnnouncement((prev) => (prev !== msg ? msg : prev));
+    }, 500);
+
+    return () => {
+      if (announceTimer.current) clearTimeout(announceTimer.current);
+    };
+  }, [unreadCount]);
 
   const request = useCallback(async (path, options = {}) => {
     const response = await fetch(`${apiUrl}/api/notifications${path}`, {
@@ -78,7 +93,10 @@ const NotificationBell = ({ apiUrl, token, connectRealtime, navigate, soundForNe
     const onCreated = (notification) => {
       setItems((current) => [notification, ...current.filter((item) => item._id !== notification._id)].slice(0, 20));
       setUnreadCount((count) => count + (notification.readAt ? 0 : 1));
-      setLiveMessage(`Thông báo mới: ${notification.title}. ${notification.body}`);
+      if (announceTimer.current) clearTimeout(announceTimer.current);
+      announceTimer.current = setTimeout(() => {
+        setAnnouncement(`Thông báo mới: ${notification.title}. ${notification.body}`);
+      }, 500);
       if (soundForNewOrder && notification.type === "order.new" && audioUnlockedRef.current) playSound();
     };
     socket?.on("notificationCreated", onCreated);
@@ -94,31 +112,110 @@ const NotificationBell = ({ apiUrl, token, connectRealtime, navigate, soundForNe
     };
   }, [connectRealtime, refresh, soundForNewOrder, token]);
 
+  // Focus management, Escape key, and focus trap (NTF-008, NTF-009, NTF-017)
   useEffect(() => {
+    if (!open) return undefined;
+
+    // Focus into panel upon opening
+    const timer = setTimeout(() => {
+      if (panelRef.current) {
+        const firstFocusable = panelRef.current.querySelector(
+          'button, [href], input, [tabindex]:not([tabindex="-1"])'
+        );
+        firstFocusable?.focus();
+      }
+    }, 40);
+
     const closeOnOutside = (event) => {
-      if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
+      if (rootRef.current && !rootRef.current.contains(event.target)) {
+        setOpen(false);
+        triggerBtnRef.current?.focus();
+      }
     };
-    const closeOnEscape = (event) => { if (event.key === "Escape") setOpen(false); };
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setOpen(false);
+        triggerBtnRef.current?.focus();
+        return;
+      }
+
+      // Focus trap within panel
+      if (event.key === "Tab" && panelRef.current) {
+        const focusables = panelRef.current.querySelectorAll(
+          'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusables.length === 0) return;
+
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+
+      // NTF-017: Arrow navigation, Home, End, and wrap-around between notification items
+      if (
+        (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Home" || event.key === "End") &&
+        panelRef.current
+      ) {
+        const itemButtons = Array.from(panelRef.current.querySelectorAll(".notification-list button"));
+        if (itemButtons.length > 0) {
+          if (event.key === "Home") {
+            event.preventDefault();
+            itemButtons[0]?.focus();
+            return;
+          }
+          if (event.key === "End") {
+            event.preventDefault();
+            itemButtons[itemButtons.length - 1]?.focus();
+            return;
+          }
+          const currentIndex = itemButtons.indexOf(document.activeElement);
+          if (currentIndex !== -1) {
+            event.preventDefault();
+            if (event.key === "ArrowDown") {
+              const nextIndex = (currentIndex + 1) % itemButtons.length;
+              itemButtons[nextIndex]?.focus();
+            } else if (event.key === "ArrowUp") {
+              const prevIndex = (currentIndex - 1 + itemButtons.length) % itemButtons.length;
+              itemButtons[prevIndex]?.focus();
+            }
+          }
+        }
+      }
+    };
+
     document.addEventListener("mousedown", closeOnOutside);
-    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
+      clearTimeout(timer);
       document.removeEventListener("mousedown", closeOnOutside);
-      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("keydown", handleKeyDown);
     };
-  }, []);
+  }, [open]);
 
   const markRead = async (notification) => {
     if (notification.readAt) return;
     try {
       const updated = await request(`/${notification._id}/read`, { method: "POST" });
-      setItems((current) => current.map((item) => item._id === updated._id ? updated : item));
+      setItems((current) => current.map((item) => (item._id === updated._id ? updated : item)));
       setUnreadCount((count) => Math.max(0, count - 1));
-    } catch (err) { setError(err.message || "Không thể cập nhật thông báo"); }
+    } catch (err) {
+      setError(err.message || "Không thể cập nhật thông báo");
+    }
   };
 
   const openNotification = async (notification) => {
     await markRead(notification);
     setOpen(false);
+    triggerBtnRef.current?.focus();
     const path = notification.data?.path;
     if (path && path.startsWith("/")) navigate?.(path);
   };
@@ -128,23 +225,102 @@ const NotificationBell = ({ apiUrl, token, connectRealtime, navigate, soundForNe
       await request("/read-all", { method: "POST" });
       setItems((current) => current.map((item) => ({ ...item, readAt: item.readAt || new Date().toISOString() })));
       setUnreadCount(0);
-    } catch (err) { setError(err.message || "Không thể đánh dấu đã đọc"); }
+    } catch (err) {
+      setError(err.message || "Không thể đánh dấu đã đọc");
+    }
+  };
+
+  const handleToggle = () => {
+    setOpen((prev) => {
+      const next = !prev;
+      if (!next) {
+        triggerBtnRef.current?.focus();
+      }
+      return next;
+    });
   };
 
   if (!token) return null;
   return (
     <div className="notification-bell" ref={rootRef}>
-      <span className="notification-live-status" role="status" aria-atomic="true">{liveMessage}</span>
-      <button type="button" className="notification-trigger" onClick={() => setOpen((value) => !value)} aria-label={unreadCount ? `Thông báo, ${unreadCount} chưa đọc` : "Thông báo"} aria-expanded={open} aria-haspopup="dialog">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></svg>
-        {unreadCount > 0 && <span className="notification-count" aria-hidden="true">{unreadCount > 99 ? "99+" : unreadCount}</span>}
+      <span className="notification-live-status" role="status" aria-live="polite" aria-atomic="true">
+        {announcement}
+      </span>
+      <button
+        ref={triggerBtnRef}
+        type="button"
+        className="notification-trigger"
+        onClick={handleToggle}
+        aria-label={unreadCount ? `Thông báo, ${unreadCount} chưa đọc` : "Thông báo"}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          width="18"
+          height="18"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+          <path d="M10 21h4" />
+        </svg>
+        {unreadCount > 0 && (
+          <span className="notification-count" aria-hidden="true">
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
+        )}
       </button>
       {open && (
-        <section className="notification-panel" role="dialog" aria-label="Thông báo">
-          <header className="notification-panel-header"><h2>Thông báo</h2>{unreadCount > 0 && <button type="button" onClick={markAllRead}>Đọc tất cả</button>}</header>
-          {loading ? <p className="notification-state">Đang tải…</p> : error ? <div className="notification-state notification-error"><p>{error}</p><button type="button" onClick={refresh}>Thử lại</button></div> : items.length === 0 ? <p className="notification-state">Bạn chưa có thông báo nào.</p> : <ul className="notification-list">
-            {items.map((notification) => <li key={notification._id} className={notification.readAt ? "" : "is-unread"}><button type="button" onClick={() => openNotification(notification)}><span className="notification-item-main"><strong>{notification.title}</strong><span>{notification.body}</span><time dateTime={notification.createdAt}>{timeLabel(notification.createdAt)}</time></span>{!notification.readAt && <span className="notification-unread-dot" aria-label="Chưa đọc" />}</button></li>)}
-          </ul>}
+        <section
+          ref={panelRef}
+          className="notification-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Trung tâm thông báo"
+        >
+          <header className="notification-panel-header">
+            <h2>Thông báo</h2>
+            {unreadCount > 0 && (
+              <button type="button" onClick={markAllRead} aria-label="Đánh dấu tất cả thông báo đã đọc">
+                Đọc tất cả
+              </button>
+            )}
+          </header>
+          {loading ? (
+            <p className="notification-state" role="status">Đang tải…</p>
+          ) : error ? (
+            <div className="notification-state notification-error" role="alert">
+              <p>{error}</p>
+              <button type="button" onClick={refresh}>Thử lại</button>
+            </div>
+          ) : items.length === 0 ? (
+            <p className="notification-state">Bạn chưa có thông báo nào.</p>
+          ) : (
+            <ul className="notification-list" role="listbox" aria-label="Danh sách thông báo">
+              {items.map((notification) => (
+                <li key={notification._id} className={notification.readAt ? "" : "is-unread"} role="none">
+                  <button
+                    type="button"
+                    role="option"
+                    aria-label={`${notification.title}${!notification.readAt ? " — chưa đọc" : ""}`}
+                    onClick={() => openNotification(notification)}
+                  >
+                    <span className="notification-item-main">
+                      <strong>{notification.title}</strong>
+                      <span>{notification.body}</span>
+                      <time dateTime={notification.createdAt}>{timeLabel(notification.createdAt)}</time>
+                    </span>
+                    {!notification.readAt && <span className="notification-unread-dot" aria-label="Chưa đọc" />}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
     </div>

@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Check } from "lucide-react";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import "./Checkout.css";
 import { StoreContext } from "../../context/StoreContext";
 import OrderSummary from "../../components/OrderSummary/OrderSummary";
@@ -303,7 +303,14 @@ const Checkout = () => {
   const placeOrder = useCallback(async () => {
     if (!address || !isComplete(address)) return;
     if (paymentMethod === "COD" && deliveryMethod !== "shipper") {
-      toast.error("Cash on delivery is only available with a human shipper.");
+      notificationService.warning(
+        "Phương thức thanh toán không hỗ trợ",
+        "Thanh toán khi nhận hàng (COD) chỉ áp dụng khi giao bằng Shipper.",
+        {
+          audience: "user",
+          key: `checkout-cod-${cartId}`,
+        }
+      );
       return;
     }
     setPlacing(true);
@@ -325,13 +332,24 @@ const Checkout = () => {
         return;
       }
       await loadCartData();
-      toast.success("Order placed successfully!");
+      notificationService.success("Đặt hàng thành công!", "Đơn hàng của bạn đã được ghi nhận.", {
+        audience: "user",
+      });
       navigate("/myorders");
     } catch (error) {
-      toast.error(
+      notificationService.error(
+        "Đặt hàng không thành công",
         error.response?.data?.message ||
           error.message ||
-          "Server error. Please try again."
+          "Không thể hoàn tất đơn hàng. Vui lòng kiểm tra lại thông tin và thử lại.",
+        {
+          audience: "user",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `checkout-place-${cartId}`,
+          actions: [{ label: "Thử lại", onClick: placeOrder }],
+        }
       );
       if (error.response?.status === 409) {
         await loadCartDetail(cartId);

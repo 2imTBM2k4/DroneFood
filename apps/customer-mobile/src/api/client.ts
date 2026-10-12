@@ -204,10 +204,14 @@ api.interceptors.response.use(
 // API Functions
 export const authApi = {
   login: async (email: string, password: string) => {
-    const res = await refreshApi.post<{ token: string; refreshToken?: string; user: UserProfile }>(
+    const res = await refreshApi.post<{ token: string; refreshToken?: string; role?: string; user: UserProfile }>(
       "/api/user/login",
-      { email: email.trim(), password }
+      { email: email.trim(), password, portal: "customer" }
     );
+    const role = res.data.role || res.data.user?.role;
+    if (role && role !== "user") {
+      throw new Error("Tài khoản Quản trị hoặc Nhà hàng không thể đăng nhập vào ứng dụng Khách hàng.");
+    }
     return res.data;
   },
   register: async (name: string, email: string, password: string, phone?: string) => {
@@ -222,6 +226,10 @@ export const authApi = {
 export const userApi = {
   getProfile: async () => {
     const res = await api.get<{ data: UserProfile }>("/api/user/me");
+    if (res.data.data?.role && res.data.data.role !== "user") {
+      await clearCustomerSession();
+      throw new Error("Tài khoản không phải khách hàng.");
+    }
     return res.data.data;
   },
   updateProfile: async (name: string, phone: string) => {

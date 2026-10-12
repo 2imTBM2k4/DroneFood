@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState } from "react";
 import { ChevronRight, ShoppingCart, Store, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import { EmptyState } from "@drone-food/web-ui/components/StateBlock";
 import { StoreContext } from "../../context/StoreContext";
 import { cartMeta } from "../../lib/cartState";
@@ -56,10 +56,25 @@ const CartIndex = () => {
     try {
       const { clearedIds, failedIds } = await clearCarts([...selectedCartIds]);
       if (clearedIds.length > 0) {
-        toast.success(`${clearedIds.length} ${clearedIds.length === 1 ? "cart" : "carts"} removed`);
+        notificationService.success(
+          "Đã xóa giỏ hàng",
+          `Đã xóa ${clearedIds.length} giỏ hàng thành công.`,
+          { audience: "user" }
+        );
       }
       if (failedIds.length > 0) {
-        toast.error(`Could not remove ${failedIds.length} ${failedIds.length === 1 ? "cart" : "carts"}. Please try again.`);
+        notificationService.error(
+          "Không thể xóa giỏ hàng",
+          `Không thể xóa ${failedIds.length} giỏ hàng đã chọn. Vui lòng thử lại.`,
+          {
+            audience: "user",
+            priority: "high",
+            persistent: true,
+            duration: 0,
+            key: `cart-bulk-remove-${failedIds.join("-")}`,
+            actions: [{ label: "Thử lại", onClick: handleDeleteSelected }],
+          }
+        );
         setSelectedCartIds(new Set(failedIds));
       } else {
         stopSelecting();

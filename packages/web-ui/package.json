@@ -3,20 +3,28 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "scripts": {
+    "test": "node --test services/*.test.mjs"
+  },
   "exports": {
     "./components/NotificationBell": "./components/NotificationBell.jsx",
     "./components/OptionGroupBuilder": "./components/OptionGroupBuilder.jsx",
     "./components/StateBlock": "./components/StateBlock.jsx",
     "./components/ToastNotification": "./components/ToastNotification.jsx",
+    "./components/ConfirmModal": "./components/ConfirmModal.jsx",
+    "./services/notificationService": "./services/notificationService.js",
+    "./services/notificationAnalytics": "./services/notificationAnalytics.js",
     "./utils/money": "./utils/money.js",
     "./utils/toast": "./utils/toast.jsx",
     "./tokens.css": "./tokens.css",
     "./toast.css": "./toast.css",
     "./favicon.svg": "./favicon.svg"
   },
-  "peerDependencies": {
-    "react": ">=18.2.0 <20",
+  "dependencies": {
     "react-toastify": "^10.0.0 || ^11.0.0"
+  },
+  "peerDependencies": {
+    "react": ">=18.2.0 <20"
   },
   "engines": {
     "node": ">=22.13.0"

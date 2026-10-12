@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   Bike,
   Clock3,
@@ -17,11 +17,12 @@ import {
 import { MapContainer, Marker, Polyline, TileLayer, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import { io } from "socket.io-client";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import "leaflet/dist/leaflet.css";
 import { StoreContext } from "../../context/StoreContext";
 import DroneDelivery from "../../components/DroneDelivery/DroneDelivery";
 import { formatVND } from "@drone-food/web-ui/utils/money";
+import ConfirmModal from "@drone-food/web-ui/components/ConfirmModal";
 import "./OrderDetail.css";
 
 // Setup Leaflet default marker icons
@@ -122,6 +123,7 @@ const CenterOnFirstShipperPoint = ({ position }) => {
 
 const OrderDetail = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { url, token, customerApi } = useContext(StoreContext);
 
   const [order, setOrder] = useState(null);
@@ -189,7 +191,7 @@ const OrderDetail = () => {
       if (!response.data.success) {
         throw new Error(response.data.message || "Không thể xác nhận giao hàng.");
       }
-      toast.success("Đã xác nhận nhận hàng thành công.");
+      notificationService.success("Đã xác nhận nhận hàng thành công", undefined, { audience: "user" });
       setDroneReadyForConfirmation(false);
       window.dispatchEvent(new Event("order-updated"));
       await load();
@@ -201,12 +203,23 @@ const OrderDetail = () => {
           isPaid: true,
           paidAt: new Date().toISOString(),
         });
-        toast.success("Đã xác nhận nhận hàng thành công.");
+        notificationService.success("Đã xác nhận nhận hàng thành công", undefined, { audience: "user" });
         setDroneReadyForConfirmation(false);
         window.dispatchEvent(new Event("order-updated"));
         await load();
       } catch {
-        toast.error(err.response?.data?.message || err.message || "Không thể xác nhận giao hàng.");
+        notificationService.error(
+          "Không thể xác nhận giao hàng",
+          err.response?.data?.message || err.message || "Vui lòng thử xác nhận nhận hàng lại.",
+          {
+            audience: "user",
+            priority: "high",
+            persistent: true,
+            duration: 0,
+            key: `confirm-drone-delivery-${order._id}`,
+            actions: [{ label: "Thử lại", onClick: confirmDroneDelivery }],
+          }
+        );
       }
     } finally {
       setConfirmingDrone(false);
@@ -223,21 +236,43 @@ const OrderDetail = () => {
       }
       window.location.assign(response.data.checkoutUrl);
     } catch (err) {
-      toast.error(err.response?.data?.message || err.message || "Không thể tạo lại liên kết thanh toán");
+      notificationService.error(
+        "Không thể tạo lại liên kết thanh toán",
+        err.response?.data?.message || err.message || "Vui lòng thử tạo lại liên kết thanh toán.",
+        {
+          audience: "user",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `retry-payment-${order._id}`,
+          actions: [{ label: "Thử lại", onClick: retryPayosPayment }],
+        }
+      );
       setRetryingPayment(false);
     }
   };
 
   const [cancellingOrder, setCancellingOrder] = useState(false);
-  const handleCancelOrder = async () => {
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+
+  const handleCancelOrder = () => {
     if (!order || cancellingOrder) return;
     if (order.paymentMethod === "PAYOS" && order.isPaid && !isZeroPayableVoucherOrder(order)) {
-      toast.info(
-        "Đơn hàng đã thanh toán qua PayOS. Vui lòng chuyển sang trang Danh sách đơn hàng để gửi yêu cầu hoàn tiền kèm số tài khoản ngân hàng."
+      notificationService.info(
+        "Gửi yêu cầu hoàn tiền",
+        "Đơn hàng đã thanh toán qua PayOS. Vui lòng vào danh sách đơn hàng để gửi yêu cầu hoàn tiền kèm số tài khoản ngân hàng.",
+        {
+          audience: "user",
+          key: `payos-refund-request-${order._id}`,
+          actions: [{ label: "Xem đơn hàng", onClick: () => navigate("/myorders") }],
+        }
       );
       return;
     }
-    const reason = window.prompt("Nhập lý do hủy đơn hàng:", "Đổi ý không mua nữa");
+    setCancelModalOpen(true);
+  };
+
+  const submitCancelOrder = async (reason) => {
     if (!reason || !reason.trim()) return;
     setCancellingOrder(true);
     try {
@@ -247,14 +282,37 @@ const OrderDetail = () => {
         reason: reason.trim(),
       });
       if (response.data.success) {
-        toast.success("Đã hủy đơn hàng thành công.");
+        notificationService.success("Đã hủy đơn hàng thành công", undefined, { audience: "user" });
+        setCancelModalOpen(false);
         window.dispatchEvent(new Event("order-updated"));
         await load();
       } else {
-        toast.error(response.data.message || "Hủy đơn thất bại");
+        notificationService.error(
+          "Hủy đơn không thành công",
+          response.data.message || "Không thể hủy đơn vào lúc này.",
+          {
+            audience: "user",
+            priority: "high",
+            persistent: true,
+            duration: 0,
+            key: `cancel-order-${order._id}`,
+            actions: [{ label: "Thử lại", onClick: () => setCancelModalOpen(true) }],
+          }
+        );
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || "Hủy đơn thất bại");
+      notificationService.error(
+        "Lỗi hủy đơn hàng",
+        err.response?.data?.message || "Kiểm tra kết nối mạng và thử lại.",
+        {
+          audience: "user",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `cancel-order-${order._id}`,
+          actions: [{ label: "Thử lại", onClick: () => setCancelModalOpen(true) }],
+        }
+      );
     } finally {
       setCancellingOrder(false);
     }
@@ -910,6 +968,21 @@ const OrderDetail = () => {
           </aside>
         </div>
       </div>
+      <ConfirmModal
+        open={cancelModalOpen}
+        isPrompt
+        promptLabel="Lý do hủy đơn hàng:"
+        promptPlaceholder="Ví dụ: Đổi ý không mua nữa, đặt nhầm món..."
+        defaultValue="Đổi ý không mua nữa"
+        title="Hủy đơn hàng"
+        message="Vui lòng xác nhận lý do hủy đơn. Thao tác này không thể hoàn tác."
+        confirmText="Xác nhận hủy"
+        cancelText="Quay lại"
+        danger
+        isLoading={cancellingOrder}
+        onClose={() => setCancelModalOpen(false)}
+        onConfirm={submitCancelOrder}
+      />
     </main>
   );
 };

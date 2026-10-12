@@ -1,7 +1,6 @@
 import { useContext, useEffect, useState } from "react";
 import "leaflet/dist/leaflet.css";
-import { ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { ToastContainer } from "@drone-food/web-ui/utils/toast";
 import "@drone-food/web-ui/toast.css";
 import Navbar from "../components/Navbar/Navbar";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
@@ -20,6 +19,7 @@ import RestaurantsPage from "../pages/Restaurants/RestaurantsPage";
 import RestaurantPage from "../pages/Restaurant/RestaurantPage";
 import FloatingCartBar from "../components/FloatingCartBar/FloatingCartBar";
 import ResetPassword from "../pages/ResetPassword/ResetPassword";
+import VerifyEmail from "../pages/VerifyEmail/VerifyEmail";
 import OrderDetail from "../pages/OrderDetail/OrderDetail";
 import ActiveOrderBar from "../components/ActiveOrderBar/ActiveOrderBar";
 
@@ -59,7 +59,7 @@ const PageTransition = ({ children }) => {
 const CustomerWebApp = () => {
   const { showLogin, setShowLogin } = useContext(StoreContext);
   const location = useLocation();
-  const isMyOrdersPage = location.pathname === "/myorders";
+  const isMyOrdersPage = location.pathname.startsWith("/myorders");
 
   return (
     <>
@@ -83,6 +83,8 @@ const CustomerWebApp = () => {
             <Route path="/profile" element={<Profile />} />
             <Route path="/product/:id" element={<ProductDetail />} />
             <Route path="/reset-password/:token" element={<ResetPassword />} />
+            <Route path="/verify-email/:token" element={<VerifyEmail />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
             {/* The old three-route flow (Cart → PlaceOrder → Payment) is now
                 one page; keep the old paths working for saved links. */}
             <Route path="/order" element={<Navigate to="/cart" replace />} />
@@ -100,7 +102,7 @@ const CustomerWebApp = () => {
       <Footer compactTop={isMyOrdersPage} />
       <FloatingCartBar />
       <ActiveOrderBar />
-      <ToastContainer position="bottom-center" pauseOnHover={false} />
+      <ToastContainer position="bottom-right" limit={4} pauseOnHover={false} autoClose={4000} closeButton={false} />
     </>
   );
 };

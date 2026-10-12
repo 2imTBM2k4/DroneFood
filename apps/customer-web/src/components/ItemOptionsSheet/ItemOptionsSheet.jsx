@@ -1,7 +1,7 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, Plus, Minus } from "lucide-react";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import "./ItemOptionsSheet.css";
 import { StoreContext } from "../../context/StoreContext";
 import { assets } from "../../assets/assets";
@@ -38,6 +38,7 @@ const ItemOptionsSheet = ({
   const [quantity, setQuantity] = useState(initial?.quantity || 1);
   const [note, setNote] = useState(initial?.note || "");
   const [submitting, setSubmitting] = useState(false);
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
 
   // selections: { [groupName]: string[] } — one entry for single-choice
   // groups, any number for multi-choice ones.
@@ -120,7 +121,11 @@ const ItemOptionsSheet = ({
         };
       }
       if (group.max > 0 && picked.length >= group.max) {
-        toast.info(`Pick at most ${group.max} in "${group.name}"`);
+        notificationService.info(
+          "Đã đạt số lượng tùy chọn tối đa",
+          `Bạn chỉ có thể chọn tối đa ${group.max} lựa chọn cho ${group.name}.`,
+          { audience: "user", key: `option-max-${item._id}-${group.name}` }
+        );
         return current;
       }
       return { ...current, [group.name]: [...picked, optionName] };
@@ -155,8 +160,8 @@ const ItemOptionsSheet = ({
   });
 
   const handleSubmit = async () => {
+    setAttemptedSubmit(true);
     if (missingGroup) {
-      toast.warning(`Please choose from "${missingGroup.name}"`);
       return;
     }
     setSubmitting(true);
@@ -166,9 +171,22 @@ const ItemOptionsSheet = ({
         : await addToCart(item._id, quantity, selectedOptions, note.trim());
 
       if (succeeded) {
-        if (!onSubmit) toast.success("Added to cart!");
+        if (!onSubmit) notificationService.success("Đã thêm vào giỏ hàng!", undefined, { audience: "user" });
         onClose();
       }
+    } catch (err) {
+      notificationService.error(
+        "Không thể thêm món vào giỏ hàng",
+        err?.response?.data?.message || err?.message || "Lỗi hệ thống. Vui lòng thử lại sau.",
+        {
+          audience: "user",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `cart-add-sheet-${item._id}`,
+          actions: [{ label: "Thử lại", onClick: handleSubmit }],
+        }
+      );
     } finally {
       setSubmitting(false);
     }
@@ -217,41 +235,70 @@ const ItemOptionsSheet = ({
             <p className="ios-desc">{item.description}</p>
             <p className="ios-base-price ds-num">{formatVND(item.price)}</p>
 
-            {groups.map((group) => (
-              <fieldset className="ios-group" key={group.name}>
-                <legend className="ios-group-head">
-                  <span className="ios-group-name">{group.name}</span>
-                  <span className="ds-label">{requirementLabel(group)}</span>
-                </legend>
+            {groups.map((group) => {
+              const picked = selections[group.name] || [];
+              const isRequiredUnmet =
+                group.type === "single"
+                  ? group.required && picked.length === 0
+                  : (group.required ? Math.max(group.min || 0, 1) : group.min || 0) > picked.length;
+              const hasError = attemptedSubmit && isRequiredUnmet;
+              const errorId = `group-error-${group.name.replace(/\s+/g, "-")}`;
+              const errorMessage = group.name.toLowerCase().includes("size")
+                ? "Vui lòng chọn size"
+                : group.name.toLowerCase().includes("topping")
+                ? "Vui lòng chọn topping bắt buộc"
+                : `Vui lòng chọn ${group.name} bắt buộc`;
 
-                <div className="ios-options">
-                  {group.options.map((option) => {
-                    const picked = (selections[group.name] || []).includes(
-                      option.name
-                    );
-                    return (
-                      <label
-                        key={option.name}
-                        className={`ios-option ${picked ? "picked" : ""}`}
-                      >
-                        <input
-                          type={group.type === "single" ? "radio" : "checkbox"}
-                          name={`group-${group.name}`}
-                          checked={picked}
-                          onChange={() => toggleOption(group, option.name)}
-                        />
-                        <span className="ios-option-name">{option.name}</span>
-                        {option.priceDelta > 0 && (
-                          <span className="ios-option-price ds-num">
-                            +{formatVND(option.priceDelta)}
-                          </span>
-                        )}
-                      </label>
-                    );
-                  })}
-                </div>
-              </fieldset>
-            ))}
+              return (
+                <fieldset
+                  className="ios-group"
+                  key={group.name}
+                  aria-invalid={hasError ? "true" : undefined}
+                  aria-describedby={hasError ? errorId : undefined}
+                >
+                  <legend className="ios-group-head">
+                    <span className="ios-group-name">{group.name}</span>
+                    <span className="ds-label">{requirementLabel(group)}</span>
+                  </legend>
+
+                  {hasError && (
+                    <p
+                      id={errorId}
+                      role="alert"
+                      className="ios-group-error"
+                      style={{ color: "#ef4444", fontSize: "12px", margin: "4px 0 8px 0" }}
+                    >
+                      {errorMessage}
+                    </p>
+                  )}
+
+                  <div className="ios-options">
+                    {group.options.map((option) => {
+                      const isOptionPicked = picked.includes(option.name);
+                      return (
+                        <label
+                          key={option.name}
+                          className={`ios-option ${isOptionPicked ? "picked" : ""}`}
+                        >
+                          <input
+                            type={group.type === "single" ? "radio" : "checkbox"}
+                            name={`group-${group.name}`}
+                            checked={isOptionPicked}
+                            onChange={() => toggleOption(group, option.name)}
+                          />
+                          <span className="ios-option-name">{option.name}</span>
+                          {option.priceDelta > 0 && (
+                            <span className="ios-option-price ds-num">
+                              +{formatVND(option.priceDelta)}
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              );
+            })}
 
             <label className="ios-note">
               <span className="ds-label">Note for the kitchen</span>

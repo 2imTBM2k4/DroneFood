@@ -1,6 +1,6 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { StoreContext } from "../../context/StoreContext";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import { useNavigate } from "react-router-dom";
 import {
   Package,
@@ -111,7 +111,11 @@ const MyOrders = () => {
 
   const handleCancelOrder = async () => {
     if (!cancelReason.trim()) {
-      toast.error("Vui lòng nhập lý do hủy đơn");
+      notificationService.error(
+        "Chưa nhập lý do hủy đơn",
+        "Vui lòng nhập lý do trước khi xác nhận hủy đơn.",
+        { audience: "user", key: `cancel-order-reason-${showCancelModal}` }
+      );
       return;
     }
     try {
@@ -124,16 +128,42 @@ const MyOrders = () => {
           : { orderId: showCancelModal, status: "cancelled", reason: cancelReason }
       );
       if (response.data.success) {
-        toast.success(needsManualRefund ? "Yêu cầu hoàn tiền đã được gửi thành công." : "Đã hủy đơn hàng.");
+        notificationService.success(
+          needsManualRefund ? "Đã gửi yêu cầu hoàn tiền" : "Đã hủy đơn hàng",
+          needsManualRefund ? "Yêu cầu hoàn tiền đã được ghi nhận và đang chờ xử lý." : undefined,
+          { audience: "user" }
+        );
         setShowCancelModal(null);
         setCancelReason("");
         setRefundBank({ bankName: "", accountNumber: "", accountHolder: "" });
         fetchOrders();
       } else {
-        toast.error(response.data.message || "Hủy đơn thất bại");
+        notificationService.error(
+          "Hủy đơn không thành công",
+          response.data.message || "Không thể hủy đơn vào lúc này.",
+          {
+            audience: "user",
+            priority: "high",
+            persistent: true,
+            duration: 0,
+            key: `cancel-order-${showCancelModal}`,
+            actions: [{ label: "Thử lại", onClick: handleCancelOrder }],
+          }
+        );
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || "Hủy đơn thất bại");
+      notificationService.error(
+        "Hủy đơn không thành công",
+        error.response?.data?.message || "Không thể hủy đơn vào lúc này.",
+        {
+          audience: "user",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `cancel-order-${showCancelModal}`,
+          actions: [{ label: "Thử lại", onClick: handleCancelOrder }],
+        }
+      );
     }
   };
 
@@ -152,10 +182,23 @@ const MyOrders = () => {
       if (!response.data.success) {
         throw new Error(response.data.message || "Không thể tiếp tục tìm kiếm shipper");
       }
-      toast.success("Hệ thống sẽ tiếp tục tìm Shipper trong 10 phút.");
+      notificationService.success("Đã gia hạn tìm Shipper", "Hệ thống sẽ tiếp tục tìm Shipper trong 10 phút.", {
+        audience: "user",
+      });
       fetchOrders();
     } catch (error) {
-      toast.error(error.response?.data?.message || error.message || "Không thể tiếp tục tìm kiếm");
+      notificationService.error(
+        "Không thể gia hạn tìm Shipper",
+        error.response?.data?.message || error.message || "Hệ thống chưa thể tiếp tục tìm Shipper.",
+        {
+          audience: "user",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `extend-shipper-search-${orderId}`,
+          actions: [{ label: "Thử lại", onClick: () => handleExtendShipperSearch(orderId) }],
+        }
+      );
     } finally {
       setExtendingSearchId(null);
     }
@@ -170,7 +213,18 @@ const MyOrders = () => {
       }
       window.location.assign(response.data.checkoutUrl);
     } catch (error) {
-      toast.error(error.response?.data?.message || error.message || "Không thể tạo lại liên kết thanh toán");
+      notificationService.error(
+        "Không thể tạo lại liên kết thanh toán",
+        error.response?.data?.message || error.message || "Vui lòng thử tạo lại liên kết thanh toán.",
+        {
+          audience: "user",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `retry-payment-${orderId}`,
+          actions: [{ label: "Thử lại", onClick: () => handleRetryPayosPayment(orderId) }],
+        }
+      );
       setRetryingPaymentId(null);
     }
   };

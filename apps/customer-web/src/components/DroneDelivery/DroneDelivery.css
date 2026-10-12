@@ -535,3 +535,35 @@
     text-align: right;
   }
 }
+
+/* ============================================================
+   Dark Mode Support for DroneDelivery
+   ============================================================ */
+.dark-mode .drone-delivery-container {
+  background: #1e1e20;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.dark-mode .delivery-status {
+  background: #1e1e20;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.dark-mode .cargo-weight-display {
+  background: #1e1e20;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  color: var(--apple-ink, #f5f5f7);
+}
+
+.dark-mode .weight-label {
+  color: var(--apple-body-muted, #a1a1a6);
+}
+
+.dark-mode .weight-value {
+  color: var(--apple-ink, #f5f5f7);
+}
+
+.dark-mode .status-text {
+  color: var(--apple-ink, #f5f5f7);
+}
+
