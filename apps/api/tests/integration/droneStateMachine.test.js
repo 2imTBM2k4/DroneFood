@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import request from "supertest";
+import mongoose from "mongoose";
 import app from "../../app.js";
-import { Order } from "../../models/index.cjs";
+import { Order, Hub } from "../../models/index.cjs";
 import Drone from "../../models/droneModel.cjs";
 import {
   createUser,
@@ -15,6 +16,7 @@ describe("Drone Delivery State Machine & Safety Reassign", () => {
   let admin, adminToken;
   let owner, restaurant, ownerToken;
   let customer, customerToken;
+  let branchId, hub;
 
   beforeEach(async () => {
     admin = await createAdmin();
@@ -27,10 +29,20 @@ describe("Drone Delivery State Machine & Safety Reassign", () => {
 
     customer = await createUser({ email: "customer-drone@test.com" });
     customerToken = generateToken(customer._id);
+    branchId = new mongoose.Types.ObjectId();
+
+    hub = await Hub.create({
+      name: "Hub Test",
+      code: `HUB-${Date.now()}`,
+      address: { text: "123 Lê Duẩn, Q1", lat: 10.7769, lng: 106.7009 },
+      location: { type: "Point", coordinates: [106.7009, 10.7769] },
+      status: "active",
+    });
   });
 
   it("dispatches available drone atomically upon paid order and sets phase to assigned", async () => {
     const drone = await Drone.create({
+      hubId: hub._id,
       droneCode: "DRONE-01",
       status: "available",
       batteryLevel: 85,
@@ -56,13 +68,14 @@ describe("Drone Delivery State Machine & Safety Reassign", () => {
     expect(updatedOrder.qrCode).toBeNull(); // QR code is NOT generated at assignment!
 
     const updatedDrone = await Drone.findById(drone._id);
-    expect(updatedDrone.status).toBe("delivering");
+    expect(updatedDrone.status).toBe("flying_to_branch");
     expect(String(updatedDrone.currentOrder)).toBe(String(order._id));
   });
 
   it("sets phase to fallback_pending_customer_consent when no suitable drone is available", async () => {
     // Drone with low battery (<30%) cannot fly
     await Drone.create({
+      hubId: hub._id,
       droneCode: "DRONE-LOW",
       status: "available",
       batteryLevel: 20,
@@ -93,6 +106,7 @@ describe("Drone Delivery State Machine & Safety Reassign", () => {
 
   it("handles preflight check pass and fail flows properly", async () => {
     const drone = await Drone.create({
+      hubId: hub._id,
       droneCode: "DRONE-02",
       status: "delivering",
       batteryLevel: 90,
@@ -127,6 +141,7 @@ describe("Drone Delivery State Machine & Safety Reassign", () => {
 
     // 2. Preflight check fail on another order -> Drone must go to maintenance, NOT available
     const droneFail = await Drone.create({
+      hubId: hub._id,
       droneCode: "DRONE-FAIL",
       status: "delivering",
       batteryLevel: 90,
@@ -160,6 +175,7 @@ describe("Drone Delivery State Machine & Safety Reassign", () => {
 
   it("blocks restaurant handover if drone has not arrived, and generates QR once arrived", async () => {
     const drone = await Drone.create({
+      hubId: hub._id,
       droneCode: "DRONE-03",
       status: "delivering",
       batteryLevel: 95,
@@ -210,11 +226,13 @@ describe("Drone Delivery State Machine & Safety Reassign", () => {
 
   it("rejects reassigning drone with 409 when in flight, puts faulty drone in maintenance, and resets QR", async () => {
     const drone1 = await Drone.create({
+      hubId: hub._id,
       droneCode: "DRONE-FLYING",
       status: "delivering",
       batteryLevel: 80,
     });
     const drone2 = await Drone.create({
+      hubId: hub._id,
       droneCode: "DRONE-SPARE",
       status: "available",
       batteryLevel: 90,

@@ -2,8 +2,11 @@ import * as orderRepo from "../repositories/orderRepository.js";
 import * as restaurantRepo from "../repositories/restaurantRepository.js";
 import * as droneRepo from "../repositories/droneRepository.js";
 import crypto from "crypto";
+import mongoose from "mongoose";
 import Drone from "../models/droneModel.cjs";
 import DroneDeliveryHistory from "../models/droneDeliveryHistoryModel.cjs";
+import { Branch, Hub } from "../models/index.cjs";
+import { haversineKm } from "../utils/distance.js";
 import AppError from "../utils/AppError.js";
 import { recordAudit } from "../utils/auditLog.js";
 import { isZeroPayableVoucherOrder } from "../utils/zeroPayableVoucher.js";
@@ -105,44 +108,114 @@ export const generateQRCode = (orderId) => {
  * Gán drone cho đơn hàng (Admin thủ công hoặc test)
  * Drone được gán ở phase 'assigned', chưa sinh QR code cho tới khi nhà hàng bàn giao món.
  */
-export const assignDroneToOrder = async (orderId, droneId) => {
+export const assignDroneToOrder = async (orderId, droneId = null, actorUser = null) => {
   const order = await orderRepo.findById(orderId);
   if (!order) {
     throw new AppError("Order not found", 404);
   }
 
-  const cargoWeight = Math.floor(Math.random() * 1500) + 500;
-
-  const drone = await Drone.findOneAndUpdate(
-    // Same battery floor as the automatic dispatcher — picking the drone by
-    // hand does not make a flat battery safe.
-    {
-      _id: droneId,
-      status: "available",
-      batteryLevel: { $gte: droneRepo.MIN_BATTERY_PERCENT },
-    },
-    {
-      $set: {
-        status: "delivering",
-        currentOrder: orderId,
-        cargoWeight,
-      },
-    },
-    { new: true }
-  );
-
-  if (!drone) {
-    throw new AppError(
-      `Drone not found, already flying, or below ${droneRepo.MIN_BATTERY_PERCENT}% battery`,
-      400
-    );
+  let branch = null;
+  if (order.branchId) {
+    branch = await Branch.findById(order.branchId);
+    if (!branch || !branch.droneDeliveryEnabled) {
+      throw new AppError("Chi nhánh không hỗ trợ giao hàng bằng drone", 400);
+    }
   }
 
-  order.droneId = droneId;
+  const cargoWeight = Math.floor(Math.random() * 1500) + 500;
+  let drone = null;
+
+  if (droneId) {
+    drone = await Drone.findOneAndUpdate(
+      {
+        _id: droneId,
+        status: "available",
+        batteryLevel: { $gte: droneRepo.MIN_BATTERY_PERCENT },
+      },
+      {
+        $set: {
+          status: "flying_to_branch",
+          currentOrder: orderId,
+          cargoWeight,
+        },
+      },
+      { new: true }
+    );
+    if (!drone) {
+      throw new AppError("Không có drone khả dụng", 409);
+    }
+  } else {
+    const branchLat = branch?.address?.lat ?? branch?.location?.coordinates?.[1];
+    const branchLng = branch?.address?.lng ?? branch?.location?.coordinates?.[0];
+    const hasBranchCoords = Number.isFinite(branchLat) && Number.isFinite(branchLng);
+
+    const candidateDrones = await Drone.find({
+      status: "available",
+      batteryLevel: { $gte: droneRepo.MIN_BATTERY_PERCENT },
+    }).populate("hubId");
+
+    if (!candidateDrones.length) {
+      throw new AppError("Không có drone khả dụng", 409);
+    }
+
+    const sorted = candidateDrones.map((d) => {
+      let distanceKm = 0;
+      const hub = d.hubId;
+      if (hasBranchCoords && hub) {
+        const hubLat = hub.address?.lat ?? hub.location?.coordinates?.[1];
+        const hubLng = hub.address?.lng ?? hub.location?.coordinates?.[0];
+        if (Number.isFinite(hubLat) && Number.isFinite(hubLng)) {
+          distanceKm = haversineKm({ lat: branchLat, lng: branchLng }, { lat: hubLat, lng: hubLng });
+        }
+      }
+      return { drone: d, distanceKm, totalDeliveries: d.totalDeliveries || 0 };
+    }).sort((a, b) => {
+      if (a.distanceKm !== b.distanceKm) return a.distanceKm - b.distanceKm;
+      return a.totalDeliveries - b.totalDeliveries;
+    });
+
+    for (const item of sorted) {
+      drone = await Drone.findOneAndUpdate(
+        {
+          _id: item.drone._id,
+          status: "available",
+          batteryLevel: { $gte: droneRepo.MIN_BATTERY_PERCENT },
+        },
+        {
+          $set: {
+            status: "flying_to_branch",
+            currentOrder: orderId,
+            cargoWeight,
+          },
+        },
+        { new: true }
+      );
+      if (drone) break;
+    }
+
+    if (!drone) {
+      throw new AppError("Không có drone khả dụng", 409);
+    }
+  }
+
+  order.droneId = drone._id;
   order.dronePhase = "assigned";
   order.droneAssignedAt = new Date();
   order.droneArrivedAt = null;
   await order.save();
+
+  if (actorUser) {
+    await recordAudit({
+      actor: actorUser,
+      action: "drone.assign",
+      targetType: "drone",
+      targetId: drone._id,
+      merchantId: order.merchantId,
+      branchId: order.branchId,
+      reason: `Gán drone ${drone.droneCode} cho đơn hàng ${order._id}`,
+      metadata: { orderId: order._id, droneCode: drone.droneCode },
+    });
+  }
 
   return {
     success: true,
@@ -176,22 +249,57 @@ export const dispatchPaidDroneOrder = async (orderId) => {
     return { success: true, message: "Drone already assigned", alreadyDispatched: true, droneId: order.droneId };
   }
 
-  // Atomic claim một drone khả dụng có pin >= MIN_BATTERY_PERCENT, ít lượt bay nhất
-  const drone = await Drone.findOneAndUpdate(
-    {
-      status: "available",
-      batteryLevel: { $gte: droneRepo.MIN_BATTERY_PERCENT },
-    },
-    {
-      $set: {
-        status: "delivering",
-        currentOrder: order._id,
-        cargoWeight: 0,
-        cargoLidStatus: "closed",
-      },
-    },
-    { new: true, sort: { totalDeliveries: 1 } }
-  );
+  let branch = null;
+  if (order.branchId) {
+    branch = await Branch.findById(order.branchId);
+  }
+  const branchLat = branch?.address?.lat ?? branch?.location?.coordinates?.[1];
+  const branchLng = branch?.address?.lng ?? branch?.location?.coordinates?.[0];
+  const hasBranchCoords = Number.isFinite(branchLat) && Number.isFinite(branchLng);
+
+  const candidateDrones = await Drone.find({
+    status: "available",
+    batteryLevel: { $gte: droneRepo.MIN_BATTERY_PERCENT },
+  }).populate("hubId");
+
+  let drone = null;
+  if (candidateDrones.length > 0) {
+    const sorted = candidateDrones.map((d) => {
+      let distanceKm = 0;
+      const hub = d.hubId;
+      if (hasBranchCoords && hub) {
+        const hubLat = hub.address?.lat ?? hub.location?.coordinates?.[1];
+        const hubLng = hub.address?.lng ?? hub.location?.coordinates?.[0];
+        if (Number.isFinite(hubLat) && Number.isFinite(hubLng)) {
+          distanceKm = haversineKm({ lat: branchLat, lng: branchLng }, { lat: hubLat, lng: hubLng });
+        }
+      }
+      return { drone: d, distanceKm, totalDeliveries: d.totalDeliveries || 0 };
+    }).sort((a, b) => {
+      if (a.distanceKm !== b.distanceKm) return a.distanceKm - b.distanceKm;
+      return a.totalDeliveries - b.totalDeliveries;
+    });
+
+    for (const item of sorted) {
+      drone = await Drone.findOneAndUpdate(
+        {
+          _id: item.drone._id,
+          status: "available",
+          batteryLevel: { $gte: droneRepo.MIN_BATTERY_PERCENT },
+        },
+        {
+          $set: {
+            status: "flying_to_branch",
+            currentOrder: order._id,
+            cargoWeight: 0,
+            cargoLidStatus: "closed",
+          },
+        },
+        { new: true }
+      );
+      if (drone) break;
+    }
+  }
 
   if (drone) {
     order.droneId = drone._id;
@@ -351,11 +459,31 @@ export const confirmRestaurantHandover = async (user, orderId) => {
     throw new AppError("Order not found", 404);
   }
 
-  // Quyền: Restaurant Owner của chính quán đó hoặc Admin
+  // Quyền: Restaurant Owner / Merchant Owner / Branch Manager hoặc Admin
   if (user.role !== "admin") {
+    const { Merchant, Branch } = await import("../models/index.cjs");
+    const merchant = await Merchant.findOne({ ownerUserId: user._id });
     const orderRestId = String(order.restaurantId?._id || order.restaurantId || "");
+    const orderMerchantId = String(order.merchantId?._id || order.merchantId || "");
+    const orderBranchId = String(order.branchId?._id || order.branchId || "");
     const userRestId = String(user.restaurantId || "");
-    if (user.role !== "restaurant_owner" || userRestId !== orderRestId) {
+    const merchantIdStr = merchant ? String(merchant._id) : "";
+    const legacyRestStr = merchant?.legacyRestaurantId ? String(merchant.legacyRestaurantId) : "";
+
+    let isAuthorized = false;
+    if (["restaurant_owner", "merchant_owner"].includes(user.role)) {
+      if (userRestId && (userRestId === orderRestId || userRestId === orderMerchantId)) {
+        isAuthorized = true;
+      } else if (merchant && (merchantIdStr === orderMerchantId || merchantIdStr === orderRestId || legacyRestStr === orderRestId)) {
+        isAuthorized = true;
+      } else if (orderBranchId && merchant) {
+        isAuthorized = Boolean(await Branch.exists({ _id: orderBranchId, merchantId: merchant._id }));
+      }
+    } else if (user.role === "branch_manager" && orderBranchId) {
+      isAuthorized = Boolean(await Branch.exists({ _id: orderBranchId, managerUserIds: user._id }));
+    }
+
+    if (!isAuthorized) {
       throw new AppError("Unauthorized: Not your restaurant", 403);
     }
   }
@@ -708,8 +836,7 @@ export const confirmDelivery = async (user, orderId) => {
   if (order.droneId) {
     const drone = await droneRepo.findById(order.droneId);
     if (drone) {
-      drone.status = "available";
-      drone.currentOrder = null;
+      drone.status = "returning_to_hub";
       drone.cargoWeight = 0;
       drone.cargoLidStatus = "closed";
       drone.totalDeliveries = (drone.totalDeliveries || 0) + 1;
@@ -726,7 +853,7 @@ export const confirmDelivery = async (user, orderId) => {
 
   return {
     success: true,
-    message: "Delivery confirmed successfully. Drone is now available for new orders.",
+    message: "Delivery confirmed successfully. Drone is returning to hub.",
     data: {
       orderId: order._id,
       deliveredAt: order.deliveredAt,
@@ -735,10 +862,76 @@ export const confirmDelivery = async (user, orderId) => {
 };
 
 /**
- * Lấy danh sách tất cả drone (Admin)
+ * Cập nhật trạng thái drone sau khi hoàn thành giao hàng
  */
-export const getAllDrones = async () => {
-  const drones = await droneRepo.findAll();
+export const updateDroneStatusAfterDelivery = async (droneId) => {
+  if (!droneId) return null;
+  return await Drone.findByIdAndUpdate(
+    droneId,
+    {
+      $set: {
+        status: "returning_to_hub",
+        cargoWeight: 0,
+        cargoLidStatus: "closed",
+      },
+    },
+    { new: true }
+  );
+};
+
+/**
+ * Cập nhật trạng thái drone thủ công (Admin)
+ */
+export const updateDroneStatus = async (droneId, status, actorUser = null) => {
+  if (!mongoose.Types.ObjectId.isValid(droneId)) {
+    throw new AppError("ID drone không hợp lệ", 400);
+  }
+  const drone = await Drone.findById(droneId);
+  if (!drone) {
+    throw new AppError("Drone not found", 404);
+  }
+  const validStatuses = [
+    "available",
+    "flying_to_branch",
+    "delivering",
+    "returning_to_hub",
+    "maintenance",
+  ];
+  if (!validStatuses.includes(status)) {
+    throw new AppError("Trạng thái drone không hợp lệ", 400);
+  }
+
+  const updates = { status };
+  if (status === "available") {
+    updates.currentOrder = null;
+    updates.cargoWeight = 0;
+    updates.cargoLidStatus = "closed";
+  }
+
+  const updated = await Drone.findByIdAndUpdate(droneId, { $set: updates }, { new: true });
+
+  if (actorUser) {
+    await recordAudit({
+      actor: actorUser,
+      action: "drone.status_update",
+      targetType: "drone",
+      targetId: drone._id,
+      reason: `Cập nhật trạng thái drone sang ${status}`,
+      metadata: { from: drone.status, to: status },
+    });
+  }
+
+  return { success: true, data: updated };
+};
+
+/**
+ * Lấy danh sách tất cả drone (Admin only)
+ */
+export const getAllDrones = async (query = {}) => {
+  const filter = {};
+  if (query.hubId) filter.hubId = query.hubId;
+  if (query.status) filter.status = query.status;
+  const drones = await Drone.find(filter).populate("hubId");
   return {
     success: true,
     data: drones,
@@ -746,15 +939,37 @@ export const getAllDrones = async () => {
 };
 
 /**
- * Tạo drone mới (Admin)
+ * Tạo drone mới (Admin only)
  */
-export const createDrone = async (droneData) => {
+export const createDrone = async (droneData, actorUser = null) => {
+  if (!droneData.hubId || !mongoose.Types.ObjectId.isValid(droneData.hubId)) {
+    throw new AppError("hubId là bắt buộc và phải là ObjectId hợp lệ", 400);
+  }
+  const hubExists = await Hub.exists({ _id: droneData.hubId });
+  if (!hubExists) {
+    throw new AppError("Hub không tồn tại", 404);
+  }
+
   const existingDrone = await droneRepo.findByCode(droneData.droneCode);
   if (existingDrone) {
     throw new AppError("Drone code already exists", 409);
   }
 
-  const drone = await droneRepo.create(droneData);
+  const drone = await droneRepo.create({
+    ...droneData,
+  });
+
+  if (actorUser) {
+    await recordAudit({
+      actor: actorUser,
+      action: "drone.create",
+      targetType: "drone",
+      targetId: drone._id,
+      reason: "Tạo drone mới",
+      metadata: { droneCode: drone.droneCode, hubId: drone.hubId },
+    });
+  }
+
   return {
     success: true,
     message: "Drone created successfully",

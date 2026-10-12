@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import crypto from "crypto";
 import { PayOS } from "@payos/node";
 import AppError from "../utils/AppError.js";
-import { Order, User, WalletPayment, PlatformVoucherFundingLedger } from "../models/index.cjs";
+import { Order, User, WalletPayment, PlatformVoucherFundingLedger, Merchant, Restaurant } from "../models/index.cjs";
 import * as walletRepo from "../repositories/walletRepository.js";
 import { logger } from "../utils/logger.js";
 import { recordAudit } from "../utils/auditLog.js";
@@ -11,6 +11,27 @@ import { isZeroPayableVoucherOrder } from "../utils/zeroPayableVoucher.js";
 export const MIN_INITIAL_DEPOSIT = 350000;
 export const EARLY_WARNING_RATIO = 0.5;
 export const LOCK_RATIO = 0.75;
+
+// TODO: Khi settlement/withdrawal chuyển sang ghi merchant.balance, đảo lại thứ tự ưu tiên.
+export const getMerchantBalance = async (merchantId) => {
+  const merchant = await Merchant.findById(merchantId).lean();
+  if (!merchant) throw new AppError("Merchant not found", 404);
+
+  // Ưu tiên restaurant.balance — nguồn truth hiện tại của settlement/withdrawal.
+  const restaurantId = merchant.legacyRestaurantId || merchant._id;
+  const restaurant = await Restaurant.findById(restaurantId).lean();
+
+  if (restaurant && typeof restaurant.balance === "number") {
+    return restaurant.balance;
+  }
+
+  // Fallback merchant.balance — dùng khi restaurant không tồn tại.
+  if (typeof merchant.balance === "number") {
+    return merchant.balance;
+  }
+
+  return 0;
+};
 
 const runInTransaction = async (work) => {
   const session = await mongoose.startSession();

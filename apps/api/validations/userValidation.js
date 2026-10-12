@@ -41,6 +41,8 @@ export const loginSchema = Joi.object({
   password: Joi.string().required().messages({
     "any.required": "Mật khẩu là bắt buộc",
   }),
+  portal: Joi.string().valid("admin", "restaurant", "customer", "user", "shipper").optional(),
+  clientType: Joi.string().valid("admin", "restaurant", "customer", "user", "shipper").optional(),
 });
 
 export const updateAddressSchema = Joi.object({
@@ -102,6 +104,50 @@ export const updateProfileSchema = Joi.object({
     }),
 });
 
+export const requestEmailChangeSchema = Joi.object({
+  newEmail: Joi.string().trim().lowercase().email().required().messages({
+    "string.empty": "Email mới không được để trống",
+    "string.email": "Email mới không hợp lệ",
+    "any.required": "Email mới là bắt buộc",
+  }),
+  currentPassword: Joi.string().required().messages({
+    "string.empty": "Vui lòng nhập mật khẩu hiện tại",
+    "any.required": "Vui lòng nhập mật khẩu hiện tại",
+  }),
+});
+
+export const confirmEmailChangeSchema = Joi.object({
+  otp: Joi.string().trim().length(6).required().messages({
+    "string.empty": "Mã xác thực không được để trống",
+    "string.length": "Mã xác thực phải gồm 6 chữ số",
+    "any.required": "Mã xác thực là bắt buộc",
+  }),
+});
+
+export const requestPhoneChangeSchema = Joi.object({
+  newPhone: Joi.string()
+    .trim()
+    .pattern(/^[0-9+\-\s()]{8,15}$/)
+    .required()
+    .messages({
+      "string.empty": "Số điện thoại mới không được để trống",
+      "string.pattern.base": "Số điện thoại không hợp lệ (8 - 15 chữ số)",
+      "any.required": "Số điện thoại mới là bắt buộc",
+    }),
+  currentPassword: Joi.string().required().messages({
+    "string.empty": "Vui lòng nhập mật khẩu hiện tại",
+    "any.required": "Vui lòng nhập mật khẩu hiện tại",
+  }),
+});
+
+export const confirmPhoneChangeSchema = Joi.object({
+  otp: Joi.string().trim().length(6).required().messages({
+    "string.empty": "Mã xác thực không được để trống",
+    "string.length": "Mã xác thực phải gồm 6 chữ số",
+    "any.required": "Mã xác thực là bắt buộc",
+  }),
+});
+
 export const lockUserSchema = Joi.object({
   id: Joi.string().trim(),
   userId: Joi.string().trim(),
@@ -144,3 +190,19 @@ export const deleteUserSchema = Joi.object({
 export const statsQuerySchema = Joi.object({
   period: Joi.string().valid("day", "month").default("day"),
 });
+
+export const verifyEmailSchema = Joi.object({
+  token: Joi.string().trim().required().messages({
+    "string.empty": "Mã xác thực không được để trống",
+    "any.required": "Mã xác thực là bắt buộc",
+  }),
+});
+
+export const resendVerificationSchema = Joi.object({
+  email: Joi.string().trim().lowercase().email().required().messages({
+    "string.empty": "Email không được để trống",
+    "string.email": "Email không hợp lệ",
+    "any.required": "Email là bắt buộc",
+  }),
+});
+

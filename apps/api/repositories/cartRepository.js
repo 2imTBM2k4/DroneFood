@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { Cart, Food } from "../models/index.cjs";
 
 const populateCart = (query) =>
-  query.populate("items.foodId").populate("restaurantId");
+  query.populate("items.foodId").populate("restaurantId").populate("branchId");
 
 export const findAllByUser = async (userId) =>
   populateCart(Cart.find({ userId }).sort({ updatedAt: -1 }));
@@ -15,6 +15,9 @@ export const findByIdForUser = async (cartId, userId) => {
 export const findByUserAndRestaurant = async (userId, restaurantId) =>
   populateCart(Cart.findOne({ userId, restaurantId }));
 
+export const findByUserAndBranch = async (userId, branchId) =>
+  populateCart(Cart.findOne({ userId, branchId }));
+
 export const findOrCreate = async (userId, restaurantId) => {
   try {
     return await Cart.findOneAndUpdate(
@@ -25,6 +28,21 @@ export const findOrCreate = async (userId, restaurantId) => {
   } catch (error) {
     if (error?.code === 11000) {
       return Cart.findOne({ userId, restaurantId });
+    }
+    throw error;
+  }
+};
+
+export const findOrCreateByBranch = async (userId, branchId, merchantId) => {
+  try {
+    return await Cart.findOneAndUpdate(
+      { userId, branchId },
+      { $setOnInsert: { userId, branchId, merchantId, items: [] } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+  } catch (error) {
+    if (error?.code === 11000) {
+      return Cart.findOne({ userId, branchId });
     }
     throw error;
   }

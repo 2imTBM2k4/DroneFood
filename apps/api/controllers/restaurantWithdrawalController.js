@@ -16,6 +16,7 @@ export const create = respond(async (req) => {
 });
 export const list = respond(async (req) => ({ success: true, data: await service.listWithdrawals(req.user) }));
 export const transactions = respond(async (req) => ({ success: true, data: await service.listTransactions(req.user) }));
+export const balance = respond(async (req) => ({ success: true, data: await service.getBalance(req.user) }));
 export const approve = respond(async (req) => {
   const result = await service.approveWithdrawalRequest(req.user, req.params.id);
   if (!result.alreadyApproved) await notifyWithdrawalOwner(req.app.get("io"), result.request, "approved");

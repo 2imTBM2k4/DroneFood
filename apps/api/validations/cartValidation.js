@@ -22,6 +22,10 @@ export const addToCartSchema = Joi.object({
   note: Joi.string().trim().allow("").max(200).default("").messages({
     "string.max": "Note must be 200 characters or fewer",
   }),
+  branchId: Joi.string().trim().hex().length(24).optional(),
+  restaurantId: Joi.string().trim().optional(),
+}).oxor("branchId", "restaurantId").messages({
+  "object.oxor": "Chỉ được truyền branchId hoặc restaurantId, không được truyền cả hai",
 });
 
 export const updateLineSchema = Joi.object({

@@ -4,12 +4,38 @@ import * as foodRepo from "../repositories/foodRepository.js";
 import foodModel from "../models/foodModel.cjs";
 import AppError from "../utils/AppError.js";
 export const addFood = async (user, foodData, file) => {
-  if (user.role !== "restaurant_owner" || !user.restaurantId) {
+  let targetMerchantId = foodData.merchantId;
+  let targetRestaurantId = foodData.restaurantId;
+
+  if (user.role === "merchant_owner") {
+    const { Merchant } = await import("../models/index.cjs");
+    const merchant = await Merchant.findOne({ ownerUserId: user._id });
+    if (!merchant) {
+      throw new AppError("Bạn chưa có thông tin merchant", 404);
+    }
+    if (targetMerchantId && targetMerchantId.toString() !== merchant._id.toString()) {
+      throw new AppError("Bạn không có quyền thêm món cho merchant khác", 403);
+    }
+    targetMerchantId = merchant._id;
+  } else if (user.role === "restaurant_owner") {
+    if (!user.restaurantId) {
+      throw new AppError(
+        "Only restaurant owners with a valid restaurant can add food",
+        403
+      );
+    }
+    targetRestaurantId = user.restaurantId;
+  } else if (user.role === "admin") {
+    if (!targetMerchantId && !targetRestaurantId) {
+      throw new AppError("merchantId hoặc restaurantId là bắt buộc", 400);
+    }
+  } else {
     throw new AppError(
-      "Only restaurant owners with a valid restaurant can add food",
+      "Only merchant owners or restaurant owners can add food",
       403
     );
   }
+
   const { name, description, price, category, optionGroups } = foodData;
   let imageUrl = null;
 
@@ -30,34 +56,61 @@ export const addFood = async (user, foodData, file) => {
     price,
     category,
     image: imageUrl,
-    restaurantId: user.restaurantId,
+    merchantId: targetMerchantId || undefined,
+    restaurantId: targetRestaurantId || targetMerchantId || undefined,
     optionGroups: optionGroups || [],
   };
   const newFood = await foodRepo.create(newFoodData);
   return { success: true, message: "Food added successfully", food: newFood };
 };
 
-// SỬA: Cho phép user thường xem món ăn theo restaurantId
+// SỬA: Cho phép user thường xem món ăn theo restaurantId hoặc merchantId/branchId
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export const listFood = async (user, query = {}) => {
-  const { restaurantId, q, category, minPrice, maxPrice, page, limit, sort } = query;
-  let filter = {};
+  const { restaurantId, merchantId, branchId, q, category, minPrice, maxPrice, page, limit, sort } = query;
+  const conditions = [];
 
-  if (restaurantId) {
-    filter.restaurantId = restaurantId;
-  } else if (user && user.role === "restaurant_owner" && user.restaurantId) {
-    filter.restaurantId = user.restaurantId;
+  let effectiveMerchantId = merchantId;
+  if (!effectiveMerchantId && branchId) {
+    const { Branch } = await import("../models/index.cjs");
+    const branch = await Branch.findById(branchId);
+    if (branch) {
+      effectiveMerchantId = branch.merchantId;
+    }
+  }
+
+  if (effectiveMerchantId) {
+    conditions.push({ $or: [{ merchantId: effectiveMerchantId }, { restaurantId: effectiveMerchantId }] });
+  } else if (restaurantId) {
+    conditions.push({ $or: [{ restaurantId }, { merchantId: restaurantId }] });
+  } else if (user && (user.role === "restaurant_owner" || user.role === "merchant_owner")) {
+    if (user.role === "merchant_owner") {
+      const { Merchant } = await import("../models/index.cjs");
+      const merchant = await Merchant.findOne({ ownerUserId: user._id });
+      if (merchant) {
+        conditions.push({ $or: [{ merchantId: merchant._id }, { restaurantId: merchant._id }] });
+      }
+    } else if (user.restaurantId) {
+      conditions.push({ $or: [{ restaurantId: user.restaurantId }, { merchantId: user.restaurantId }] });
+    }
   } else {
     // Storefront discovery must not expose dishes an owner has marked sold
     // out. Restaurant owners still receive their entire menu above.
-    filter.isAvailable = true;
+    conditions.push({ isAvailable: true });
   }
 
   if (q) {
     const search = new RegExp(escapeRegex(q), "i");
-    filter.$or = [{ name: search }, { description: search }];
+    conditions.push({ $or: [{ name: search }, { description: search }] });
   }
+
+  const filter = conditions.length > 1
+    ? { $and: conditions }
+    : conditions.length === 1
+      ? conditions[0]
+      : {};
+
   if (category) filter.category = category;
   if (minPrice !== undefined || maxPrice !== undefined) {
     filter.price = {};
@@ -90,10 +143,29 @@ export const removeFood = async (user, id) => {
       : user.restaurantId
     : null;
 
-  // Admins may touch any dish. Everyone else must own the restaurant it
-  // belongs to — checking only the restaurant_owner role would let a plain
-  // customer through.
-  if (user.role !== "admin" && userRestIdStr !== foodRestIdStr) {
+  let isAuthorized = user.role === "admin";
+  if (!isAuthorized) {
+    if (user.role === "merchant_owner") {
+      const { Merchant } = await import("../models/index.cjs");
+      const merchant = await Merchant.findOne({ ownerUserId: user._id });
+      if (merchant) {
+        const merchantIdStr = merchant._id.toString();
+        const foodMerchantStr = (food.merchantId?._id || food.merchantId || "").toString();
+        const foodRestStr = (food.restaurantId?._id || food.restaurantId || "").toString();
+        if (foodMerchantStr === merchantIdStr || foodRestStr === merchantIdStr) {
+          isAuthorized = true;
+        }
+      }
+    } else if (
+      userRestIdStr &&
+      (userRestIdStr === foodRestIdStr ||
+        userRestIdStr === (food.merchantId?._id || food.merchantId || "").toString())
+    ) {
+      isAuthorized = true;
+    }
+  }
+
+  if (!isAuthorized) {
     throw new AppError("Unauthorized: Not your restaurant's food", 403);
   }
 
@@ -129,10 +201,29 @@ export const updateFood = async (user, updates, file) => {
       : user.restaurantId
     : null;
 
-  // Admins may touch any dish. Everyone else must own the restaurant it
-  // belongs to — checking only the restaurant_owner role would let a plain
-  // customer through.
-  if (user.role !== "admin" && userRestIdStr !== foodRestIdStr) {
+  let isAuthorized = user.role === "admin";
+  if (!isAuthorized) {
+    if (user.role === "merchant_owner") {
+      const { Merchant } = await import("../models/index.cjs");
+      const merchant = await Merchant.findOne({ ownerUserId: user._id });
+      if (merchant) {
+        const merchantIdStr = merchant._id.toString();
+        const foodMerchantStr = (food.merchantId?._id || food.merchantId || "").toString();
+        const foodRestStr = (food.restaurantId?._id || food.restaurantId || "").toString();
+        if (foodMerchantStr === merchantIdStr || foodRestStr === merchantIdStr) {
+          isAuthorized = true;
+        }
+      }
+    } else if (
+      userRestIdStr &&
+      (userRestIdStr === foodRestIdStr ||
+        userRestIdStr === (food.merchantId?._id || food.merchantId || "").toString())
+    ) {
+      isAuthorized = true;
+    }
+  }
+
+  if (!isAuthorized) {
     throw new AppError("Unauthorized: Not your restaurant's food", 403);
   }
 

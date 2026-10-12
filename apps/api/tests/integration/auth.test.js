@@ -14,7 +14,8 @@ describe("Auth API", () => {
       });
 
       expect(res.body.success).toBe(true);
-      expect(res.body.token).toBeDefined();
+      expect(res.body.requiresVerification).toBe(true);
+      expect(res.body.token).toBeUndefined();
     });
 
     it("should reject duplicate email", async () => {
@@ -61,6 +62,7 @@ describe("Auth API", () => {
         email: "loginuser@test.com",
         password: "password123",
       });
+      await User.updateOne({ email: "loginuser@test.com" }, { isEmailVerified: true });
     });
 
     it("should login with valid credentials", async () => {
@@ -72,6 +74,18 @@ describe("Auth API", () => {
       expect(res.body.success).toBe(true);
       expect(res.body.token).toBeDefined();
       expect(res.body.role).toBe("user");
+    });
+
+    it("should reject login if email is not verified", async () => {
+      await User.updateOne({ email: "loginuser@test.com" }, { isEmailVerified: false });
+      const res = await request(app).post("/api/user/login").send({
+        email: "loginuser@test.com",
+        password: "password123",
+      });
+
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.isUnverified).toBe(true);
     });
 
     it("should reject wrong password", async () => {
@@ -90,6 +104,49 @@ describe("Auth API", () => {
       });
 
       expect(res.body.success).toBe(false);
+    });
+  });
+
+  describe("POST /api/user/verify-email & /api/user/resend-verification", () => {
+    it("should verify user email via API", async () => {
+      await request(app).post("/api/user/register").send({
+        name: "Verify API User",
+        email: "verifyapi@test.com",
+        password: "password123",
+      });
+
+      const rawToken = "integtesttoken1234567890123456";
+      const crypto = await import("crypto");
+      const hashed = crypto.createHash("sha256").update(rawToken).digest("hex");
+      await User.updateOne(
+        { email: "verifyapi@test.com" },
+        { emailVerificationToken: hashed, emailVerificationTokenExpires: new Date(Date.now() + 3600000) }
+      );
+
+      const res = await request(app).post("/api/user/verify-email").send({
+        token: rawToken,
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+
+      const user = await User.findOne({ email: "verifyapi@test.com" });
+      expect(user.isEmailVerified).toBe(true);
+    });
+
+    it("should resend verification link via API", async () => {
+      await request(app).post("/api/user/register").send({
+        name: "Resend API User",
+        email: "resendapi@test.com",
+        password: "password123",
+      });
+
+      const res = await request(app).post("/api/user/resend-verification").send({
+        email: "resendapi@test.com",
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
     });
   });
 

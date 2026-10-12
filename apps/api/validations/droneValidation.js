@@ -1,13 +1,19 @@
 import Joi from "joi";
 
 export const createDroneSchema = Joi.object({
+  hubId: Joi.string().trim().hex().length(24).required().messages({
+    "any.required": "hubId là bắt buộc",
+    "string.empty": "hubId không được để trống",
+    "string.hex": "hubId phải là MongoDB ObjectId hợp lệ",
+    "string.length": "hubId phải là MongoDB ObjectId hợp lệ",
+  }),
   droneCode: Joi.string().trim().min(1).max(50).required().messages({
     "any.required": "Mã drone là bắt buộc",
     "string.empty": "Mã drone không được để trống",
   }),
   cargoWeight: Joi.number().min(0).default(0),
   status: Joi.string()
-    .valid("available", "delivering", "maintenance", "offline")
+    .valid("available", "flying_to_branch", "delivering", "returning_to_hub", "maintenance")
     .default("available"),
   cargoLidStatus: Joi.string().valid("open", "closed").default("closed"),
   batteryLevel: Joi.number().min(0).max(100).default(100),
@@ -16,24 +22,36 @@ export const createDroneSchema = Joi.object({
 
 export const updateDroneSchema = Joi.object({
   droneCode: Joi.string().trim().min(1).max(50),
+  hubId: Joi.string().trim().hex().length(24),
   cargoWeight: Joi.number().min(0),
   status: Joi.string().valid(
     "available",
+    "flying_to_branch",
     "delivering",
-    "maintenance",
-    "offline"
+    "returning_to_hub",
+    "maintenance"
   ),
   cargoLidStatus: Joi.string().valid("open", "closed"),
   batteryLevel: Joi.number().min(0).max(100),
   lastMaintenance: Joi.date().allow(null),
 });
 
+export const updateDroneStatusSchema = Joi.object({
+  status: Joi.string()
+    .valid("available", "flying_to_branch", "delivering", "returning_to_hub", "maintenance")
+    .required()
+    .messages({
+      "any.required": "Trạng thái drone là bắt buộc",
+    }),
+});
+
 export const assignDroneSchema = Joi.object({
   orderId: Joi.string().trim().required().messages({
     "any.required": "orderId là bắt buộc",
   }),
-  droneId: Joi.string().trim().required().messages({
-    "any.required": "droneId là bắt buộc",
+  droneId: Joi.string().trim().hex().length(24).optional().messages({
+    "string.hex": "droneId phải là MongoDB ObjectId hợp lệ",
+    "string.length": "droneId phải là MongoDB ObjectId hợp lệ",
   }),
 });
 

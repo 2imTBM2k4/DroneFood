@@ -139,9 +139,17 @@ const optionalAuth = async (req, res, next) => {
   next();
 };
 
+const ROLE_ALIASES = {
+  restaurant_owner: ["restaurant_owner", "merchant_owner"],
+  merchant_owner: ["merchant_owner", "restaurant_owner"],
+};
+
 const authorize = (...roles) => {
+  const allowedRoles = new Set(
+    roles.flatMap((role) => ROLE_ALIASES[role] || [role])
+  );
   return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
+    if (!req.user || !allowedRoles.has(req.user.role)) {
       return res
         .status(403)
         .json({ success: false, message: "Unauthorized: Insufficient permissions" });
@@ -150,4 +158,4 @@ const authorize = (...roles) => {
   };
 };
 
-export { protect, optionalAuth, authorize };
+export { protect, optionalAuth, authorize, ROLE_ALIASES };

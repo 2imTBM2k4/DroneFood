@@ -275,10 +275,21 @@ const orderSchema = new mongoose.Schema(
     refundStatus: { type: String, enum: ["not_required", "requested", "paid", "rejected", "failed"], default: "not_required" },
     refundRequestId: { type: String, default: null },
     refundRequestedAt: { type: Date, default: null },
+    merchantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Merchant",
+      default: null,
+    },
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Branch",
+      required() { return !this.restaurantId; },
+    },
+    // Deprecated compatibility field for orders created before multi-branch.
     restaurantId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Restaurant",
-      required: true,
+      default: null,
     },
     qrCode: {
       type: String,

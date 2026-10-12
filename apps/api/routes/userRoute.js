@@ -13,12 +13,18 @@ import {
   getStats,
   logoutUser,
   updateProfile,
+  requestEmailChange,
+  confirmEmailChange,
+  requestPhoneChange,
+  confirmPhoneChange,
   changePassword,
   updateAvatar,
   forgotPassword,
   resetPassword,
   refreshToken,
   getUserTransactions,
+  verifyEmail,
+  resendVerification,
 } from "../controllers/userController.js";
 
 import { protect, authorize } from "../middleware/auth.js";
@@ -31,17 +37,23 @@ import {
   reverseGeocodeQuerySchema,
   geocodeAddressQuerySchema,
   updateProfileSchema,
+  requestEmailChangeSchema,
+  confirmEmailChangeSchema,
+  requestPhoneChangeSchema,
+  confirmPhoneChangeSchema,
   changePasswordSchema,
   lockUserSchema,
   updateByAdminSchema,
   deleteUserSchema,
   statsQuerySchema,
+  verifyEmailSchema,
+  resendVerificationSchema,
 } from "../validations/userValidation.js";
 import rateLimit from "express-rate-limit";
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: process.env.NODE_ENV === "test" ? 1000 : 10,
   message: { success: false, message: "Too many attempts, please try again after 15 minutes" },
 });
 
@@ -53,6 +65,8 @@ userRouter.post("/login", authLimiter, validate(loginSchema), loginUser);
 userRouter.post("/logout", logoutUser);
 userRouter.post("/forgot-password", authLimiter, forgotPassword);
 userRouter.post("/reset-password", authLimiter, resetPassword);
+userRouter.post("/verify-email", authLimiter, validate(verifyEmailSchema), verifyEmail);
+userRouter.post("/resend-verification", authLimiter, validate(resendVerificationSchema), resendVerification);
 userRouter.post("/refresh-token", authLimiter, refreshToken);
 
 // ============ PROTECTED ROUTES ============
@@ -62,6 +76,10 @@ userRouter.get("/reverse-geocode", protect, validate(reverseGeocodeQuerySchema, 
 userRouter.get("/geocode", protect, validate(geocodeAddressQuerySchema, "query"), geocodeUserAddress);
 userRouter.put("/update-address", protect, validate(updateAddressSchema), updateUserAddress);
 userRouter.put("/profile", protect, validate(updateProfileSchema), updateProfile);
+userRouter.post("/request-email-change", protect, authLimiter, validate(requestEmailChangeSchema), requestEmailChange);
+userRouter.post("/confirm-email-change", protect, authLimiter, validate(confirmEmailChangeSchema), confirmEmailChange);
+userRouter.post("/request-phone-change", protect, authLimiter, validate(requestPhoneChangeSchema), requestPhoneChange);
+userRouter.post("/confirm-phone-change", protect, authLimiter, validate(confirmPhoneChangeSchema), confirmPhoneChange);
 userRouter.put("/change-password", protect, validate(changePasswordSchema), changePassword);
 userRouter.put("/avatar", protect, uploadMiddleware.single("avatar"), updateAvatar);
 

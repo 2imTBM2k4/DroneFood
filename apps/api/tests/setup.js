@@ -27,3 +27,6 @@ afterEach(async () => {
 process.env.JWT_SECRET = "test-secret-key-for-testing";
 process.env.FRONTEND_URL = "http://localhost:5173";
 process.env.BANK_ACCOUNT_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
+process.env.VNPAY_TMN_CODE = "TESTTMN";
+process.env.VNPAY_HASH_SECRET = "TESTHASHSECRETTESTHASHSECRETTEST";
+process.env.VNPAY_RETURN_URL = "http://localhost:5173/vnpay-return";

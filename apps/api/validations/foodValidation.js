@@ -86,6 +86,8 @@ export const addFoodSchema = Joi.object({
   category: Joi.string().trim().min(1).max(50).required().messages({
     "any.required": "Danh mục là bắt buộc",
   }),
+  merchantId: Joi.string().trim().hex().length(24).optional(),
+  restaurantId: Joi.string().trim().optional(),
   optionGroups: optionGroupsField.default([]),
 });
 
@@ -115,6 +117,8 @@ export const foodAvailabilitySchema = Joi.object({
 
 export const listFoodQuerySchema = Joi.object({
   restaurantId: Joi.string().trim().hex().length(24).allow("", null),
+  merchantId: Joi.string().trim().hex().length(24).allow("", null),
+  branchId: Joi.string().trim().hex().length(24).allow("", null),
   q: Joi.string().trim().max(100).allow("", null),
   category: Joi.string().trim().max(50).allow("", null),
   minPrice: Joi.number().integer().min(0),

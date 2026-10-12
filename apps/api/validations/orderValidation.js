@@ -39,11 +39,13 @@ export const placeOrderSchema = Joi.object({
   voucherCodes: Joi.array().items(
     Joi.string().trim().uppercase().pattern(/^[A-Z0-9_-]+$/).min(3).max(32)
   ).max(5).optional(),
+  branchId: Joi.string().trim().hex().length(24).optional(),
   restaurantId: Joi.alternatives()
     .try(Joi.string().trim(), Joi.object())
     .optional(),
-}).or("address", "addressEntryId").messages({
+}).or("address", "addressEntryId").oxor("branchId", "restaurantId").messages({
   "object.missing": "Địa chỉ giao hàng là bắt buộc",
+  "object.oxor": "Chỉ được truyền branchId hoặc restaurantId",
 });
 
 export const deliveryQuoteSchema = Joi.object({

@@ -2,11 +2,11 @@
 import { Order } from "../models/index.cjs";
 
 export const create = async (orderData, { session } = {}) => {
-  const { totalPrice, paymentMethod, restaurantId, isPaid, paymentResult } = orderData;
+  const { totalPrice, paymentMethod, restaurantId, branchId, isPaid, paymentResult } = orderData;
   const isZeroPayableVoucherOrder = Number(totalPrice) === 0 &&
     isPaid === true &&
     paymentResult?.status === "ZERO_PAYABLE_VOUCHER";
-  if (!Number.isFinite(totalPrice) || (totalPrice <= 0 && !isZeroPayableVoucherOrder) || !paymentMethod || !restaurantId) {
+  if (!Number.isFinite(totalPrice) || (totalPrice <= 0 && !isZeroPayableVoucherOrder) || !paymentMethod || (!restaurantId && !branchId)) {
     throw new Error("Invalid order data");
   }
   const order = new Order(orderData);

@@ -25,7 +25,9 @@ export const addToCart = handle((req) =>
     req.body.itemId,
     req.body.quantity || 1,
     req.body.selectedOptions || [],
-    req.body.note || ""
+    req.body.note || "",
+    req.body.branchId || null,
+    req.body.restaurantId || null
   )
 );
 export const updateCartLine = handle((req) =>

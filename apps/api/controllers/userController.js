@@ -3,14 +3,30 @@ import { geocodeAddress, reverseGeocode as reverseGeocodeAddress } from "../util
 
 export const loginUser = async (req, res) => {
   try {
-    const result = await userService.loginUser(req.body);
+    let portal = req.body?.portal || req.body?.clientType;
+    if (!portal) {
+      const origin = req.get("origin") || req.get("referer") || "";
+      if (origin.includes(":5174") || origin.includes("admin")) {
+        portal = "admin";
+      } else if (origin.includes(":5175") || origin.includes("restaurant")) {
+        portal = "restaurant";
+      } else if (origin.includes(":5173") || origin.includes("customer")) {
+        portal = "customer";
+      }
+    }
+    const result = await userService.loginUser({ ...req.body, portal });
     res.json(result);
   } catch (error) {
     const { recordAudit } = await import("../utils/auditLog.js");
     await recordAudit({ action: "auth.login_failed", targetType: "authentication", category: "authentication", outcome: "failure", ip: req.ip, userAgent: req.get("user-agent") || "", metadata: { email: String(req.body?.email || "").replace(/^(.{2}).*(@.*)$/, "$1***$2") } });
     res
       .status(error.statusCode || 500)
-      .json({ success: false, message: error.message });
+      .json({
+        success: false,
+        message: error.message,
+        isUnverified: !!error.isUnverified,
+        email: error.email || undefined,
+      });
   }
 };
 
@@ -77,6 +93,64 @@ export const updateProfile = async (req, res) => {
       req.user._id,
       req.user.email,
       req.body
+    );
+    res.json(result);
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ success: false, message: error.message });
+  }
+};
+
+export const requestEmailChange = async (req, res) => {
+  try {
+    const result = await userService.requestEmailChange(
+      req.user._id,
+      req.body.currentPassword,
+      req.body.newEmail
+    );
+    res.json(result);
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ success: false, message: error.message });
+  }
+};
+
+export const confirmEmailChange = async (req, res) => {
+  try {
+    const result = await userService.confirmEmailChange(
+      req.user._id,
+      req.body.otp
+    );
+    res.json(result);
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ success: false, message: error.message });
+  }
+};
+
+export const requestPhoneChange = async (req, res) => {
+  try {
+    const result = await userService.requestPhoneChange(
+      req.user._id,
+      req.body.currentPassword,
+      req.body.newPhone
+    );
+    res.json(result);
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ success: false, message: error.message });
+  }
+};
+
+export const confirmPhoneChange = async (req, res) => {
+  try {
+    const result = await userService.confirmPhoneChange(
+      req.user._id,
+      req.body.otp
     );
     res.json(result);
   } catch (error) {
@@ -219,3 +293,27 @@ export const getUserTransactions = async (req, res) => {
     res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
 };
+
+export const verifyEmail = async (req, res) => {
+  try {
+    const token = req.body?.token || req.params?.token || req.query?.token;
+    const result = await userService.verifyEmail(token);
+    res.json(result);
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ success: false, message: error.message });
+  }
+};
+
+export const resendVerification = async (req, res) => {
+  try {
+    const result = await userService.resendVerification(req.body.email);
+    res.json(result);
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ success: false, message: error.message });
+  }
+};
+

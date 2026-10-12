@@ -23,6 +23,10 @@ import addressBookRouter from "./routes/addressBookRoute.js";
 import orderReviewRouter from "./routes/orderReviewRoute.js";
 import notificationRouter from "./routes/notificationRoute.js";
 import pushTokenRouter from "./routes/pushTokenRoute.js";
+import merchantRouter from "./routes/merchantRoute.js";
+import branchRouter from "./routes/branchRoute.js";
+import hubRouter from "./routes/hubRoute.js";
+import adminDashboardRouter from "./routes/adminDashboardRoute.js";
 
 const app = express();
 
@@ -68,6 +72,10 @@ app.use("/api/address-book", addressBookRouter);
 app.use("/api/order-reviews", orderReviewRouter);
 app.use("/api/notifications", notificationRouter);
 app.use("/api/push-tokens", pushTokenRouter);
+app.use("/api/merchant", merchantRouter);
+app.use("/api/branch", branchRouter);
+app.use("/api/hub", hubRouter);
+app.use("/api/admin", adminDashboardRouter);
 
 app.get("/api/health", (req, res) => {
   const dbState = mongoose.connection.readyState;

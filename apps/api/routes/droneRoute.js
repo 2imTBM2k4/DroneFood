@@ -22,12 +22,14 @@ import {
   confirmRestaurantHandover,
   recordDroneArrivedCustomer,
   handleCustomerFallbackConsent,
+  updateDroneStatus,
 } from "../controllers/droneController.js";
 import { protect, authorize } from "../middleware/auth.js";
 import validate from "../middleware/validate.js";
 import {
   createDroneSchema,
   updateDroneSchema,
+  updateDroneStatusSchema,
   assignDroneSchema,
   scanQRSchema,
   confirmDeliverySchema,
@@ -42,7 +44,13 @@ import {
 const router = express.Router();
 
 router.get("/addresses/:orderId", protect, getDeliveryAddresses);
-router.post("/assign", protect, authorize("admin", "restaurant_owner"), validate(assignDroneSchema), assignDrone);
+router.post(
+  "/assign",
+  protect,
+  authorize("admin"),
+  validate(assignDroneSchema),
+  assignDrone
+);
 router.post(
   "/reassign",
   protect,
@@ -54,7 +62,13 @@ router.post(
 // State Machine Endpoints
 router.post("/preflight", protect, authorize("admin"), validate(preflightCheckSchema), performPreflightCheck);
 router.post("/arrived-restaurant", protect, authorize("admin"), validate(orderTargetSchema), recordDroneArrivedRestaurant);
-router.post("/handover", protect, authorize("admin", "restaurant_owner"), validate(orderTargetSchema), confirmRestaurantHandover);
+router.post(
+  "/handover",
+  protect,
+  authorize("admin", "restaurant_owner", "merchant_owner", "branch_manager"),
+  validate(orderTargetSchema),
+  confirmRestaurantHandover
+);
 router.post("/arrived-customer", protect, authorize("admin"), validate(orderTargetSchema), recordDroneArrivedCustomer);
 router.post("/fallback-consent", protect, validate(fallbackConsentSchema), handleCustomerFallbackConsent);
 
@@ -70,10 +84,22 @@ router.post("/reset-all-stuck", protect, authorize("admin"), resetAllStuckDrones
 router.post("/:id/reset", protect, authorize("admin"), resetDrone);
 router.post("/:id/charge", protect, authorize("admin"), chargeDrone);
 
-router.get("/", protect, authorize("admin"), getAllDrones);
+router.get(
+  "/",
+  protect,
+  authorize("admin"),
+  getAllDrones
+);
 router.get("/:id", protect, authorize("admin"), getDroneById);
-router.post("/create", protect, authorize("admin"), validate(createDroneSchema), createDrone);
+router.post(
+  "/create",
+  protect,
+  authorize("admin"),
+  validate(createDroneSchema),
+  createDrone
+);
 router.put("/:id", protect, authorize("admin"), validate(updateDroneSchema), updateDrone);
+router.patch("/:id/status", protect, authorize("admin"), validate(updateDroneStatusSchema), updateDroneStatus);
 router.delete("/:id", protect, authorize("admin"), deleteDrone);
 
 export default router;

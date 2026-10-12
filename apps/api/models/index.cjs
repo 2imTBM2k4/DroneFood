@@ -25,6 +25,10 @@ const Order = require("./orderModel.cjs");
 // const Category = require("./categoryModel.cjs"); // Không sử dụng - comment để tránh tạo collection
 const Food = require("./foodModel.cjs");
 const Restaurant = require("./restaurantModel.cjs");
+const Merchant = require("./Merchant.cjs");
+const Branch = require("./Branch.cjs");
+const Hub = require("./Hub.cjs");
+const Drone = require("./droneModel.cjs");
 const Cart = require("./cartModel.cjs");
 const ShipperProfile = require("./shipperProfileModel.cjs");
 const ShipperDeposit = require("./shipperDepositModel.cjs");
@@ -41,6 +45,7 @@ const OrderReview = require("./orderReviewModel.cjs");
 const Notification = require("./notificationModel.cjs");
 const ExpoPushToken = require("./expoPushTokenModel.cjs");
 const PlatformVoucherFundingLedger = require("./platformVoucherFundingLedgerModel.cjs");
+const AuditLog = require("./auditLogModel.cjs");
 
 module.exports = {
   User,
@@ -50,7 +55,12 @@ module.exports = {
   // Category, // Không sử dụng
   Food,
   Restaurant,
+  Merchant,
+  Branch,
+  Hub,
+  Drone,
   Cart,
+  AuditLog,
   ShipperProfile,
   ShipperDeposit,
   ShipperEarningsWallet,

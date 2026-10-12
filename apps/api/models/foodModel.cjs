@@ -40,7 +40,17 @@ const foodSchema = new mongoose.Schema({
     },
     image:{type:String,required:true},
     category:{type:String,required:true},
-    restaurantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Restaurant', required: true },
+    merchantId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Merchant',
+        required() { return !this.restaurantId; },
+    },
+    // Deprecated compatibility field. Phase 2 callers move to merchantId.
+    restaurantId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Restaurant',
+        required() { return !this.merchantId; },
+    },
     // Owners can temporarily hide an out-of-stock dish without deleting its
     // menu record or breaking historical order snapshots.
     isAvailable: { type: Boolean, default: true, index: true },
@@ -50,7 +60,9 @@ const foodSchema = new mongoose.Schema({
     optionGroups: { type: [optionGroupSchema], default: [] }
 });
 
-// Supports the canonical restaurant-menu filters without a collection scan.
+// Supports the canonical merchant-menu filters without a collection scan.
+foodSchema.index({ merchantId: 1, isAvailable: 1, category: 1, price: 1 });
+// Kept for the one-sprint legacy restaurant API compatibility window.
 foodSchema.index({ restaurantId: 1, isAvailable: 1, category: 1, price: 1 });
 
 module.exports = mongoose.models.Food || mongoose.model('Food', foodSchema);

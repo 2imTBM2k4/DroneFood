@@ -152,8 +152,14 @@ export const customerOrderDetail = async (req, res) => {
 
 export const listOrders = async (req, res) => {
   try {
-    const { page, limit } = req.query;
-    const pagination = page && limit ? { page: parseInt(page), limit: parseInt(limit) } : {};
+    const { page, limit, branchId, merchantId, restaurantId } = req.query;
+    const pagination = {
+      ...(page && { page: parseInt(page, 10) }),
+      ...(limit && { limit: parseInt(limit, 10) }),
+      branchId,
+      merchantId,
+      restaurantId,
+    };
     const result = await orderService.listOrders(req.user, pagination);
     res.json(result);
   } catch (error) {

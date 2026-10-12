@@ -1,5 +1,6 @@
 import { v2 as cloudinary } from "cloudinary";
 import fs from "fs";
+import mongoose from "mongoose";
 import * as restaurantRepo from "../repositories/restaurantRepository.js";
 import * as userRepo from "../repositories/userRepository.js";
 import AppError from "../utils/AppError.js";
@@ -175,7 +176,20 @@ export const deleteRestaurant = async (actor, id) => {
 };
 
 export const getRestaurantById = async (id) => {
-  const restaurant = await restaurantRepo.findById(id);
+  if (!mongoose.isValidObjectId(id)) {
+    throw new AppError("Restaurant not found", 404);
+  }
+  let restaurant = await restaurantRepo.findById(id);
+  if (!restaurant) {
+    const { Merchant } = await import("../models/index.cjs");
+    const merchant = await Merchant.findOne({
+      $or: [{ _id: id }, { legacyRestaurantId: id }],
+    });
+    if (merchant) {
+      const candidateId = merchant.legacyRestaurantId || merchant._id;
+      restaurant = await restaurantRepo.findById(candidateId);
+    }
+  }
   if (!restaurant) {
     throw new AppError("Restaurant not found", 404);
   }
@@ -195,22 +209,71 @@ export const lockRestaurant = async (actor, id, isLocked) => {
   if (typeof isLocked !== "boolean") {
     throw new AppError("isLocked must be a boolean", 400);
   }
-  const restaurant = await restaurantRepo.updateById(id, { isLocked });
-  if (!restaurant) {
+
+  if (!mongoose.isValidObjectId(id)) {
     throw new AppError("Restaurant not found", 404);
   }
-  await recordAudit({
-    actor,
-    action: isLocked ? "restaurant.locked" : "restaurant.unlocked",
-    targetType: "restaurant",
-    targetId: id,
-    metadata: { name: restaurant.name },
+
+  const { Merchant, Branch, Restaurant } = await import("../models/index.cjs");
+
+  let merchant = await Merchant.findOne({
+    $or: [{ _id: id }, { legacyRestaurantId: id }],
   });
+  let restaurant = await Restaurant.findById(id);
+
+  if (!merchant && restaurant) {
+    merchant = await Merchant.findOne({ ownerUserId: restaurant.owner });
+  }
+
+  if (!merchant && !restaurant) {
+    throw new AppError("Restaurant not found", 404);
+  }
+
+  let updatedMerchant = null;
+  if (merchant) {
+    const status = isLocked ? "suspended" : "active";
+    updatedMerchant = await Merchant.findByIdAndUpdate(
+      merchant._id,
+      {
+        $set: {
+          status,
+          ...(isLocked ? { rejectReason: "Khóa nhà hàng qua legacy endpoint" } : { rejectReason: "" }),
+        },
+      },
+      { new: true }
+    );
+
+    if (isLocked) {
+      await Branch.updateMany({ merchantId: merchant._id }, { $set: { isOpen: false } });
+    }
+
+    await recordAudit({
+      actor,
+      action: isLocked ? "merchant.lock_legacy" : "merchant.unlock_legacy",
+      targetType: "merchant",
+      targetId: merchant._id,
+      merchantId: merchant._id,
+      metadata: { isLocked, legacyRestaurantId: id },
+      reason: isLocked ? "Khóa nhà hàng qua legacy endpoint" : "Mở khóa nhà hàng qua legacy endpoint",
+    });
+  }
+
+  let updatedRestaurant = null;
+  if (restaurant) {
+    updatedRestaurant = await restaurantRepo.updateById(id, { isLocked });
+    await recordAudit({
+      actor,
+      action: isLocked ? "restaurant.locked" : "restaurant.unlocked",
+      targetType: "restaurant",
+      targetId: id,
+      metadata: { isLocked },
+    });
+  }
 
   return {
     success: true,
-    message: `Restaurant ${isLocked ? "locked" : "unlocked"} successfully`,
-    data: restaurant,
+    message: isLocked ? "Đã khóa nhà hàng" : "Đã mở khóa nhà hàng",
+    data: updatedMerchant || updatedRestaurant,
   };
 };
 

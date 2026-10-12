@@ -31,12 +31,30 @@ const withdrawalSnapshotFor = (document) => {
 };
 
 const restaurantForOwner = async (user) => {
-  const linkedRestaurant = user.restaurantId ? await Restaurant.findById(user.restaurantId).select("+bankAccountEncrypted") : null;
-  const restaurant = linkedRestaurant || await Restaurant.findOne({ owner: user._id }).select("+bankAccountEncrypted");
+  const { Merchant } = await import("../models/index.cjs");
+  const merchant = await Merchant.findOne({ ownerUserId: user._id });
+
+  let restaurant = null;
+  if (user.restaurantId) {
+    restaurant = await Restaurant.findById(user.restaurantId).select("+bankAccountEncrypted");
+  }
+  if (!restaurant && merchant) {
+    const candidateId = merchant.legacyRestaurantId || merchant._id;
+    restaurant = await Restaurant.findById(candidateId).select("+bankAccountEncrypted");
+  }
+  if (!restaurant) {
+    restaurant = await Restaurant.findOne({ owner: user._id }).select("+bankAccountEncrypted");
+  }
+
   if (!restaurant) throw new AppError("Restaurant not found", 404);
 
   const ownerId = String(restaurant.owner?._id || restaurant.owner || "");
-  if (user.role !== "admin" && ownerId !== String(user._id) && String(user.restaurantId || "") !== String(restaurant._id)) {
+  const isOwner =
+    ownerId === String(user._id) ||
+    (merchant && String(merchant.ownerUserId) === String(user._id)) ||
+    String(user.restaurantId || "") === String(restaurant._id);
+
+  if (user.role !== "admin" && !isOwner) {
     throw new AppError("You can only manage your own restaurant bank account", 403);
   }
   return restaurant;
@@ -85,7 +103,6 @@ export const updateShipperBankAccount = async (user, account) => {
 
 export const getRestaurantBankAccount = async (user) => {
   const restaurant = await restaurantForOwner(user);
-  await recordAudit({ actor: user, action: "bank_account.viewed", targetType: "bank_account", targetId: restaurant._id, category: "banking" });
   return { success: true, data: responseFor(restaurant) };
 };
 

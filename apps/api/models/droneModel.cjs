@@ -2,6 +2,11 @@ const mongoose = require("mongoose");
 
 const droneSchema = new mongoose.Schema(
   {
+    hubId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Hub",
+      required: true,
+    },
     droneCode: {
       type: String,
       required: true,
@@ -16,9 +21,15 @@ const droneSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["available", "delivering", "delivered", "maintenance", "offline"],
+      enum: [
+        "available",
+        "flying_to_branch",
+        "delivering",
+        "returning_to_hub",
+        "maintenance",
+      ],
       default: "available",
-      comment: "Trạng thái drone: sẵn sàng, đang giao, đã giao, bảo trì, ngoại tuyến",
+      comment: "Trạng thái drone: sẵn sàng, đang bay tới chi nhánh, đang giao, đang quay về hub, bảo trì",
     },
     cargoLidStatus: {
       type: String,
@@ -53,6 +64,9 @@ const droneSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+droneSchema.index({ hubId: 1, status: 1 });
+droneSchema.index({ status: 1, batteryLevel: -1 });
 
 // Middleware ngăn xóa drone đã giao hàng
 droneSchema.pre(["deleteOne", "findOneAndDelete"], async function (next) {

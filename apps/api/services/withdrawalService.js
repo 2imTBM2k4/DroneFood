@@ -2,7 +2,7 @@ import AppError from "../utils/AppError.js";
 import * as restaurantRepo from "../repositories/restaurantRepository.js";
 import * as withdrawalRepo from "../repositories/restaurantWithdrawalRepository.js";
 import * as walletRepo from "../repositories/walletRepository.js";
-import { addLedgerEntry, runInTransaction } from "./walletService.js";
+import { addLedgerEntry, getMerchantBalance, runInTransaction } from "./walletService.js";
 import { recordAudit } from "../utils/auditLog.js";
 import {
   restaurantWithdrawalBankAccountSnapshot,
@@ -23,14 +23,47 @@ export const vietnamDayRange = (date = new Date()) => {
 };
 
 const restaurantForOwner = async (user) => {
-  const restaurant = user.restaurantId
-    ? await restaurantRepo.findById(user.restaurantId)
-    : await restaurantRepo.findByOwner(user._id);
-  if (!restaurant) throw new AppError("Restaurant not found", 404);
-  if (String(restaurant.owner?._id || restaurant.owner) !== String(user._id)) {
-    throw new AppError("Unauthorized: Not your restaurant", 403);
+  const { Merchant } = await import("../models/index.cjs");
+  const merchant = await Merchant.findOne({ ownerUserId: user._id });
+
+  let restaurant = null;
+  if (user.restaurantId) {
+    restaurant = await restaurantRepo.findById(user.restaurantId);
   }
-  return restaurant;
+  if (!restaurant && merchant) {
+    const candidateId = merchant.legacyRestaurantId || merchant._id;
+    restaurant = await restaurantRepo.findById(candidateId);
+  }
+  if (!restaurant) {
+    restaurant = await restaurantRepo.findByOwner(user._id);
+  }
+
+  if (restaurant) {
+    const ownerId = String(restaurant.owner?._id || restaurant.owner || "");
+    const isOwner =
+      ownerId === String(user._id) ||
+      (merchant && String(merchant.ownerUserId) === String(user._id)) ||
+      String(user.restaurantId || "") === String(restaurant._id);
+    if (user.role !== "admin" && !isOwner) {
+      throw new AppError("Unauthorized: Not your restaurant", 403);
+    }
+    return restaurant;
+  }
+
+  if (merchant) {
+    if (user.role !== "admin" && String(merchant.ownerUserId) !== String(user._id)) {
+      throw new AppError("Unauthorized: Not your restaurant", 403);
+    }
+    return {
+      _id: merchant._id,
+      name: merchant.name,
+      owner: merchant.ownerUserId,
+      balance: await getMerchantBalance(merchant._id),
+      reservedWithdrawalAmount: 0,
+    };
+  }
+
+  throw new AppError("Restaurant not found", 404);
 };
 
 const reserve = (request, session) => request.actorType === "restaurant"
@@ -104,15 +137,33 @@ export const createShipperWithdrawal = async (user, amount) => {
 
 export const listRestaurantWithdrawals = async (user) => {
   const restaurant = await restaurantForOwner(user);
-  await recordAudit({ actor: user, action: "money.withdrawals_viewed", targetType: "wallet", targetId: restaurant._id, category: "money" });
   return withdrawalRepo.findByRestaurant(restaurant._id);
 };
 
 /** Immutable ledger entries are the wallet's transaction history. */
 export const listRestaurantWalletTransactions = async (user) => {
   const restaurant = await restaurantForOwner(user);
-  await recordAudit({ actor: user, action: "money.transactions_viewed", targetType: "wallet", targetId: restaurant._id, category: "money" });
   return walletRepo.listTransactions({ ownerId: restaurant._id, walletType: "restaurant_balance" });
+};
+
+/**
+ * Current wallet balance for the caller's restaurant/merchant. Prefers a migrated
+ * `merchant.balance` and falls back to the legacy restaurant document.
+ */
+export const getRestaurantWalletBalance = async (user) => {
+  const restaurant = await restaurantForOwner(user);
+  const { Merchant } = await import("../models/index.cjs");
+  const merchant = await Merchant.findOne({
+    $or: [{ _id: restaurant._id }, { legacyRestaurantId: restaurant._id }],
+  }).select("_id").lean();
+
+  const balance = merchant ? await getMerchantBalance(merchant._id) : (restaurant.balance || 0);
+  const reservedWithdrawalAmount = restaurant.reservedWithdrawalAmount || 0;
+  return {
+    balance,
+    reservedWithdrawalAmount,
+    availableBalance: Math.max(0, balance - reservedWithdrawalAmount),
+  };
 };
 
 export const listShipperWithdrawals = async (user) => withdrawalRepo.findByShipper(user._id);

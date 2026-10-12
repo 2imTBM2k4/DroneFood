@@ -21,7 +21,7 @@
 | 11 | [Luồng nghiệp vụ](#11-luồng-nghiệp-vụ) | 25 | [Nợ công nghệ](#25-nợ-công-nghệ) |
 | 12 | [Đồ thị phụ thuộc](#12-đồ-thị-phụ-thuộc) | 26 | [Đề xuất cải tiến](#26-đề-xuất-cải-tiến) |
 | 13 | [Dịch vụ bên ngoài](#13-dịch-vụ-bên-ngoài) | 27 | [Phụ lục](#27-phụ-lục) |
-| 14 | [Cấu hình](#14-cấu-hình) | | |
+| 14 | [Cấu hình](#14-cấu-hình) | 28 | [Kiến trúc Multi-Branch](#28-kiến-trúc-multi-branch-restaurant) |
 
 ---
 
@@ -1399,6 +1399,167 @@ docker exec drone-delivery-backend node seeds/backfillRestaurantCoords.js
 - [TrackAsia Docs](https://docs.track-asia.com/) · [Leaflet](https://leafletjs.com/reference.html)
 - [MDN — Geolocation API](https://developer.mozilla.org/en-US/docs/Web/API/Geolocation_API)
 - `README.md` — hướng dẫn cài đặt nhanh
+
+---
+
+## 28. Kiến trúc Multi-Branch Restaurant
+
+Hệ thống đã chuyển đổi từ mô hình "1 Restaurant = 1 cơ sở bán" sang mô hình "Merchant + nhiều Branch", hỗ trợ cả hộ kinh doanh cá nhân và thương hiệu đa chi nhánh.
+
+### 28.1 Sơ đồ Entity và quan hệ
+
+```mermaid
+erDiagram
+    USER ||--o| MERCHANT : "sở hữu (ownerUserId)"
+    USER ||--o{ BRANCH : "quản lý (managerUserIds)"
+    MERCHANT ||--|{ BRANCH : "có (merchantId)"
+    MERCHANT ||--|{ FOOD : "thực đơn chung (merchantId)"
+    HUB ||--o{ DRONE : "đội bay trực thuộc (hubId)"
+    BRANCH ||--o{ CART : "giỏ hàng gắn (branchId)"
+    BRANCH ||--o{ ORDER : "đơn hàng gắn (branchId)"
+
+    HUB {
+        ObjectId _id
+        string name
+        string code "unique"
+        object address
+        object location "Point 2dsphere"
+        string status "active | inactive"
+        number capacity
+    }
+
+    DRONE {
+        ObjectId _id
+        ObjectId hubId "home hub (ref Hub)"
+        string droneCode "unique"
+        string status "available | flying_to_branch | delivering | returning_to_hub | maintenance"
+        number batteryLevel
+        number cargoWeight
+    }
+
+    MERCHANT {
+        ObjectId _id
+        string type "individual | brand"
+        string name
+        string slug "unique"
+        ObjectId ownerUserId
+        string status "pending | active | suspended"
+        number branchCount
+        object revenueShare
+    }
+
+    BRANCH {
+        ObjectId _id
+        ObjectId merchantId
+        string name
+        string code "unique trong merchant"
+        object address
+        object location "Point 2dsphere"
+        boolean isOpen
+        boolean droneDeliveryEnabled
+        string status "pending | active | locked"
+        ObjectId_array managerUserIds
+        number deliveryRadiusKm
+    }
+```
+
+- **Quy tắc phân loại Merchant:**
+  - `individual`: Hộ kinh doanh có đúng 1 chi nhánh (`branchCount = 1`).
+  - `brand`: Thương hiệu chuỗi có từ 2 chi nhánh trở lên (`branchCount >= 2`).
+  - `type` được đồng bộ tự động sau các thao tác tạo/xóa/khóa chi nhánh thông qua hàm `syncMerchantBranchCount`.
+- **Phân bổ trách nhiệm:**
+  - Thực đơn (`Food`): Thuộc về `Merchant`. Các chi nhánh trong cùng thương hiệu dùng chung menu.
+  - Giỏ hàng (`Cart`) & Đơn hàng (`Order`): Gắn trực tiếp với `branchId` (1 giỏ hàng = 1 chi nhánh, chặn thêm món chéo chi nhánh bằng lỗi 409).
+  - Đội bay (`Drone`) & Trạm trung tâm (`Hub`): **Drone là tài sản của nền tảng (Platform)**, trực thuộc Trạm điều hành (`Hub`) (`Drone.hubId`). Chi nhánh không sở hữu drone mà chỉ đăng ký tính năng hỗ trợ qua cờ `droneDeliveryEnabled`. Khi phát sinh đơn hàng chọn giao bằng drone, hệ thống tự động tìm drone khả dụng tại Hub gần chi nhánh nhất, điều phối bay đến chi nhánh lấy hàng (`flying_to_branch`) rồi giao đến khách (`delivering`).
+
+### 28.2 Ma trận phân quyền (Permissions Matrix)
+
+| Hành động | public | user | branch_manager | merchant_owner | admin |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Đăng ký merchant (`/register`) | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Xem thông tin merchant của mình (`/me`) | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Sửa thông tin thương hiệu | ❌ | ❌ | ❌ | ✅ (của mình) | ✅ |
+| Duyệt / đình chỉ thương hiệu | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Tạo chi nhánh mới | ❌ | ❌ | ❌ | ✅ (khi merchant active) | ✅ |
+| Sửa chi nhánh / Đóng mở cửa | ❌ | ❌ | ✅ (chi nhánh quản lý) | ✅ (của mình) | ✅ |
+| Bật/tắt giao hàng bằng drone cho branch | ❌ | ❌ | ✅ (chi nhánh quản lý) | ✅ (của mình) | ✅ |
+| Xóa chi nhánh (chặn xóa branch cuối) | ❌ | ❌ | ❌ | ✅ (của mình) | ✅ |
+| Khóa / mở khóa chi nhánh | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Gán quản lý cho chi nhánh | ❌ | ❌ | ❌ | ✅ (của mình) | ✅ |
+| Quản lý Hub drone (`/api/hub`) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Quản lý drone (CRUD, gán thủ công) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Quản lý món ăn (`/api/food`) | ❌ | ❌ | ❌ | ✅ (của mình) | ✅ |
+| Xem danh sách đơn hàng (`/api/order/list`) | ❌ | ❌ | ✅ (chỉ branch mình) | ✅ (toàn brand) | ✅ (tất cả) |
+| Cập nhật trạng thái đơn | ❌ | ❌ | ✅ (chỉ branch mình) | ✅ (toàn brand) | ✅ |
+| Xem audit log (`/api/audit`) | ❌ | ❌ | ✅ (chỉ branch mình) | ✅ (toàn brand) | ✅ (tất cả) |
+
+### 28.3 Danh sách API Endpoints mới
+
+#### Hub API (`/api/hub`) — Quản lý Trạm điều hành Drone (Admin)
+- `POST /`: Tạo Hub mới kèm tọa độ địa lý GeoJSON (`admin`).
+- `GET /`: Danh sách Hub toàn hệ thống (`admin`).
+- `GET /:id`: Chi tiết Hub (`admin`).
+- `PUT /:id`: Cập nhật thông tin/tọa độ Hub (`admin`).
+- `DELETE /:id`: Xóa Hub (chặn xóa nếu Hub còn drone trực thuộc) (`admin`).
+
+#### Drone API (`/api/drone`) — Quản lý Đội bay Platform (Admin)
+- `GET /`: Danh sách drone toàn hệ thống, hỗ trợ lọc theo `hubId`, `status` (`admin`).
+- `POST /create`: Tạo drone mới trực thuộc một Hub (`admin`).
+- `PATCH /:id/status`: Cập nhật trạng thái drone (ví dụ đặt về `available` khi quay về Hub) (`admin`).
+- `POST /assign`: Gán drone cho đơn hàng (`admin`).
+- `POST /reassign`: Đổi drone khẩn cấp khi gặp sự cố (`admin`).
+
+#### Merchant API (`/api/merchant`)
+- `POST /register`: Đăng ký merchant + tự động tạo branch MAIN (`protect`, rate-limit theo user ID).
+- `GET /me`: Lấy thông tin merchant và các chi nhánh thuộc sở hữu (`merchant_owner`, `admin`).
+- `GET /:slug/public`: Xem thông tin thương hiệu công khai và các chi nhánh active (Public, ẩn `ownerUserId` và `revenueShare`).
+- `PUT /:id`: Cập nhật thông tin thương hiệu (`merchant_owner`, `admin`, có kiểm tra quyền sở hữu).
+- `GET /list`: Danh sách merchant có phân trang và filter theo `status`, `type` (`admin`).
+- `POST /:id/approve`: Phê duyệt merchant (`admin`). Khi duyệt từ `pending`, branch MAIN được tự động kích hoạt sang `active`.
+- `POST /:id/suspend`: Đình chỉ thương hiệu kèm lý do (`admin`). Tự động đóng toàn bộ chi nhánh (`isOpen = false`). Khi mở lại, hệ thống không tự động mở cửa để đảm bảo an toàn.
+
+#### Branch API (`/api/branch`)
+- `GET /nearby?lat=&lng=&radius=`: Tìm các chi nhánh gần khách hàng nhất (dùng `$geoNear` 2dsphere), gom nhóm theo Merchant, chọn chi nhánh gần nhất và danh sách các chi nhánh khác trong bán kính (Public).
+- `GET /list?merchantId=`: Lấy danh sách chi nhánh của một merchant (Public).
+- `GET /:id`: Lấy chi tiết chi nhánh (Public).
+- `POST /`: Tạo chi nhánh mới cho thương hiệu (`merchant_owner`, yêu cầu merchant đang `active`).
+- `PUT /:id`: Cập nhật thông tin chi nhánh (`merchant_owner`, `branch_manager`).
+- `PATCH /:id/open-state`: Bật/tắt mở cửa chi nhánh (`merchant_owner`, `branch_manager`).
+- `PATCH /:id/drone-delivery`: Bật/tắt hỗ trợ giao hàng bằng drone cho chi nhánh (`merchant_owner`, `branch_manager`).
+- `DELETE /:id`: Xóa chi nhánh (chặn xóa nếu là chi nhánh duy nhất) (`merchant_owner`).
+- `PUT /:id/lock`: Khóa / mở khóa chi nhánh (`admin`).
+- `POST /:id/managers`: Gán danh sách user quản lý chi nhánh (`merchant_owner`).
+- `PUT /:id`: Cập nhật thông tin chi nhánh (`merchant_owner`, `branch_manager`).
+- `PATCH /:id/open-state`: Bật/tắt mở cửa chi nhánh (`merchant_owner`, `branch_manager`).
+- `DELETE /:id`: Xóa chi nhánh (chặn xóa nếu là chi nhánh duy nhất) (`merchant_owner`).
+- `PUT /:id/lock`: Khóa / mở khóa chi nhánh (`admin`).
+- `POST /:id/managers`: Gán danh sách user quản lý chi nhánh (`merchant_owner`).
+
+### 28.4 Quy trình Migration và Quản lý Artifact
+
+- **Script:** `apps/api/seeds/migrate-to-multi-branch.cjs`.
+- **Cách thức chạy:**
+  - Chế độ xem trước an toàn: `node seeds/migrate-to-multi-branch.cjs --dry-run`.
+  - Chế độ thực thi: `node seeds/migrate-to-multi-branch.cjs --apply --phase2-ready`.
+- **Tính năng bảo vệ:**
+  - Tự động kết xuất 2 file artifact vào `apps/api/migration-artifacts/` trước khi ghi vào database:
+    - `multi-branch-mapping-<timestamp>.json`: Ánh xạ `oldRestaurantId` → `{ merchantId, branchId }`.
+    - `migration-log-<timestamp>.json`: Ghi nhận mọi thay đổi, tài liệu và trạng thái cập nhật index.
+  - Tự động sửa chữa và tạo toàn bộ index unique cho `Merchant`, `Branch` và partial index cho `Cart`.
+  - Tính idempotent: Chạy lại nhiều lần không nhân bản dữ liệu.
+- **Kế hoạch Rollback:** Xem tài liệu [`MIGRATION_NOTES.md`](../MIGRATION_NOTES.md).
+
+### 28.5 Tương thích ngược (Legacy Compatibility) và Kế hoạch Sunset
+
+- **Giai đoạn chuyển tiếp (Sprint hiện tại):**
+  - Các route ghi dữ liệu cũ (`PUT /:id`, `POST /`, `DELETE /`, `PATCH /:id/open-state`, `PUT /:id/lock` của `/api/restaurant`) đã được chuyển sang mã lỗi **410 Gone** kèm hướng dẫn chuyển đổi.
+  - Các route đọc dữ liệu cũ (`GET /api/restaurant/list`, `GET /api/restaurant/:id`) và ví rút tiền (`/me/bank-account`) tiếp tục được duy trì để ứng dụng mobile cũ vẫn có thể duyệt món và thực hiện đối soát tài chính.
+  - Mỗi request gọi vào route cũ đều được ghi log cảnh báo: `[LEGACY API] <METHOD> <URL> user: <userId>`.
+- **Kế hoạch Sunset (Sprint tiếp theo):**
+  - Sau khi các ứng dụng mobile hoàn tất cập nhật sang endpoint mới `/api/merchant` và `/api/branch`:
+    1. Xóa bỏ hoàn toàn file `apps/api/routes/restaurantRoute.js` và model `restaurantModel.cjs`.
+    2. Chạy script dọn dẹp `$unset: { restaurantId: "" }` trên các collection `carts`, `orders`, `foods`, `drones`.
+    3. Xóa index cũ `{ userId: 1, restaurantId: 1 }` trên collection `carts`.
 
 ---
 

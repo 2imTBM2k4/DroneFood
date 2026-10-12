@@ -1,5 +1,6 @@
 import * as cartRepo from "../repositories/cartRepository.js";
 import { resolveAddressSnapshot } from "./addressBookService.js";
+import { assertBranchOperational } from "./branchService.js";
 import { haversineKm } from "../utils/distance.js";
 import { estimateEtaMinutes } from "../utils/deliveryEstimate.js";
 import { isRestaurantOpenNow } from "../utils/openingHours.js";
@@ -44,12 +45,19 @@ const serialiseCart = (cart, fallback = {}) => {
       };
     });
   const restaurant = cart?.restaurantId || fallback.restaurant || null;
+  const branch = cart?.branchId || null;
+  const branchId = branch?._id?.toString?.() || branch?.toString?.() || null;
+  const merchantId =
+    cart?.merchantId?._id?.toString?.() || cart?.merchantId?.toString?.() || null;
   return {
     success: true,
     cartId: cart?._id?.toString?.() || fallback.cartId || null,
     cartVersion: cart?.__v ?? fallback.cartVersion ?? null,
     restaurant: serialiseRestaurant(restaurant),
     restaurantId: restaurantIdOf(restaurant),
+    branchId,
+    merchantId,
+    ...(branch?.name && { branchName: branch.name }),
     items,
     subtotal: items.reduce(
       (sum, item) => sum + item.unitPrice * item.quantity,
@@ -142,23 +150,77 @@ export const addToCart = async (
   itemId,
   quantity = 1,
   selectedOptions = [],
-  note = ""
+  note = "",
+  branchId = null,
+  restaurantId = null
 ) => {
+  if (branchId && restaurantId) {
+    throw new AppError(
+      "Chỉ được truyền branchId hoặc restaurantId, không được truyền cả hai",
+      400
+    );
+  }
+
   const food = await cartRepo.findFoodById(itemId);
   if (!food) throw new AppError("Food not found", 404);
   if (food.isAvailable === false) {
     throw new AppError("This dish is currently sold out", 409);
   }
-  if (!food.restaurantId) throw new AppError("Restaurant not found", 404);
+
   const resolvedOptions = resolveSelectedOptions(food, selectedOptions);
   const lineKey = buildLineKey(itemId, resolvedOptions);
-  const cart = await cartRepo.findOrCreate(userId, food.restaurantId);
+
+  let cart;
+  if (branchId) {
+    const { branch, merchant } = await assertBranchOperational(branchId);
+    if (food.merchantId && food.merchantId.toString() !== merchant._id.toString()) {
+      throw new AppError("Món ăn không thuộc thương hiệu của chi nhánh này", 400);
+    }
+
+    const existingCarts = await cartRepo.findAllByUser(userId);
+    const otherBranchCart = existingCarts.find(
+      (c) =>
+        (c.items || []).length > 0 &&
+        ((c.branchId && (c.branchId._id || c.branchId).toString() !== branchId.toString()) ||
+          (!c.branchId && (c.restaurantId || c.get?.("restaurantId"))))
+    );
+    if (otherBranchCart) {
+      throw new AppError(
+        "Giỏ hàng chỉ chứa món từ 1 chi nhánh. Xóa giỏ để thêm từ chi nhánh mới",
+        409
+      );
+    }
+
+    cart = await cartRepo.findOrCreateByBranch(userId, branchId, merchant._id);
+  } else {
+    const targetRestId = restaurantId || food.restaurantId;
+    if (!targetRestId) throw new AppError("Restaurant not found", 404);
+
+    const existingCarts = await cartRepo.findAllByUser(userId);
+    const branchCartWithItems = existingCarts.find(
+      (c) => c.branchId && (c.items || []).length > 0
+    );
+    if (branchCartWithItems) {
+      throw new AppError(
+        "Giỏ hàng chỉ chứa món từ 1 chi nhánh. Xóa giỏ để thêm từ chi nhánh mới",
+        409
+      );
+    }
+
+    cart = await cartRepo.findOrCreate(userId, targetRestId);
+  }
+
   if (!cart) {
     throw new AppError(
       "Cart storage migration is incomplete. Please try again after the database migration.",
       503
     );
   }
+
+  if (cart.branchId && cart.restaurantId) {
+    cart.restaurantId = undefined;
+  }
+
   const updated = await cartRepo.mutateItems(cart._id, userId, (items) => {
     const existing = items.find((item) => item.lineKey === lineKey);
     if (existing) {
@@ -174,6 +236,7 @@ export const addToCart = async (
       });
     }
   });
+
   return serialiseCart(updated);
 };
 

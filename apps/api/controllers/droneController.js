@@ -18,7 +18,8 @@ export const assignDrone = async (req, res) => {
   try {
     const result = await droneService.assignDroneToOrder(
       req.body.orderId,
-      req.body.droneId
+      req.body.droneId || null,
+      req.user
     );
     res.json(result);
   } catch (error) {
@@ -56,7 +57,7 @@ export const confirmDelivery = async (req, res) => {
 
 export const getAllDrones = async (req, res) => {
   try {
-    const result = await droneService.getAllDrones();
+    const result = await droneService.getAllDrones(req.query);
     res.json(result);
   } catch (error) {
     res
@@ -67,8 +68,23 @@ export const getAllDrones = async (req, res) => {
 
 export const createDrone = async (req, res) => {
   try {
-    const result = await droneService.createDrone(req.body);
+    const result = await droneService.createDrone(req.body, req.user);
     res.status(201).json(result);
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ success: false, message: error.message });
+  }
+};
+
+export const updateDroneStatus = async (req, res) => {
+  try {
+    const result = await droneService.updateDroneStatus(
+      req.params.id,
+      req.body.status,
+      req.user
+    );
+    res.json(result);
   } catch (error) {
     res
       .status(error.statusCode || 500)

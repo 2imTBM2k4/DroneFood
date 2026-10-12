@@ -59,6 +59,13 @@ export const findByResetToken = async (hashedToken) => {
   }).select("+resetPasswordToken +resetPasswordExpires");
 };
 
+export const findByVerificationToken = async (hashedToken) => {
+  return await User.findOne({
+    emailVerificationToken: hashedToken,
+    emailVerificationTokenExpires: { $gt: Date.now() },
+  }).select("+emailVerificationToken +emailVerificationTokenExpires");
+};
+
 export const findByRefreshToken = async (userId, hashedToken) => {
   return await User.findOne({
     _id: userId,

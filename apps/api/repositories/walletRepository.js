@@ -28,12 +28,25 @@ export const getShipperWallets = async (shipperId, session) => {
   return { deposit, earnings };
 };
 
-export const updateRestaurantBalance = async (restaurantId, amount, session) =>
-  Restaurant.findOneAndUpdate(
+export const updateRestaurantBalance = async (restaurantId, amount, session) => {
+  let updated = await Restaurant.findOneAndUpdate(
     amount < 0 ? { _id: restaurantId, balance: { $gte: -amount } } : { _id: restaurantId },
     { $inc: { balance: amount } },
     { new: true, session, runValidators: true }
   );
+  if (!updated) {
+    const { Merchant } = await import("../models/index.cjs");
+    const merchant = await Merchant.findById(restaurantId);
+    if (merchant?.legacyRestaurantId) {
+      updated = await Restaurant.findOneAndUpdate(
+        amount < 0 ? { _id: merchant.legacyRestaurantId, balance: { $gte: -amount } } : { _id: merchant.legacyRestaurantId },
+        { $inc: { balance: amount } },
+        { new: true, session, runValidators: true }
+      );
+    }
+  }
+  return updated;
+};
 
 export const updateDepositBalance = async (shipperId, amount, session) =>
   ShipperDeposit.findOneAndUpdate(
@@ -58,8 +71,8 @@ export const updateReservedCodLiability = async (shipperId, amount, session) =>
     { new: true, session, runValidators: true }
   );
 
-export const reserveRestaurantWithdrawal = async (restaurantId, amount, session) =>
-  Restaurant.findOneAndUpdate(
+export const reserveRestaurantWithdrawal = async (restaurantId, amount, session) => {
+  let updated = await Restaurant.findOneAndUpdate(
     {
       _id: restaurantId,
       $expr: {
@@ -72,6 +85,27 @@ export const reserveRestaurantWithdrawal = async (restaurantId, amount, session)
     { $inc: { reservedWithdrawalAmount: amount } },
     { new: true, session, runValidators: true }
   );
+  if (!updated) {
+    const { Merchant } = await import("../models/index.cjs");
+    const merchant = await Merchant.findById(restaurantId);
+    if (merchant?.legacyRestaurantId) {
+      updated = await Restaurant.findOneAndUpdate(
+        {
+          _id: merchant.legacyRestaurantId,
+          $expr: {
+            $gte: [
+              { $subtract: ["$balance", { $ifNull: ["$reservedWithdrawalAmount", 0] }] },
+              amount,
+            ],
+          },
+        },
+        { $inc: { reservedWithdrawalAmount: amount } },
+        { new: true, session, runValidators: true }
+      );
+    }
+  }
+  return updated;
+};
 
 export const reserveEarningsWithdrawal = async (shipperId, amount, session) =>
   ShipperEarningsWallet.findOneAndUpdate(
@@ -88,12 +122,25 @@ export const reserveEarningsWithdrawal = async (shipperId, amount, session) =>
     { new: true, session, runValidators: true }
   );
 
-export const releaseRestaurantWithdrawal = async (restaurantId, amount, session) =>
-  Restaurant.findOneAndUpdate(
+export const releaseRestaurantWithdrawal = async (restaurantId, amount, session) => {
+  let updated = await Restaurant.findOneAndUpdate(
     { _id: restaurantId, reservedWithdrawalAmount: { $gte: amount } },
     { $inc: { reservedWithdrawalAmount: -amount } },
     { new: true, session, runValidators: true }
   );
+  if (!updated) {
+    const { Merchant } = await import("../models/index.cjs");
+    const merchant = await Merchant.findById(restaurantId);
+    if (merchant?.legacyRestaurantId) {
+      updated = await Restaurant.findOneAndUpdate(
+        { _id: merchant.legacyRestaurantId, reservedWithdrawalAmount: { $gte: amount } },
+        { $inc: { reservedWithdrawalAmount: -amount } },
+        { new: true, session, runValidators: true }
+      );
+    }
+  }
+  return updated;
+};
 
 export const releaseEarningsWithdrawal = async (shipperId, amount, session) =>
   ShipperEarningsWallet.findOneAndUpdate(
@@ -102,12 +149,25 @@ export const releaseEarningsWithdrawal = async (shipperId, amount, session) =>
     { new: true, session, runValidators: true }
   );
 
-export const debitReservedRestaurantWithdrawal = async (restaurantId, amount, session) =>
-  Restaurant.findOneAndUpdate(
+export const debitReservedRestaurantWithdrawal = async (restaurantId, amount, session) => {
+  let updated = await Restaurant.findOneAndUpdate(
     { _id: restaurantId, balance: { $gte: amount }, reservedWithdrawalAmount: { $gte: amount } },
     { $inc: { balance: -amount, reservedWithdrawalAmount: -amount } },
     { new: true, session, runValidators: true }
   );
+  if (!updated) {
+    const { Merchant } = await import("../models/index.cjs");
+    const merchant = await Merchant.findById(restaurantId);
+    if (merchant?.legacyRestaurantId) {
+      updated = await Restaurant.findOneAndUpdate(
+        { _id: merchant.legacyRestaurantId, balance: { $gte: amount }, reservedWithdrawalAmount: { $gte: amount } },
+        { $inc: { balance: -amount, reservedWithdrawalAmount: -amount } },
+        { new: true, session, runValidators: true }
+      );
+    }
+  }
+  return updated;
+};
 
 export const debitReservedEarningsWithdrawal = async (shipperId, amount, session) =>
   ShipperEarningsWallet.findOneAndUpdate(

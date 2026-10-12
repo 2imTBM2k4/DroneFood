@@ -6,6 +6,11 @@ const auditRouter = express.Router();
 
 // Read-only by design: the trail is append-only, so there is no update or
 // delete endpoint for it.
-auditRouter.get("/", protect, authorize("admin"), listAuditLogs);
+auditRouter.get(
+  "/",
+  protect,
+  authorize("admin", "merchant_owner", "branch_manager"),
+  listAuditLogs
+);
 
 export default auditRouter;

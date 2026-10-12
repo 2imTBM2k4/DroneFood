@@ -105,28 +105,41 @@ const loadCheckoutCart = async (userId, cartId) => {
   const cart = await cartRepo.findByIdForUser(cartId, userId);
   if (!cart) throw new AppError("Cart not found", 404);
   const restaurantId = cart.restaurantId?._id || cart.restaurantId;
+  const branchId = cart.branchId?._id || cart.branchId;
   const lines = (cart.items || []).filter((line) => line.foodId);
-  if (!restaurantId || lines.length === 0) {
+  if ((!restaurantId && !branchId) || lines.length === 0) {
     throw new AppError("Cart is empty. Please add items to your cart.", 400);
   }
-  if (lines.some((line) => String(line.foodId.restaurantId) !== String(restaurantId))) {
+  if (restaurantId && lines.some((line) => line.foodId?.restaurantId && String(line.foodId.restaurantId) !== String(restaurantId))) {
     throw new AppError("Cart contains items from another restaurant", 409);
   }
-  return { cart, lines, restaurantId };
+  return { cart, lines, restaurantId, branchId };
 };
 
 export const quoteDelivery = async (user, { cartId, address, addressEntryId, deliveryMethod, voucherCode, voucherCodes }) => {
   const shippingAddress = await resolveShippingAddress(user._id, { address, addressEntryId });
-  const { cart, restaurantId } = await loadCheckoutCart(user._id, cartId);
-  const restaurant = await restaurantRepo.findById(restaurantId);
-  if (!restaurant) throw new AppError("Restaurant not found.", 404);
-  if (!isRestaurantOpenNow(restaurant)) {
-    throw new AppError("Nhà hàng hiện đang đóng cửa và tạm ngưng nhận đơn.", 409);
+  const { cart, restaurantId, branchId } = await loadCheckoutCart(user._id, cartId);
+  let origin = null;
+
+  if (branchId) {
+    const { assertBranchOperational } = await import("./branchService.js");
+    const { branch } = await assertBranchOperational(branchId);
+    origin = {
+      lat: branch.address?.lat ?? branch.location?.coordinates?.[1],
+      lng: branch.address?.lng ?? branch.location?.coordinates?.[0],
+    };
+  } else {
+    const restaurant = await restaurantRepo.findById(restaurantId);
+    if (!restaurant) throw new AppError("Restaurant not found.", 404);
+    if (!isRestaurantOpenNow(restaurant)) {
+      throw new AppError("Nhà hàng hiện đang đóng cửa và tạm ngưng nhận đơn.", 409);
+    }
+    origin = { lat: restaurant.lat, lng: restaurant.lng };
   }
 
   const deliveryQuote = await calculateShippingQuote({
     deliveryMethod,
-    origin: { lat: restaurant.lat, lng: restaurant.lng },
+    origin,
     destination: { lat: shippingAddress.lat, lng: shippingAddress.lng },
   });
 
@@ -219,13 +232,80 @@ export const placeOrder = async (user, orderData, clientIp) => {
   // absent. Otherwise a customer could lose their cart without a payment URL.
   const vnpay = paymentMethod === "VNPAY" ? vnpayConfig() : null;
 
+  if (orderData.branchId && orderData.restaurantId) {
+    throw new AppError("Chỉ được truyền branchId hoặc restaurantId", 400);
+  }
+
   // The server's cart is the only source of truth for what is being bought
   // and what it costs. Whatever `items`, `amount` or `restaurantId` the client
   // sent is ignored — otherwise a customer could set their own prices.
-  const { cart, lines: cartLines, restaurantId } = await loadCheckoutCart(user._id, cartId);
+  const { cart, lines: cartLines, restaurantId: cartRestId, branchId: cartBranchId } =
+    await loadCheckoutCart(user._id, cartId);
   if (cart.__v !== cartVersion) {
     throw new AppError("Cart changed. Please review your order and try again.", 409);
   }
+
+  let effectiveBranchId = orderData.branchId;
+  let effectiveRestaurantId = orderData.restaurantId;
+
+  if (!effectiveBranchId && !effectiveRestaurantId) {
+    if (cartBranchId) effectiveBranchId = cartBranchId.toString();
+    else if (cartRestId) effectiveRestaurantId = cartRestId.toString();
+    else throw new AppError("Đơn hàng yêu cầu branchId hoặc restaurantId", 400);
+  }
+
+  let targetBranch = null;
+  let targetMerchant = null;
+  let targetRestaurant = null;
+
+  if (effectiveBranchId) {
+    const { assertBranchOperational } = await import("./branchService.js");
+    const operational = await assertBranchOperational(effectiveBranchId);
+    targetBranch = operational.branch;
+    targetMerchant = operational.merchant;
+
+    if (cartBranchId && cartBranchId.toString() !== effectiveBranchId.toString()) {
+      throw new AppError("Giỏ hàng không khớp với chi nhánh đặt hàng", 400);
+    }
+  } else {
+    // Legacy restaurantId flow
+    targetRestaurant = await restaurantRepo.findById(effectiveRestaurantId);
+    if (!targetRestaurant) {
+      throw new AppError("Restaurant not found.", 404);
+    }
+    if (!isRestaurantOpenNow(targetRestaurant)) {
+      const hoursText =
+        targetRestaurant.openingHours?.openTime && targetRestaurant.openingHours?.closeTime
+          ? ` (Giờ mở cửa: ${targetRestaurant.openingHours.openTime} - ${targetRestaurant.openingHours.closeTime})`
+          : "";
+      throw new AppError(
+        `Nhà hàng hiện đang đóng cửa và tạm ngưng nhận đơn${hoursText}. Quý khách vui lòng quay lại sau.`,
+        409
+      );
+    }
+
+    const { Merchant, Branch } = await import("../models/index.cjs");
+    targetMerchant = await Merchant.findOne({
+      $or: [{ _id: effectiveRestaurantId }, { legacyRestaurantId: effectiveRestaurantId }],
+    });
+    if (targetMerchant) {
+      targetBranch = await Branch.findOne({ merchantId: targetMerchant._id, code: "MAIN" });
+    }
+  }
+
+  if (deliveryMethod === "drone" && targetBranch && !targetBranch.droneDeliveryEnabled) {
+    throw new AppError("Chi nhánh không hỗ trợ giao hàng bằng drone", 400);
+  }
+
+  const originCoordinates = targetBranch
+    ? {
+        lat: targetBranch.address?.lat ?? targetBranch.location?.coordinates?.[1],
+        lng: targetBranch.address?.lng ?? targetBranch.location?.coordinates?.[0],
+      }
+    : {
+        lat: targetRestaurant?.lat,
+        lng: targetRestaurant?.lng,
+      };
 
   const orderItems = cartLines.map((line) => {
     const food = line.foodId;
@@ -250,25 +330,10 @@ export const placeOrder = async (user, orderData, clientIp) => {
     (sum, item) => sum + item.price * item.quantity,
     0
   );
-  // The storefront hides closed restaurants, but a stale tab could still get
-  // this far — the order has to be refused here too.
-  const restaurant = await restaurantRepo.findById(restaurantId);
-  if (!restaurant) {
-    throw new AppError("Restaurant not found.", 404);
-  }
-  if (!isRestaurantOpenNow(restaurant)) {
-    const hoursText = restaurant.openingHours?.openTime && restaurant.openingHours?.closeTime
-      ? ` (Giờ mở cửa: ${restaurant.openingHours.openTime} - ${restaurant.openingHours.closeTime})`
-      : "";
-    throw new AppError(
-      `Nhà hàng hiện đang đóng cửa và tạm ngưng nhận đơn${hoursText}. Quý khách vui lòng quay lại sau.`,
-      409
-    );
-  }
 
   const deliveryQuote = await calculateShippingQuote({
     deliveryMethod,
-    origin: { lat: restaurant.lat, lng: restaurant.lng },
+    origin: originCoordinates,
     destination: { lat: shippingAddress.lat, lng: shippingAddress.lng },
   });
   const totals = computeOrderTotals(subtotal, deliveryQuote.shippingPrice);
@@ -332,7 +397,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
     ...(deliveryMethod === "shipper" && {
       pickupLocation: {
         type: "Point",
-        coordinates: [restaurant.lng, restaurant.lat],
+        coordinates: [originCoordinates.lng, originCoordinates.lat],
       },
       shipperAssignmentStatus: "unassigned",
       shipperAssignmentDeadlineAt: new Date(Date.now() + SHIPPER_ASSIGNMENT_WINDOW_MS),
@@ -347,7 +412,11 @@ export const placeOrder = async (user, orderData, clientIp) => {
       discountAmount,
       discountTargetAmount: multiVoucherResult.applications.reduce((s, a) => s + a.targetAmount, 0),
     }),
-    restaurantId: restaurantId,
+    branchId: targetBranch ? targetBranch._id : null,
+    merchantId: targetMerchant ? targetMerchant._id : null,
+    restaurantId: targetRestaurant
+      ? targetRestaurant._id
+      : (targetMerchant?.legacyRestaurantId || targetMerchant?._id || targetBranch?.merchantId || null),
     isPaid: isZeroPayableVoucherCheckout,
     paidAt: isZeroPayableVoucherCheckout ? new Date() : null,
     orderStatus: isZeroPayableVoucherCheckout || !isOnlinePayment(paymentMethod) ? "pending" : "pending_payment",
@@ -469,7 +538,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
     event: "order.placed",
     orderId: newOrder._id,
     userId: user._id,
-    restaurantId: restaurantId.toString(),
+    restaurantId: (newOrder.restaurantId || newOrder.branchId || "").toString(),
     paymentMethod,
     deliveryMethod,
     totalPrice: payableTotal,
@@ -477,11 +546,28 @@ export const placeOrder = async (user, orderData, clientIp) => {
     discountAmount,
   }, `Đơn hàng [${newOrder._id}] đã được tạo thành công bởi User [${user._id}] (${payableTotal} VND, ${paymentMethod}, ${deliveryMethod})`);
 
+  await recordAudit({
+    actor: user,
+    action: "order.place",
+    targetType: "order",
+    targetId: newOrder._id,
+    merchantId: newOrder.merchantId,
+    branchId: newOrder.branchId,
+    reason: "Khách hàng tạo đơn hàng",
+    metadata: {
+      deliveryMethod,
+      paymentMethod,
+      totalPrice: payableTotal,
+    },
+  });
+
   return {
     success: true,
     ...(paymentUrl && { paymentUrl, checkoutUrl: paymentUrl }),
     orderId: newOrder._id,
-    restaurantId: restaurantId.toString(),
+    restaurantId: (newOrder.restaurantId || newOrder.branchId || "").toString(),
+    branchId: newOrder.branchId?.toString?.() || null,
+    merchantId: newOrder.merchantId?.toString?.() || null,
     deliveryMethod,
     paymentMethod,
     totalPrice: payableTotal,
@@ -772,9 +858,62 @@ const cancelZeroPayableVoucherOrder = async (user, order, reason) => {
   return { success: true, message: "Status Updated", data: cancelledOrder };
 };
 
-export const listOrders = async (user, { page, limit } = {}) => {
+export const listOrders = async (user, { page, limit, branchId, merchantId, restaurantId } = {}) => {
   let filter = {};
-  if (user.role === "restaurant_owner") {
+
+  if (restaurantId && !merchantId) {
+    const { Merchant } = await import("../models/index.cjs");
+    const merchant = await Merchant.findOne({
+      $or: [{ legacyRestaurantId: restaurantId }, { _id: restaurantId }],
+    });
+    if (merchant) {
+      merchantId = merchant._id;
+    }
+  }
+
+  if (user.role === "admin") {
+    if (branchId) filter.branchId = branchId;
+    if (merchantId) {
+      filter.$or = [{ merchantId }, { restaurantId: merchantId }];
+    } else if (restaurantId) {
+      filter.restaurantId = restaurantId;
+    }
+  } else if (user.role === "merchant_owner") {
+    const { Merchant, Branch } = await import("../models/index.cjs");
+    const merchant = await Merchant.findOne({ ownerUserId: user._id });
+    if (!merchant) {
+      return { success: true, data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } };
+    }
+    const merchantMatches = [{ merchantId: merchant._id }, { restaurantId: merchant._id }];
+    if (merchant.legacyRestaurantId) {
+      merchantMatches.push({ restaurantId: merchant.legacyRestaurantId });
+    }
+    filter.$or = merchantMatches;
+    if (branchId) {
+      const branchBelongs = await Branch.exists({ _id: branchId, merchantId: merchant._id });
+      if (!branchBelongs) {
+        throw new AppError("Chi nhánh không thuộc thương hiệu của bạn", 403);
+      }
+      filter.branchId = branchId;
+    }
+    filter.$and = [{ $or: [{ paymentMethod: "COD" }, { isPaid: true }] }];
+  } else if (user.role === "branch_manager") {
+    const { Branch } = await import("../models/index.cjs");
+    const managedBranches = await Branch.find({ managerUserIds: user._id }).select("_id");
+    const managedBranchIds = managedBranches.map((b) => b._id.toString());
+    if (managedBranchIds.length === 0) {
+      return { success: true, data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } };
+    }
+    if (branchId) {
+      if (!managedBranchIds.includes(branchId.toString())) {
+        throw new AppError("Bạn không có quyền xem đơn hàng của chi nhánh này", 403);
+      }
+      filter.branchId = branchId;
+    } else {
+      filter.branchId = { $in: managedBranches.map((b) => b._id) };
+    }
+    filter.$or = [{ paymentMethod: "COD" }, { isPaid: true }];
+  } else if (user.role === "restaurant_owner") {
     let restId = user.restaurantId;
     if (!restId) {
       const restaurant = await restaurantRepo.findByOwner(user._id);
@@ -782,10 +921,22 @@ export const listOrders = async (user, { page, limit } = {}) => {
         restId = restaurant._id;
       }
     }
+    const { Merchant } = await import("../models/index.cjs");
+    const merchant = await Merchant.findOne({
+      $or: [{ ownerUserId: user._id }, { legacyRestaurantId: restId }, { _id: restId }],
+    });
+    const restMatches = [{ restaurantId: restId }];
+    if (merchant) {
+      restMatches.push({ merchantId: merchant._id });
+      if (merchant.legacyRestaurantId) {
+        restMatches.push({ restaurantId: merchant.legacyRestaurantId });
+      }
+    }
     filter = {
-      restaurantId: restId,
-      // An online order is not actionable until its payment webhook confirms it.
-      $or: [{ paymentMethod: "COD" }, { isPaid: true }],
+      $and: [
+        { $or: restMatches },
+        { $or: [{ paymentMethod: "COD" }, { isPaid: true }] },
+      ],
     };
   } else if (user.role !== "admin") {
     throw new AppError("Unauthorized", 403);
@@ -801,71 +952,97 @@ export const updateStatus = async (user, updateData) => {
     throw new AppError("Order not found", 404);
   }
 
-  // THAY THẾ TOÀN BỘ PHẦN CHECK CHO ROLE "restaurant_owner" (fallback + auto-fix, FIX: dùng order.restaurantId thay vì order.restaurant)
-  if (user.role === "restaurant_owner") {
-    if (!order.restaurantId) {
-      throw new AppError("Unauthorized: Order missing restaurantId", 403);
+  if (user.role === "branch_manager") {
+    const { Branch } = await import("../models/index.cjs");
+    const isManager = await Branch.exists({
+      _id: order.branchId,
+      managerUserIds: user._id,
+    });
+    if (!isManager) {
+      throw new AppError("Unauthorized: Not your branch", 403);
+    }
+  } else if (user.role === "merchant_owner") {
+    const { Merchant, Branch } = await import("../models/index.cjs");
+    const merchant = await Merchant.findOne({ ownerUserId: user._id });
+    if (!merchant) {
+      throw new AppError("Unauthorized: Not your merchant", 403);
     }
 
-    // Priority check: user.restaurantId vs order.restaurantId (fast)
+    const orderMerchantStr = String(order.merchantId?._id || order.merchantId || "");
+    const orderRestStr = String(order.restaurantId?._id || order.restaurantId || "");
+    const orderBranchStr = String(order.branchId?._id || order.branchId || "");
+    const merchantIdStr = String(merchant._id);
+    const legacyRestStr = String(merchant.legacyRestaurantId || "");
+    const userRestStr = String(user.restaurantId || "");
+
     let isAuthorized = false;
-    const userRestStr = user.restaurantId ? user.restaurantId.toString() : null;
-    const orderRestStr = order.restaurantId._id
-      ? order.restaurantId._id.toString()
-      : order.restaurantId.toString(); // FIX: Lấy _id từ populated object
-
-    if (userRestStr && userRestStr === orderRestStr) {
+    if (orderMerchantStr && orderMerchantStr === merchantIdStr) {
       isAuthorized = true;
-    } else {
-      // Fallback: Check owner từ populated restaurantId (không cần fetch extra, repo đã populate)
+    } else if (
+      orderRestStr &&
+      (orderRestStr === merchantIdStr ||
+        orderRestStr === legacyRestStr ||
+        (userRestStr && orderRestStr === userRestStr))
+    ) {
+      isAuthorized = true;
+    } else if (orderBranchStr) {
+      isAuthorized = Boolean(
+        await Branch.exists({ _id: orderBranchStr, merchantId: merchant._id })
+      );
+    }
+
+    if (!isAuthorized) {
+      throw new AppError("Unauthorized: Not your merchant", 403);
+    }
+  } else if (user.role === "restaurant_owner") {
+    let restId = user.restaurantId;
+    if (!restId) {
+      const restaurant = await restaurantRepo.findByOwner(user._id);
+      if (restaurant) restId = restaurant._id;
+    }
+
+    const { Merchant, Branch } = await import("../models/index.cjs");
+    const merchant = await Merchant.findOne({
+      $or: [{ ownerUserId: user._id }, { legacyRestaurantId: restId }, { _id: restId }],
+    });
+
+    const orderMerchantStr = String(order.merchantId?._id || order.merchantId || "");
+    const orderRestStr = String(order.restaurantId?._id || order.restaurantId || "");
+    const orderBranchStr = String(order.branchId?._id || order.branchId || "");
+    const userRestStr = String(restId || "");
+    const merchantIdStr = merchant ? String(merchant._id) : "";
+    const legacyRestStr = merchant?.legacyRestaurantId ? String(merchant.legacyRestaurantId) : "";
+
+    let isAuthorized = false;
+    if (userRestStr && (userRestStr === orderRestStr || userRestStr === orderMerchantStr)) {
+      isAuthorized = true;
+    } else if (
+      merchant &&
+      (merchantIdStr === orderMerchantStr ||
+        merchantIdStr === orderRestStr ||
+        legacyRestStr === orderRestStr)
+    ) {
+      isAuthorized = true;
+    } else if (orderBranchStr && merchant) {
+      isAuthorized = Boolean(
+        await Branch.exists({ _id: orderBranchStr, merchantId: merchant._id })
+      );
+    }
+
+    if (!isAuthorized) {
+      // Fallback: Check owner từ populated restaurantId
       if (order.restaurantId && order.restaurantId.owner) {
-        const orderOwnerStr = order.restaurantId.owner._id
-          ? order.restaurantId.owner._id.toString()
-          : order.restaurantId.owner.toString();
-
-        if (user._id.toString() === orderOwnerStr) {
-          isAuthorized = true;
-          // Auto-fix user.restaurantId cho lần sau (one-time, chỉ nếu null/mismatch)
-          if (
-            !user.restaurantId ||
-            user.restaurantId.toString() !== order.restaurantId._id.toString()
-          ) {
-            await userRepo.updateById(user._id, {
-              restaurantId: order.restaurantId._id,
-            });
-            user.restaurantId = order.restaurantId._id.toString(); // Update in-memory
-          }
-        }
-      } else {
-        // Nếu chưa populate owner, fetch manual (fallback cuối)
-        const fullRestaurant = await restaurantRepo.findById(
-          order.restaurantId
-        );
-        if (fullRestaurant && fullRestaurant.owner) {
-          const orderOwnerStr = fullRestaurant.owner._id
-            ? fullRestaurant.owner._id.toString()
-            : fullRestaurant.owner.toString();
-
-          if (user._id.toString() === orderOwnerStr) {
-            isAuthorized = true;
-            if (
-              !user.restaurantId ||
-              user.restaurantId.toString() !== order.restaurantId.toString()
-            ) {
-              await userRepo.updateById(user._id, {
-                restaurantId: order.restaurantId,
-              });
-              user.restaurantId = order.restaurantId.toString(); // Update in-memory
-            }
-          }
-        }
+        const orderOwnerStr = String(order.restaurantId.owner._id || order.restaurantId.owner);
+        if (String(user._id) === orderOwnerStr) isAuthorized = true;
       }
     }
 
     if (!isAuthorized) {
       throw new AppError("Unauthorized: Not your restaurant", 403);
     }
+  }
 
+  if (["restaurant_owner", "merchant_owner", "branch_manager"].includes(user.role)) {
     // Validation rules từ gốc (status transitions)
     if (order.orderStatus !== "pending" && status === "preparing") {
       throw new AppError("Cannot accept (not pending)", 400);
@@ -928,21 +1105,42 @@ export const updateStatus = async (user, updateData) => {
     throw new AppError("Unauthorized: Invalid role", 403);
   }
 
-  // Xử lý chuyển trạng thái delivering đối với đơn drone: Phải qua xác nhận bàn giao khi drone đã tới quán
+  // Xử lý chuyển trạng thái delivering đối với đơn drone
   if (status === "delivering" && order.deliveryMethod === "drone") {
-    if (!order.droneId || order.dronePhase !== "awaiting_restaurant_handover") {
-      throw new AppError(
-        `Drone chưa sẵn sàng nhận bàn giao món tại nhà hàng (Pha hiện tại: ${order.dronePhase || "chưa gán drone"}). Vui lòng đợi drone hạ cánh.`,
-        409
-      );
+    if (!order.droneId) {
+      const { assignDroneToOrder } = await import("./droneService.js");
+      await assignDroneToOrder(orderId, null, user);
+      const reloaded = await orderRepo.findById(orderId);
+      order.droneId = reloaded.droneId;
+      order.dronePhase = reloaded.dronePhase;
     }
-    const { confirmRestaurantHandover } = await import("./droneService.js");
-    const handoverResult = await confirmRestaurantHandover(user, orderId);
-    const updatedOrder = await orderRepo.findById(orderId);
+    if (order.dronePhase === "awaiting_restaurant_handover") {
+      const { confirmRestaurantHandover } = await import("./droneService.js");
+      const handoverResult = await confirmRestaurantHandover(user, orderId);
+      const updatedOrder = await orderRepo.findById(orderId);
+      return {
+        success: true,
+        message: handoverResult.message,
+        data: updatedOrder,
+      };
+    }
+    order.orderStatus = "delivering";
+    order.dronePhase = "en_route_to_customer";
+    await order.save();
+    await recordAudit({
+      actor: user,
+      action: user.role === "admin" ? "order.status_overridden_by_admin" : "order.status_changed",
+      targetType: "order",
+      targetId: orderId,
+      merchantId: order.merchantId,
+      branchId: order.branchId,
+      reason: reason || "",
+      metadata: { from: "preparing", to: "delivering" },
+    });
     return {
       success: true,
-      message: handoverResult.message,
-      data: updatedOrder,
+      message: "Order status updated to delivering",
+      data: order,
     };
   }
 
@@ -1058,6 +1256,8 @@ export const updateStatus = async (user, updateData) => {
         : "order.status_changed",
     targetType: "order",
     targetId: orderId,
+    merchantId: order.merchantId,
+    branchId: order.branchId,
     reason: reason || "",
     metadata: { from: previousStatus, to: status },
   });

@@ -13,7 +13,8 @@ describe("userService", () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.token).toBeDefined();
+      expect(result.requiresVerification).toBe(true);
+      expect(result.token).toBeUndefined();
 
       const user = await User.findOne({ email: "john@test.com" });
       expect(user).not.toBeNull();
@@ -111,6 +112,7 @@ describe("userService", () => {
         email: "login@test.com",
         password: "password123",
       });
+      await User.updateOne({ email: "login@test.com" }, { isEmailVerified: true });
     });
 
     it("should login with correct credentials", async () => {
@@ -122,6 +124,17 @@ describe("userService", () => {
       expect(result.success).toBe(true);
       expect(result.token).toBeDefined();
       expect(result.user.email).toBe("login@test.com");
+    });
+
+    it("should reject login if email is not verified", async () => {
+      await User.updateOne({ email: "login@test.com" }, { isEmailVerified: false });
+
+      await expect(
+        userService.loginUser({
+          email: "login@test.com",
+          password: "password123",
+        })
+      ).rejects.toThrow("chưa được kích hoạt");
     });
 
     it("should reject non-existent email", async () => {
@@ -152,6 +165,156 @@ describe("userService", () => {
           password: "password123",
         })
       ).rejects.toThrow("locked");
+    });
+
+    it("should enforce portal role restrictions", async () => {
+      // unlock the test user
+      const testUser = await User.findOne({ email: "login@test.com" });
+      await User.findByIdAndUpdate(testUser._id, { locked: false, role: "user" });
+
+      // Customer trying to login to admin portal -> reject
+      await expect(
+        userService.loginUser({
+          email: "login@test.com",
+          password: "password123",
+          portal: "admin",
+        })
+      ).rejects.toThrow("Quản trị");
+
+      // Customer trying to login to restaurant portal -> reject
+      await expect(
+        userService.loginUser({
+          email: "login@test.com",
+          password: "password123",
+          portal: "restaurant",
+        })
+      ).rejects.toThrow("Nhà hàng");
+
+      // Customer logging into customer portal -> allow
+      const customerLogin = await userService.loginUser({
+        email: "login@test.com",
+        password: "password123",
+        portal: "customer",
+      });
+      expect(customerLogin.success).toBe(true);
+
+      // Now create an admin user
+      await User.create({
+        name: "Admin User",
+        email: "adminportal@test.com",
+        password: await bcrypt.hash("password123", 10),
+        role: "admin",
+        isEmailVerified: true,
+      });
+
+      // Admin trying to login to customer portal -> reject
+      await expect(
+        userService.loginUser({
+          email: "adminportal@test.com",
+          password: "password123",
+          portal: "customer",
+        })
+      ).rejects.toThrow("Khách hàng");
+
+      // Admin trying to login to restaurant portal -> reject
+      await expect(
+        userService.loginUser({
+          email: "adminportal@test.com",
+          password: "password123",
+          portal: "restaurant",
+        })
+      ).rejects.toThrow("Nhà hàng");
+
+      // Admin logging into admin portal -> allow
+      const adminLogin = await userService.loginUser({
+        email: "adminportal@test.com",
+        password: "password123",
+        portal: "admin",
+      });
+      expect(adminLogin.success).toBe(true);
+
+      // Now create a restaurant owner
+      await User.create({
+        name: "Rest Owner",
+        email: "restportal@test.com",
+        password: await bcrypt.hash("password123", 10),
+        role: "restaurant_owner",
+        isEmailVerified: true,
+      });
+
+      // Restaurant owner trying to login to customer portal -> reject
+      await expect(
+        userService.loginUser({
+          email: "restportal@test.com",
+          password: "password123",
+          portal: "customer",
+        })
+      ).rejects.toThrow("Khách hàng");
+
+      // Restaurant owner trying to login to admin portal -> reject
+      await expect(
+        userService.loginUser({
+          email: "restportal@test.com",
+          password: "password123",
+          portal: "admin",
+        })
+      ).rejects.toThrow("Quản trị");
+
+      // Restaurant owner logging into restaurant portal -> allow
+      const restLogin = await userService.loginUser({
+        email: "restportal@test.com",
+        password: "password123",
+        portal: "restaurant",
+      });
+      expect(restLogin.success).toBe(true);
+    });
+  });
+
+  describe("verifyEmail & resendVerification", () => {
+    it("should verify email with valid token", async () => {
+      const reg = await userService.registerUser({
+        name: "Verify Me",
+        email: "verifyme@test.com",
+        password: "password123",
+      });
+      expect(reg.requiresVerification).toBe(true);
+
+      const user = await User.findOne({ email: "verifyme@test.com" }).select(
+        "+emailVerificationToken +emailVerificationTokenExpires"
+      );
+      expect(user.isEmailVerified).toBe(false);
+
+      // Verify with invalid token
+      await expect(userService.verifyEmail("invalid-token")).rejects.toThrow(
+        "không hợp lệ hoặc đã hết hạn"
+      );
+
+      // To verify with valid token, let's create a known raw token
+      const rawToken = "mytesttoken12345678901234567890";
+      const crypto = await import("crypto");
+      const hashed = crypto.createHash("sha256").update(rawToken).digest("hex");
+      await User.updateOne(
+        { email: "verifyme@test.com" },
+        { emailVerificationToken: hashed, emailVerificationTokenExpires: new Date(Date.now() + 3600000) }
+      );
+
+      const verifyResult = await userService.verifyEmail(rawToken);
+      expect(verifyResult.success).toBe(true);
+
+      const updated = await User.findOne({ email: "verifyme@test.com" });
+      expect(updated.isEmailVerified).toBe(true);
+    });
+
+    it("should resend verification email for unverified user", async () => {
+      await userService.registerUser({
+        name: "Resend User",
+        email: "resend@test.com",
+        password: "password123",
+      });
+
+      const res = await userService.resendVerification("resend@test.com");
+      expect(res.success).toBe(true);
+      expect(res.message).toContain("Liên kết kích hoạt");
     });
   });
 

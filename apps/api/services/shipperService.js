@@ -175,13 +175,29 @@ export const currentOrder = async (userId) => {
 export const nearbyAvailableShipperIds = async (pickupLocation) => {
   if (!pickupLocation?.coordinates) return [];
   const freshAfter = new Date(Date.now() - LOCATION_STALE_MS);
-  const profiles = await ShipperProfile.find({
-    status: "available",
-    approvalStatus: "approved",
-    locationUpdatedAt: { $gte: freshAfter },
-    currentLocation: { $near: { $geometry: pickupLocation, $maxDistance: OFFER_RADIUS_METRES } },
-  }).limit(10).select("user");
-  return profiles.map((profile) => String(profile.user));
+  const findProfiles = () =>
+    ShipperProfile.find({
+      status: "available",
+      approvalStatus: "approved",
+      locationUpdatedAt: { $gte: freshAfter },
+      currentLocation: {
+        $near: { $geometry: pickupLocation, $maxDistance: OFFER_RADIUS_METRES },
+      },
+    })
+      .limit(10)
+      .select("user");
+
+  try {
+    const profiles = await findProfiles();
+    return profiles.map((profile) => String(profile.user));
+  } catch (err) {
+    if (err.message && err.message.includes("unable to find index for $geoNear")) {
+      await ShipperProfile.createIndexes();
+      const profiles = await findProfiles();
+      return profiles.map((profile) => String(profile.user));
+    }
+    throw err;
+  }
 };
 
 export const acceptOrder = async (user, orderId) => {

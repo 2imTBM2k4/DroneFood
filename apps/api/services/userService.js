@@ -26,7 +26,7 @@ const createRefreshToken = (id) => {
   return jwt.sign({ id, type: "refresh" }, process.env.JWT_SECRET, { expiresIn: "7d" });
 };
 
-export const loginUser = async ({ email, password }) => {
+export const loginUser = async ({ email, password, portal, clientType }) => {
   const user = await userRepo.findByEmail(email);
   if (!user) {
     throw new AppError("User doesn't exist.", 401);
@@ -37,6 +37,34 @@ export const loginUser = async ({ email, password }) => {
   const isMatch = await bcrypt.compare(password, user.password);
   if (!isMatch) {
     throw new AppError("Invalid credentials", 401);
+  }
+
+  if (user.role !== "admin" && user.isEmailVerified === false) {
+    const error = new AppError(
+      "Tài khoản chưa được kích hoạt. Vui lòng kiểm tra email của bạn để kích hoạt tài khoản.",
+      403
+    );
+    error.isUnverified = true;
+    error.email = user.email;
+    throw error;
+  }
+
+  const userRole = user.role || "user";
+  const targetPortal = portal || clientType;
+  if (targetPortal) {
+    if (targetPortal === "admin" && userRole !== "admin") {
+      throw new AppError("Tài khoản không có quyền truy cập trang Quản trị (Admin).", 403);
+    }
+    const RESTAURANT_ROLES = ["restaurant_owner", "merchant_owner", "branch_manager"];
+    if (targetPortal === "restaurant" && !RESTAURANT_ROLES.includes(userRole)) {
+      throw new AppError("Tài khoản không có quyền truy cập giao diện Nhà hàng.", 403);
+    }
+    if ((targetPortal === "customer" || targetPortal === "user") && userRole !== "user") {
+      throw new AppError("Tài khoản Quản trị hoặc Nhà hàng không thể đăng nhập vào giao diện Khách hàng.", 403);
+    }
+    if (targetPortal === "shipper" && userRole !== "shipper") {
+      throw new AppError("Tài khoản này không phải là tài khoản Shipper.", 403);
+    }
   }
 
   if (user.role === "restaurant_owner" && user.restaurantId) {
@@ -59,7 +87,6 @@ export const loginUser = async ({ email, password }) => {
   await userRepo.updateById(user._id, { refreshToken: hashedRefreshToken }, "+refreshToken");
   await recordAudit({ actor: user, action: "auth.login_succeeded", targetType: "authentication", targetId: user._id, category: "authentication" });
 
-  const userRole = user.role || "user";
   return {
     success: true,
     token,
@@ -72,6 +99,42 @@ export const loginUser = async ({ email, password }) => {
       role: userRole,
     },
   };
+};
+
+export const sendAccountVerificationEmail = async (email, name, rawToken) => {
+  const verifyUrl = `${process.env.FRONTEND_URL || "http://localhost:5173"}/verify-email/${rawToken}`;
+
+  try {
+    await sendEmail({
+      to: email,
+      subject: "Kích hoạt tài khoản Drone Food của bạn",
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 540px; margin: 0 auto; padding: 32px 24px; border: 1px solid #e5e7eb; border-radius: 16px; background: #ffffff;">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <h1 style="color: #ff6b35; font-size: 26px; font-weight: 800; margin: 0;">DRONE FOOD</h1>
+            <p style="color: #6b7280; font-size: 14px; margin-top: 4px;">Giao đồ ăn bằng Drone thế hệ mới</p>
+          </div>
+          <h2 style="color: #111827; font-size: 20px; font-weight: 700; margin-top: 0;">Chào mừng bạn, ${name || "Quý khách"}!</h2>
+          <p style="color: #4b5563; font-size: 15px; line-height: 1.6;">Cảm ơn bạn đã đăng ký tài khoản tại Drone Food. Để hoàn tất đăng ký và kích hoạt tài khoản của bạn, vui lòng nhấn vào nút bên dưới:</p>
+          <div style="margin: 28px 0; text-align: center;">
+            <a href="${verifyUrl}" style="display: inline-block; padding: 14px 28px; background-color: #ff6b35; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; box-shadow: 0 4px 6px -1px rgba(255, 107, 53, 0.2);">
+              Kích hoạt tài khoản ngay
+            </a>
+          </div>
+          <p style="color: #4b5563; font-size: 14px; line-height: 1.5;">Hoặc bạn có thể sao chép và dán liên kết sau vào trình duyệt của bạn:</p>
+          <p style="margin: 8px 0; padding: 12px; background: #f3f4f6; border-radius: 8px; font-size: 12px; color: #374151; word-break: break-all;">
+            <a href="${verifyUrl}" style="color: #0066cc; text-decoration: underline;">${verifyUrl}</a>
+          </p>
+          <p style="color: #9ca3af; font-size: 13px; line-height: 1.5; margin-top: 24px; margin-bottom: 0;">
+            Liên kết kích hoạt có hiệu lực trong vòng <strong>24 giờ</strong>. Nếu bạn không tạo tài khoản này, vui lòng bỏ qua email.
+          </p>
+        </div>
+      `,
+    });
+  } catch (mailErr) {
+    console.error("Failed to send verification email:", mailErr?.message || mailErr);
+    console.log(`[DEV] Account verification link for ${email}: ${verifyUrl}`);
+  }
 };
 
 export const registerUser = async (userData) => {
@@ -90,12 +153,19 @@ export const registerUser = async (userData) => {
   const salt = await bcrypt.genSalt(10);
   const hash = await bcrypt.hash(password, salt);
 
+  const activationToken = crypto.randomBytes(32).toString("hex");
+  const hashedActivationToken = crypto.createHash("sha256").update(activationToken).digest("hex");
+  const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
   const newUserData = {
     name,
     email,
     password: hash,
     role: role || "user",
     phone,
+    isEmailVerified: false,
+    emailVerificationToken: hashedActivationToken,
+    emailVerificationTokenExpires: verificationExpires,
     address: {
       fullName: name,
       address: address,
@@ -103,11 +173,6 @@ export const registerUser = async (userData) => {
     },
   };
   let newUser = await userRepo.create(newUserData);
-  const token = createAccessToken(newUser._id);
-  const refreshToken = createRefreshToken(newUser._id);
-
-  const hashedRefreshToken = crypto.createHash("sha256").update(refreshToken).digest("hex");
-  await userRepo.updateById(newUser._id, { refreshToken: hashedRefreshToken }, "+refreshToken");
 
   if (role === "restaurant_owner") {
     // Geocode the address here too: signing up is the other way a restaurant
@@ -140,7 +205,15 @@ export const registerUser = async (userData) => {
     }
   }
 
-  return { success: true, token, refreshToken };
+  // Send activation email asynchronously
+  await sendAccountVerificationEmail(email, name, activationToken);
+
+  return {
+    success: true,
+    requiresVerification: true,
+    email: newUser.email,
+    message: "Đăng ký thành công! Vui lòng kiểm tra email để kích hoạt tài khoản.",
+  };
 };
 
 export const lockUser = async (actor, userId, lock) => {
@@ -183,6 +256,13 @@ export const getMe = async (userId) => {
     userObj.restaurantId = (
       userObj.restaurantId._id || userObj.restaurantId
     ).toString();
+  } else if (userObj.role === "merchant_owner" || userObj.role === "restaurant_owner") {
+    const { Merchant } = await import("../models/index.cjs");
+    const merchant = await Merchant.findOne({ ownerUserId: userId });
+    if (merchant) {
+      userObj.restaurantId = (merchant.legacyRestaurantId || merchant._id).toString();
+      userObj.merchantId = merchant._id.toString();
+    }
   }
   return { success: true, data: userObj };
 };
@@ -222,17 +302,250 @@ export const listUsers = async ({ page, limit } = {}) => {
 
 export const updateProfile = async (userId, currentEmail, updates) => {
   const { name, email, phone } = updates;
+  const updateData = {};
+  if (name !== undefined) updateData.name = name;
+  if (phone !== undefined) updateData.phone = phone;
+
   if (email && email !== currentEmail) {
     const existing = await userRepo.findByEmail(email);
     if (existing) {
       throw new AppError("Email already exists", 409);
     }
+    updateData.email = email;
   }
-  const user = await userRepo.updateById(userId, { name, email, phone });
-  if (email && email !== currentEmail) {
-    await recordAudit({ actor: user, action: "email.updated", targetType: "user", targetId: userId, category: "email", metadata: { emailBefore: maskEmail(currentEmail), emailAfter: maskEmail(email) } });
+
+  const user = await userRepo.updateById(userId, updateData);
+  if (updateData.email && updateData.email !== currentEmail) {
+    await recordAudit({
+      actor: user,
+      action: "email.updated",
+      targetType: "user",
+      targetId: userId,
+      category: "email",
+      metadata: { emailBefore: maskEmail(currentEmail), emailAfter: maskEmail(updateData.email) },
+    });
   }
   return { success: true, data: user };
+};
+
+export const requestEmailChange = async (userId, currentPassword, newEmail) => {
+  const user = await userRepo.findById(userId, "+password");
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
+
+  const isMatch = await bcrypt.compare(currentPassword, user.password);
+  if (!isMatch) {
+    throw new AppError("Mật khẩu hiện tại không đúng", 400);
+  }
+
+  const normalizedEmail = newEmail.trim().toLowerCase();
+  if (normalizedEmail === user.email.toLowerCase()) {
+    throw new AppError("Email mới phải khác email hiện tại", 400);
+  }
+
+  const existing = await userRepo.findByEmail(normalizedEmail);
+  if (existing) {
+    throw new AppError("Email này đã được sử dụng bởi một tài khoản khác", 409);
+  }
+
+  const otp = String(crypto.randomInt(100000, 999999));
+  const hashedOtp = crypto.createHash("sha256").update(otp).digest("hex");
+  const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+  await userRepo.updateById(
+    userId,
+    {
+      pendingEmail: normalizedEmail,
+      emailVerificationOtp: hashedOtp,
+      emailVerificationExpires: expires,
+    },
+    "+pendingEmail +emailVerificationOtp +emailVerificationExpires"
+  );
+
+  try {
+    await sendEmail({
+      to: normalizedEmail,
+      subject: "Mã xác thực thay đổi Email - Drone Food",
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px; border: 1px solid #e5e7eb; border-radius: 16px; background: #ffffff;">
+          <h2 style="color: #111827; margin-top: 0; font-size: 22px; font-weight: 700;">Xác thực thay đổi Email</h2>
+          <p style="color: #4b5563; font-size: 15px; line-height: 1.6;">Bạn vừa yêu cầu thay đổi email đăng nhập của tài khoản DroneFood sang địa chỉ này. Vui lòng nhập mã xác nhận bên dưới để hoàn tất:</p>
+          <div style="margin: 24px 0; padding: 18px; background: #f3f4f6; border-radius: 12px; text-align: center;">
+            <span style="font-family: monospace; font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #0066cc;">${otp}</span>
+          </div>
+          <p style="color: #6b7280; font-size: 13px; line-height: 1.5; margin-bottom: 0;">Mã xác thực có hiệu lực trong vòng <strong>10 phút</strong>. Nếu không phải bạn thực hiện yêu cầu này, vui lòng bỏ qua email.</p>
+        </div>
+      `,
+    });
+  } catch (mailErr) {
+    console.error("Failed to send verification email:", mailErr?.message || mailErr);
+  }
+
+  return {
+    success: true,
+    message: "Mã xác thực đã được gửi đến email mới của bạn.",
+  };
+};
+
+export const confirmEmailChange = async (userId, otp) => {
+  const user = await userRepo.findById(
+    userId,
+    "+pendingEmail +emailVerificationOtp +emailVerificationExpires"
+  );
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
+
+  if (!user.pendingEmail || !user.emailVerificationOtp || !user.emailVerificationExpires) {
+    throw new AppError("Không tìm thấy yêu cầu thay đổi email nào", 400);
+  }
+
+  if (new Date() > new Date(user.emailVerificationExpires)) {
+    throw new AppError("Mã xác thực đã hết hạn. Vui lòng yêu cầu lại", 400);
+  }
+
+  const hashedOtp = crypto.createHash("sha256").update(otp.trim()).digest("hex");
+  if (hashedOtp !== user.emailVerificationOtp) {
+    throw new AppError("Mã xác thực không chính xác", 400);
+  }
+
+  const conflict = await userRepo.findByEmail(user.pendingEmail);
+  if (conflict && String(conflict._id) !== String(userId)) {
+    throw new AppError("Email này đã được sử dụng bởi một tài khoản khác", 409);
+  }
+
+  const oldEmail = user.email;
+  const newEmail = user.pendingEmail;
+
+  const updatedUser = await userRepo.updateById(userId, {
+    email: newEmail,
+    pendingEmail: null,
+    emailVerificationOtp: null,
+    emailVerificationExpires: null,
+  });
+
+  await recordAudit({
+    actor: updatedUser,
+    action: "email.updated",
+    targetType: "user",
+    targetId: userId,
+    category: "email",
+    metadata: { emailBefore: maskEmail(oldEmail), emailAfter: maskEmail(newEmail) },
+  });
+
+  return {
+    success: true,
+    data: updatedUser,
+    message: "Cập nhật email thành công",
+  };
+};
+
+export const requestPhoneChange = async (userId, currentPassword, newPhone) => {
+  const user = await userRepo.findById(userId, "+password");
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
+
+  if (!user.email) {
+    throw new AppError("Tài khoản chưa có email để nhận mã xác minh", 400);
+  }
+
+  const isMatch = await bcrypt.compare(currentPassword, user.password);
+  if (!isMatch) {
+    throw new AppError("Mật khẩu hiện tại không đúng", 400);
+  }
+
+  const normalizedPhone = newPhone.trim();
+  if (user.phone && normalizedPhone === user.phone.trim()) {
+    throw new AppError("Số điện thoại mới phải khác số điện thoại hiện tại", 400);
+  }
+
+  const otp = String(crypto.randomInt(100000, 999999));
+  const hashedOtp = crypto.createHash("sha256").update(otp).digest("hex");
+  const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+  await userRepo.updateById(
+    userId,
+    {
+      pendingPhone: normalizedPhone,
+      phoneVerificationOtp: hashedOtp,
+      phoneVerificationExpires: expires,
+    },
+    "+pendingPhone +phoneVerificationOtp +phoneVerificationExpires"
+  );
+
+  try {
+    await sendEmail({
+      to: user.email,
+      subject: "Mã xác thực thay đổi Số điện thoại - Drone Food",
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px; border: 1px solid #e5e7eb; border-radius: 16px; background: #ffffff;">
+          <h2 style="color: #111827; margin-top: 0; font-size: 22px; font-weight: 700;">Xác thực thay đổi Số điện thoại</h2>
+          <p style="color: #4b5563; font-size: 15px; line-height: 1.6;">Bạn vừa yêu cầu cập nhật số điện thoại tài khoản DroneFood sang số mới: <strong>${normalizedPhone}</strong>. Vui lòng nhập mã xác nhận bên dưới để hoàn tất:</p>
+          <div style="margin: 24px 0; padding: 18px; background: #f3f4f6; border-radius: 12px; text-align: center;">
+            <span style="font-family: monospace; font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #0066cc;">${otp}</span>
+          </div>
+          <p style="color: #6b7280; font-size: 13px; line-height: 1.5; margin-bottom: 0;">Mã xác thực có hiệu lực trong vòng <strong>10 phút</strong>. Nếu không phải bạn thực hiện yêu cầu này, vui lòng đổi mật khẩu ngay lập tức.</p>
+        </div>
+      `,
+    });
+  } catch (mailErr) {
+    console.error("Failed to send phone change verification email:", mailErr?.message || mailErr);
+  }
+
+  return {
+    success: true,
+    message: `Mã xác thực đã được gửi đến email của bạn (${maskEmail(user.email)}).`,
+  };
+};
+
+export const confirmPhoneChange = async (userId, otp) => {
+  const user = await userRepo.findById(
+    userId,
+    "+pendingPhone +phoneVerificationOtp +phoneVerificationExpires"
+  );
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
+
+  if (!user.pendingPhone || !user.phoneVerificationOtp || !user.phoneVerificationExpires) {
+    throw new AppError("Không tìm thấy yêu cầu thay đổi số điện thoại nào", 400);
+  }
+
+  if (new Date() > new Date(user.phoneVerificationExpires)) {
+    throw new AppError("Mã xác thực đã hết hạn. Vui lòng yêu cầu lại", 400);
+  }
+
+  const hashedOtp = crypto.createHash("sha256").update(otp.trim()).digest("hex");
+  if (hashedOtp !== user.phoneVerificationOtp) {
+    throw new AppError("Mã xác thực không chính xác", 400);
+  }
+
+  const oldPhone = user.phone;
+  const newPhone = user.pendingPhone;
+
+  const updatedUser = await userRepo.updateById(userId, {
+    phone: newPhone,
+    pendingPhone: null,
+    phoneVerificationOtp: null,
+    phoneVerificationExpires: null,
+  });
+
+  await recordAudit({
+    actor: updatedUser,
+    action: "phone.updated",
+    targetType: "user",
+    targetId: userId,
+    category: "security",
+    metadata: { phoneBefore: oldPhone || null, phoneAfter: newPhone },
+  });
+
+  return {
+    success: true,
+    data: updatedUser,
+    message: "Cập nhật số điện thoại thành công",
+  };
 };
 
 export const changePassword = async (userId, currentPassword, newPassword) => {
@@ -518,4 +831,85 @@ export const getUserTransactions = async (userId) => {
     },
   };
 };
+
+export const verifyEmail = async (token) => {
+  if (!token || typeof token !== "string") {
+    throw new AppError("Mã xác thực không hợp lệ", 400);
+  }
+
+  const hashedToken = crypto.createHash("sha256").update(token.trim()).digest("hex");
+  const user = await userRepo.findByVerificationToken(hashedToken);
+
+  if (!user) {
+    throw new AppError("Liên kết kích hoạt không hợp lệ hoặc đã hết hạn.", 400);
+  }
+
+  await userRepo.updateById(
+    user._id,
+    {
+      isEmailVerified: true,
+      emailVerificationToken: null,
+      emailVerificationTokenExpires: null,
+    },
+    "-password"
+  );
+
+  await recordAudit({
+    actor: user,
+    action: "auth.email_verified",
+    targetType: "user",
+    targetId: user._id,
+    category: "authentication",
+  });
+
+  return {
+    success: true,
+    message: "Tài khoản của bạn đã được kích hoạt thành công! Bạn có thể đăng nhập ngay bây giờ.",
+  };
+};
+
+export const resendVerification = async (email) => {
+  if (!email || !validator.isEmail(email)) {
+    throw new AppError("Email không hợp lệ", 400);
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = await userRepo.findByEmail(normalizedEmail);
+
+  if (!user) {
+    return {
+      success: true,
+      message: "Nếu email tồn tại trong hệ thống, liên kết kích hoạt đã được gửi.",
+    };
+  }
+
+  if (user.isEmailVerified) {
+    return {
+      success: true,
+      alreadyVerified: true,
+      message: "Tài khoản này đã được kích hoạt trước đó. Bạn có thể đăng nhập ngay.",
+    };
+  }
+
+  const activationToken = crypto.randomBytes(32).toString("hex");
+  const hashedToken = crypto.createHash("sha256").update(activationToken).digest("hex");
+  const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+  await userRepo.updateById(
+    user._id,
+    {
+      emailVerificationToken: hashedToken,
+      emailVerificationTokenExpires: expires,
+    },
+    "+emailVerificationToken +emailVerificationTokenExpires"
+  );
+
+  await sendAccountVerificationEmail(user.email, user.name, activationToken);
+
+  return {
+    success: true,
+    message: "Liên kết kích hoạt mới đã được gửi đến email của bạn.",
+  };
+};
+
 

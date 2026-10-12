@@ -21,7 +21,7 @@
 | 11 | [Business flows](#11-business-flows) | 25 | [Technical debt](#25-technical-debt) |
 | 12 | [Dependency graph](#12-dependency-graph) | 26 | [Improvement proposal](#26-improvement-proposal) |
 | 13 | [External services](#13-external-services) | 27 | [Appendix](#27-appendix) |
-| 14 | [Configuration](#14-configuration) | | |
+| 14 | [Configuration](#14-configuration) | 28 | [Multi-Branch Architecture](#28-multi-branch-restaurant-architecture) |
 
 ---
 
@@ -1399,6 +1399,162 @@ docker exec drone-delivery-backend node seeds/backfillRestaurantCoords.js
 - [TrackAsia Docs](https://docs.track-asia.com/) · [Leaflet](https://leafletjs.com/reference.html)
 - [MDN — Geolocation API](https://developer.mozilla.org/en-US/docs/Web/API/Geolocation_API)
 - `README.md` — quick setup guide
+
+---
+
+## 28. Multi-Branch Restaurant Architecture
+
+The platform has transitioned from a single-store ("1 Restaurant = 1 location") model to a "Merchant + multiple Branches" architecture, supporting both individual business owners and multi-location brands.
+
+### 28.1 Entity Model and Relationships
+
+```mermaid
+erDiagram
+    USER ||--o| MERCHANT : "owns (ownerUserId)"
+    USER ||--o{ BRANCH : "manages (managerUserIds)"
+    MERCHANT ||--|{ BRANCH : "has (merchantId)"
+    MERCHANT ||--|{ FOOD : "brand menu (merchantId)"
+    HUB ||--o{ DRONE : "hub station fleet (hubId)"
+    BRANCH ||--o{ CART : "cart bound to (branchId)"
+    BRANCH ||--o{ ORDER : "order bound to (branchId)"
+
+    HUB {
+        ObjectId _id
+        string name
+        string code "unique"
+        object address
+        object location "Point 2dsphere"
+        string status "active | inactive"
+        number capacity
+    }
+
+    DRONE {
+        ObjectId _id
+        ObjectId hubId "home hub (ref Hub)"
+        string droneCode "unique"
+        string status "available | flying_to_branch | delivering | returning_to_hub | maintenance"
+        number batteryLevel
+        number cargoWeight
+    }
+
+    MERCHANT {
+        ObjectId _id
+        string type "individual | brand"
+        string name
+        string slug "unique"
+        ObjectId ownerUserId
+        string status "pending | active | suspended"
+        number branchCount
+        object revenueShare
+    }
+
+    BRANCH {
+        ObjectId _id
+        ObjectId merchantId
+        string name
+        string code "unique per merchant"
+        object address
+        object location "Point 2dsphere"
+        boolean isOpen
+        boolean droneDeliveryEnabled
+        string status "pending | active | locked"
+        ObjectId_array managerUserIds
+        number deliveryRadiusKm
+    }
+```
+
+- **Merchant Classification Rules:**
+  - `individual`: Single-outlet business (`branchCount = 1`).
+  - `brand`: Multi-outlet brand (`branchCount >= 2`).
+  - `type` is automatically synchronized after branch creation, deletion, or locking via `syncMerchantBranchCount`.
+- **Domain Responsibilities:**
+  - Menu (`Food`): Owned by `Merchant`. All branches under the same brand share the same catalog.
+  - Cart (`Cart`) & Order (`Order`): Bound directly to `branchId` (1 cart = 1 branch; cross-branch item additions return 409).
+  - Drone Fleet (`Drone`) & Hub Stations (`Hub`): **Drones are platform assets**, owned by the platform and based at operational Hubs (`Drone.hubId`). Branches do not own drones; they only toggle support via `droneDeliveryEnabled`. For orders with drone delivery, the system locates an available drone at the nearest Hub to the branch, dispatches it to the branch (`flying_to_branch`), and fulfills the order (`delivering`).
+
+### 28.2 Permissions Matrix
+
+| Action | public | user | branch_manager | merchant_owner | admin |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Register merchant (`/register`) | ❌ | ✅ | ❌ | ❌ | ❌ |
+| View own merchant (`/me`) | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Update brand info | ❌ | ❌ | ❌ | ✅ (own) | ✅ |
+| Approve / suspend merchant | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Create new branch | ❌ | ❌ | ❌ | ✅ (when active) | ✅ |
+| Update branch / Open-close state | ❌ | ❌ | ✅ (assigned branch) | ✅ (own) | ✅ |
+| Toggle drone delivery for branch | ❌ | ❌ | ✅ (assigned branch) | ✅ (own) | ✅ |
+| Delete branch (last branch blocked) | ❌ | ❌ | ❌ | ✅ (own) | ✅ |
+| Lock / unlock branch | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Assign branch managers | ❌ | ❌ | ❌ | ✅ (own) | ✅ |
+| Manage Drone Hubs (`/api/hub`) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Manage Drones (CRUD, manual assign) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Manage foods (`/api/food`) | ❌ | ❌ | ❌ | ✅ (own) | ✅ |
+| View order list (`/api/order/list`) | ❌ | ❌ | ✅ (assigned branches only) | ✅ (all brand) | ✅ (all) |
+| Update order status | ❌ | ❌ | ✅ (assigned branch only) | ✅ (all brand) | ✅ |
+| View audit log (`/api/audit`) | ❌ | ❌ | ✅ (assigned branch only) | ✅ (all brand) | ✅ (all) |
+
+### 28.3 New API Endpoints
+
+#### Hub API (`/api/hub`) — Platform Drone Hub Management (Admin)
+- `POST /`: Create Hub with GeoJSON coordinates (`admin`).
+- `GET /`: List all Hubs (`admin`).
+- `GET /:id`: Get Hub details (`admin`).
+- `PUT /:id`: Update Hub details/location (`admin`).
+- `DELETE /:id`: Delete Hub (blocked if drones are assigned to it) (`admin`).
+
+#### Drone API (`/api/drone`) — Platform Drone Fleet Management (Admin)
+- `GET /`: List all drones, filterable by `hubId` and `status` (`admin`).
+- `POST /create`: Create drone stationed at a Hub (`admin`).
+- `PATCH /:id/status`: Update drone status (e.g., reset to `available` upon return to hub) (`admin`).
+- `POST /assign`: Assign drone to an order (`admin`).
+- `POST /reassign`: Emergency drone replacement in flight (`admin`).
+
+#### Merchant API (`/api/merchant`)
+- `POST /register`: Register merchant + auto-generate MAIN branch (`protect`, rate-limited per user ID).
+- `GET /me`: Retrieve own merchant and branch list (`merchant_owner`, `admin`).
+- `GET /:slug/public`: Public brand profile and active branches (Public; `ownerUserId` and `revenueShare` stripped).
+- `PUT /:id`: Update merchant profile (`merchant_owner`, `admin`, ownership verified).
+- `GET /list`: Paginated merchant list with `status` and `type` filters (`admin`).
+- `POST /:id/approve`: Approve merchant (`admin`). When approving from `pending`, MAIN branch is activated to `active`.
+- `POST /:id/suspend`: Suspend merchant with reason (`admin`). Closes all branches (`isOpen = false`). When re-approved, branches are not auto-opened.
+
+#### Branch API (`/api/branch`)
+- `GET /nearby?lat=&lng=&radius=`: Resolve nearest branches using `$geoNear` 2dsphere, grouped by Merchant, selecting nearest branch and listing alternatives (Public).
+- `GET /list?merchantId=`: List all branches of a merchant (Public).
+- `GET /:id`: Get branch details (Public).
+- `POST /`: Create new branch under merchant (`merchant_owner`, requires active merchant).
+- `PUT /:id`: Update branch details (`merchant_owner`, `branch_manager`).
+- `PATCH /:id/open-state`: Toggle open/close state (`merchant_owner`, `branch_manager`).
+- `PATCH /:id/drone-delivery`: Toggle drone delivery support on branch (`merchant_owner`, `branch_manager`).
+- `DELETE /:id`: Delete branch (deleting the last remaining branch is blocked with 400) (`merchant_owner`).
+- `PUT /:id/lock`: Lock / unlock branch (`admin`).
+- `POST /:id/managers`: Assign branch managers (`merchant_owner`).
+
+### 28.4 Migration Procedure and Artifact Management
+
+- **Script:** `apps/api/seeds/migrate-to-multi-branch.cjs`.
+- **Execution Modes:**
+  - Safe preview mode: `node seeds/migrate-to-multi-branch.cjs --dry-run`.
+  - Production apply mode: `node seeds/migrate-to-multi-branch.cjs --apply --phase2-ready`.
+- **Safety Guards:**
+  - Emits 2 artifact files in `apps/api/migration-artifacts/` prior to any DB write:
+    - `multi-branch-mapping-<timestamp>.json`: Maps `oldRestaurantId` → `{ merchantId, branchId }`.
+    - `migration-log-<timestamp>.json`: Logs all document insertions, field updates, and index operations.
+  - Verifies and repairs compound unique indexes for `Merchant`, `Branch`, and partial indexes for `Cart`.
+  - Idempotent: Can be safely re-run without duplicating records.
+- **Rollback Plan:** See [`MIGRATION_NOTES.md`](../MIGRATION_NOTES.md).
+
+### 28.5 Legacy Compatibility and Sunset Plan
+
+- **Transition Window (Current Sprint):**
+  - Legacy write endpoints (`PUT /:id`, `POST /`, `DELETE /`, `PATCH /:id/open-state`, `PUT /:id/lock` on `/api/restaurant`) return **410 Gone** pointing clients to `/api/merchant` or `/api/branch`.
+  - Legacy read endpoints (`GET /api/restaurant/list`, `GET /api/restaurant/:id`) and bank account operations (`/me/bank-account`) are maintained so existing mobile builds continue browsing and settling.
+  - Every call to legacy routes emits a runtime console warning: `[LEGACY API] <METHOD> <URL> user: <userId>`.
+- **Sunset Plan (Next Sprint):**
+  - Once mobile apps deploy the updated Merchant/Branch API:
+    1. Deprecate and delete `apps/api/routes/restaurantRoute.js` and `restaurantModel.cjs`.
+    2. Run clean-up script to `$unset: { restaurantId: "" }` across `carts`, `orders`, `foods`, and `drones`.
+    3. Drop legacy index `{ userId: 1, restaurantId: 1 }` on `carts`.
 
 ---
 
