@@ -1,7 +1,7 @@
 import React, { useState, useContext } from "react";
 import { AuthContext } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import "./Register.css";
 
 const Register = () => {
@@ -27,25 +27,43 @@ const Register = () => {
       const response = await register(registerData);
 
       if (response && response.success) {
-        // SỬA: Check response tồn tại và success
-        toast.success("Registration successful! Please login to continue.");
+        notificationService.success(
+          "Đăng ký thành công!",
+          "Vui lòng đăng nhập để bắt đầu thiết lập nhà hàng.",
+          { audience: "restaurant" }
+        );
         navigate("/login");
       } else {
-        // SỬA: Handle specific message nếu !success
         const errorMsg =
-          response?.message || "Registration failed. Please check your inputs.";
-        toast.error(errorMsg);
+          response?.message || "Đăng ký không thành công. Vui lòng kiểm tra lại thông tin.";
+        notificationService.error(
+          "Đăng ký không thành công",
+          errorMsg,
+          {
+            audience: "restaurant",
+            priority: "high",
+            key: "restaurant-register-api-error",
+            actions: [{ label: "Thử lại", onClick: handleSubmit }],
+          }
+        );
       }
     } catch (error) {
-      // SỬA: Customize toast dựa trên error.message (từ backend hoặc generic)
-      let message = "Error during registration. Please try again.";
+      let message = "Lỗi trong quá trình đăng ký. Vui lòng thử lại sau.";
       if (error.message.includes("User already exists")) {
-        message =
-          "Email already registered. Please use another email or login.";
+        message = "Email này đã được đăng ký. Vui lòng sử dụng email khác hoặc đăng nhập.";
       } else if (error.message.includes("pending")) {
-        message = "Account pending approval. Please wait for admin.";
+        message = "Tài khoản đang chờ duyệt từ quản trị viên. Vui lòng đợi thông báo.";
       }
-      toast.error(message);
+      notificationService.error(
+        "Đăng ký không thành công",
+        message,
+        {
+          audience: "restaurant",
+          priority: "high",
+          key: "restaurant-register-catch-error",
+          actions: [{ label: "Thử lại", onClick: handleSubmit }],
+        }
+      );
     }
   };
 

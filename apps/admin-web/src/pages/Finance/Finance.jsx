@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { ArrowRight, HandCoins, RefreshCw, RotateCcw } from "lucide-react";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import "./Finance.css";
 
 const money = (value) => `${new Intl.NumberFormat("vi-VN").format(value || 0)}đ`;
@@ -12,7 +12,30 @@ const maskedAccount = (last4 = "") => last4 ? `•••• ${last4}` : "Chưa c
 const Finance = ({ url }) => {
   const [refunds, setRefunds] = useState([]); const [withdrawals, setWithdrawals] = useState([]); const [loading, setLoading] = useState(true); const [tab, setTab] = useState("pending");
   const navigate = useNavigate(); const headers = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
-  const load = useCallback(async () => { try { setLoading(true); const [refundRes, withdrawalRes] = await Promise.all([axios.get(`${url}/api/refunds`, { headers: headers() }), axios.get(`${url}/api/withdrawals/admin`, { headers: headers() })]); setRefunds(refundRes.data.data || []); setWithdrawals(withdrawalRes.data.data || []); } catch (error) { toast.error(error.response?.data?.message || "Không thể tải quản lý tài chính."); } finally { setLoading(false); } }, [url]);
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [refundRes, withdrawalRes] = await Promise.all([
+        axios.get(`${url}/api/refunds`, { headers: headers() }),
+        axios.get(`${url}/api/withdrawals/admin`, { headers: headers() }),
+      ]);
+      setRefunds(refundRes.data.data || []);
+      setWithdrawals(withdrawalRes.data.data || []);
+    } catch (error) {
+      notificationService.error(
+        "Không thể tải quản lý tài chính",
+        error.response?.data?.message || "Vui lòng kiểm tra kết nối mạng và thử lại.",
+        {
+          audience: "admin",
+          priority: "high",
+          key: "finance-load",
+          actions: [{ label: "Thử lại", onClick: load }],
+        }
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [url]);
   useEffect(() => { load(); }, [load]);
   const entries = useMemo(() => [
     ...refunds.map((refund) => ({ id: `refund-${refund._id}`, type: "refund", status: refund.status, amount: refund.amount, createdAt: refund.createdAt, subject: refund.customer?.name || "Khách hàng", detail: `Đơn #${refund.order?._id?.slice(-8).toUpperCase() || "-"}`, bank: `${refund.bank?.bankName || "-"} · ${maskedAccount(refund.bank?.accountNumberLast4)}` })),

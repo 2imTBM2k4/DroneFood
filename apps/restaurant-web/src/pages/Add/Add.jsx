@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import "./Add.css";
 import { assets } from "../../assets/assets";
 import axios from "axios";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import OptionGroupBuilder, {
   validateOptionGroups,
   normaliseOptionGroups,
@@ -15,6 +15,7 @@ const Add = ({ url, onSuccess }) => {
   const [preview, setPreview] = useState("");
   const [optionGroups, setOptionGroups] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  const [priceError, setPriceError] = useState("");
   const fileInputRef = useRef(null);
   const [data, setData] = useState({
     name: "",
@@ -61,11 +62,22 @@ const Add = ({ url, onSuccess }) => {
   const onChangeHandler = (event) => {
     const name = event.target.name;
     const value = event.target.value;
-    setData((data) => ({ ...data, [name]: value })); // Giữ nguyên, sẽ áp dụng cho input text
+    setData((data) => ({ ...data, [name]: value }));
+    if (name === "price") {
+      const raw = String(value).trim();
+      if (!raw) {
+        setPriceError("Vui lòng nhập giá");
+      } else if (Number(raw) <= 0) {
+        setPriceError("Giá phải lớn hơn 0");
+      } else {
+        setPriceError("");
+      }
+    }
   };
 
   const resetForm = () => {
     setData({ name: "", description: "", price: "", category: "" });
+    setPriceError("");
     setImage(null);
     setOptionGroups([]);
     // Clearing state alone leaves the input's value set, so re-picking the
@@ -81,19 +93,43 @@ const Add = ({ url, onSuccess }) => {
     // hidden, and Chrome refuses to submit a form whose invalid control can't
     // be focused — the click would silently do nothing.
     if (!image) {
-      toast.error("Please choose a product image");
+      notificationService.warning(
+        "Chưa chọn ảnh món ăn",
+        "Vui lòng chọn hình ảnh minh họa cho món ăn.",
+        { audience: "restaurant", key: "food-add-image-empty" }
+      );
       return;
     }
 
+    const rawPrice = String(data.price).trim();
+    if (!rawPrice) {
+      setPriceError("Vui lòng nhập giá");
+      return;
+    }
+    const numPrice = Number(rawPrice);
+    if (isNaN(numPrice) || numPrice <= 0) {
+      setPriceError("Giá phải lớn hơn 0");
+      return;
+    }
+    setPriceError("");
+
     // Thêm validation đơn giản cho category (tùy chọn, để tránh string rỗng)
     if (!data.category.trim()) {
-      toast.error("Category không được để trống!");
+      notificationService.warning(
+        "Danh mục món trống",
+        "Vui lòng nhập hoặc chọn danh mục cho món ăn.",
+        { audience: "restaurant", key: "food-add-category-empty" }
+      );
       return;
     }
 
     const problems = validateOptionGroups(optionGroups);
     if (problems.length > 0) {
-      toast.error(problems[0]);
+      notificationService.warning(
+        "Tùy chọn món chưa hợp lệ",
+        problems[0],
+        { audience: "restaurant", key: "food-add-options-invalid" }
+      );
       return;
     }
 
@@ -121,14 +157,34 @@ const Add = ({ url, onSuccess }) => {
 
       if (response.data.success) {
         resetForm();
-        toast.success(response.data.message);
+        notificationService.success(response.data.message || "Thêm món ăn thành công", undefined, { audience: "restaurant" });
         onSuccess?.();
       } else {
         // Keep what they typed so they can fix it and resubmit.
-        toast.error(response.data.message);
+        notificationService.error(
+          "Không thể thêm món ăn",
+          response.data.message || "Vui lòng kiểm tra lại thông tin món và thử lại.",
+          {
+            audience: "restaurant",
+            priority: "high",
+            key: `food-add-${data.name}`,
+            actions: [{ label: "Thử lại", onClick: onSubmitHandler }],
+          }
+        );
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to add product");
+      notificationService.error(
+        "Không thể thêm món ăn",
+        error.response?.data?.message || "Lỗi kết nối máy chủ. Vui lòng thử lại sau.",
+        {
+          audience: "restaurant",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `food-add-${data.name}`,
+          actions: [{ label: "Thử lại", onClick: onSubmitHandler }],
+        }
+      );
     } finally {
       setSubmitting(false);
     }
@@ -206,16 +262,28 @@ const Add = ({ url, onSuccess }) => {
           <div className="add-price flex-col">
             <p>Product Price (VND)</p>
             <input
+              id="add-product-price"
               className="inputclasa"
               onChange={onChangeHandler}
               value={data.price}
               type="number"
               name="price"
-              min="1"
-              step="1"
+              min="0"
+              step="any"
               placeholder="20000"
               required
+              aria-invalid={!!priceError}
+              aria-describedby={priceError ? "add-price-error" : undefined}
             />
+            {priceError && (
+              <p
+                id="add-price-error"
+                role="alert"
+                style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}
+              >
+                {priceError}
+              </p>
+            )}
           </div>
         </div>
         <OptionGroupBuilder value={optionGroups} onChange={setOptionGroups} />

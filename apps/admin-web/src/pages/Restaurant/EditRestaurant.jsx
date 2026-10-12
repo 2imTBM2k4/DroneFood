@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import "./EditRestaurant.css";
 
 const EditRestaurant = ({ url, restaurant, onClose, onUpdate }) => {
@@ -32,7 +32,11 @@ const EditRestaurant = ({ url, restaurant, onClose, onUpdate }) => {
     event.preventDefault();
     const token = localStorage.getItem("token");
     if (!token) {
-      toast.error("Please login first");
+      notificationService.warning(
+        "Phiên đăng nhập hết hạn",
+        "Vui lòng đăng nhập lại để cập nhật thông tin nhà hàng.",
+        { audience: "admin", key: "admin-auth-required" }
+      );
       return;
     }
     const updateData = {
@@ -52,14 +56,34 @@ const EditRestaurant = ({ url, restaurant, onClose, onUpdate }) => {
         }
       );
       if (response.data.success) {
-        toast.success(response.data.message);
+        notificationService.success(response.data.message || "Cập nhật nhà hàng thành công", undefined, { audience: "admin" });
         onUpdate();
         onClose();
       } else {
-        toast.error(response.data.message);
+        notificationService.error(
+          "Không thể cập nhật nhà hàng",
+          response.data.message || "Vui lòng kiểm tra lại thông tin và thử lại.",
+          {
+            audience: "admin",
+            priority: "high",
+            key: `admin-restaurant-update-${restaurant._id}`,
+            actions: [{ label: "Thử lại", onClick: onSubmitHandler }],
+          }
+        );
       }
     } catch (error) {
-      toast.error("Error updating restaurant");
+      notificationService.error(
+        "Không thể cập nhật nhà hàng",
+        error.response?.data?.message || "Không thể cập nhật nhà hàng. Vui lòng thử lại.",
+        {
+          audience: "admin",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `admin-restaurant-update-${restaurant._id}`,
+          actions: [{ label: "Thử lại", onClick: onSubmitHandler }],
+        }
+      );
     }
   };
 

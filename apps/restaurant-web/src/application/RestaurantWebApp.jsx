@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import Navbar from '../components/Navbar/Navbar';
+import React, { useEffect, useRef, useState } from 'react';
 import Sidebar from '../components/Sidebar/Sidebar';
 import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Menu } from 'lucide-react';
 import Dashboard from '../pages/Dashboard/Dashboard';
 import List from '../pages/List/List';
 import Orders from '../pages/Orders/Orders';
@@ -10,9 +10,12 @@ import Login from '../pages/Login/Login';
 import Register from '../pages/Register/Register';
 import Withdrawals from '../pages/Withdrawals/Withdrawals';
 import ProtectedRoute from '../components/ProtectedRoute';
-import { ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { ToastContainer } from '@drone-food/web-ui/utils/toast';
 import '@drone-food/web-ui/toast.css';
+import {
+  readSidebarCollapsed,
+  writeSidebarCollapsed,
+} from '../components/Sidebar/sidebarState';
 
 const PageTransition = ({ children }) => {
   const location = useLocation();
@@ -41,18 +44,86 @@ const PageTransition = ({ children }) => {
 };
 
 const DashboardLayout = () => {
+  const location = useLocation();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
+    readSidebarCollapsed()
+  );
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const mobileTriggerRef = useRef(null);
+  const mobileCloseRef = useRef(null);
+  const mobileSidebarWasOpen = useRef(false);
+
+  useEffect(() => {
+    writeSidebarCollapsed(window.localStorage, sidebarCollapsed);
+  }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!mobileSidebarOpen) return undefined;
+
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setMobileSidebarOpen(false);
+    };
+
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [mobileSidebarOpen]);
+
+  useEffect(() => {
+    if (mobileSidebarOpen) {
+      mobileSidebarWasOpen.current = true;
+      mobileCloseRef.current?.focus();
+      return;
+    }
+
+    if (mobileSidebarWasOpen.current) {
+      mobileSidebarWasOpen.current = false;
+      mobileTriggerRef.current?.focus();
+    }
+  }, [mobileSidebarOpen]);
+
   return (
-    <>
-      <Navbar />
-      <div className="app-content">
-        <Sidebar />
+    <div
+      className={`app restaurant-shell ${
+        sidebarCollapsed ? 'sidebar-is-collapsed' : ''
+      }`}
+    >
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        mobileOpen={mobileSidebarOpen}
+        mobileCloseButtonRef={mobileCloseRef}
+        onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
+        onMobileClose={() => setMobileSidebarOpen(false)}
+      />
+      {mobileSidebarOpen && (
+        <button
+          type="button"
+          className="sidebar-scrim"
+          aria-label="Close navigation menu"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+      <div className="main-content-area">
+        <button
+          type="button"
+          ref={mobileTriggerRef}
+          className="sidebar-mobile-trigger"
+          aria-label="Open navigation menu"
+          aria-expanded={mobileSidebarOpen}
+          onClick={() => setMobileSidebarOpen(true)}
+        >
+          <Menu size={20} aria-hidden="true" />
+        </button>
         <div className="page-content">
           <PageTransition>
             <Outlet />
           </PageTransition>
         </div>
       </div>
-    </>
+    </div>
   );
 };
 
@@ -61,7 +132,7 @@ const RestaurantWebApp = () => {
 
   return (
     <div>
-      <ToastContainer position="bottom-center" pauseOnHover={false} />
+      <ToastContainer position="top-right" limit={4} pauseOnHover={false} autoClose={4000} closeButton={false} />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />

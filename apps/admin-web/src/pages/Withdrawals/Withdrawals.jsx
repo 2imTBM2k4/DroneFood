@@ -17,7 +17,8 @@ import {
   Search,
   Eye,
 } from "lucide-react";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
+import ConfirmModal from "@drone-food/web-ui/components/ConfirmModal";
 import "./Withdrawals.css";
 
 const money = (value) =>
@@ -28,9 +29,13 @@ const date = (value) => (value ? new Date(value).toLocaleString("vi-VN") : "—"
 const copyToClipboard = async (text, label) => {
   try {
     await navigator.clipboard.writeText(String(text));
-    toast.success(`Đã sao chép ${label}!`);
+    notificationService.success(`Đã sao chép ${label}!`, undefined, { audience: "admin" });
   } catch {
-    toast.error(`Không thể sao chép ${label}.`);
+    notificationService.warning(
+      "Không thể sao chép",
+      `Không thể sao chép ${label} vào khay nhớ tạm.`,
+      { audience: "admin", key: "copy-clipboard-failure" }
+    );
   }
 };
 
@@ -86,7 +91,11 @@ const PayoutModal = ({ request, payoutDetails, onClose, onConfirmPaid, onReject 
   const handleConfirmPaid = async (e) => {
     e.preventDefault();
     if (!reference.trim()) {
-      toast.warning("Vui lòng nhập mã giao dịch ngân hàng để đối soát.");
+      notificationService.warning(
+        "Thiếu mã giao dịch",
+        "Vui lòng nhập mã giao dịch ngân hàng để đối soát.",
+        { audience: "admin", key: `withdrawal-reference-${request._id}` }
+      );
       return;
     }
     setSubmitting(true);
@@ -98,10 +107,13 @@ const PayoutModal = ({ request, payoutDetails, onClose, onConfirmPaid, onReject 
     }
   };
 
-  const handleRejectClick = async () => {
-    if (!window.confirm(`Từ chối yêu cầu rút ${money(request.amount)}? Số tiền giữ chỗ sẽ được giải phóng về ví.`)) {
-      return;
-    }
+  const [rejectConfirmOpen, setRejectConfirmOpen] = useState(false);
+
+  const handleRejectClick = () => {
+    setRejectConfirmOpen(true);
+  };
+
+  const doReject = async () => {
     setSubmitting(true);
     try {
       await onReject(request);
@@ -273,6 +285,17 @@ const PayoutModal = ({ request, payoutDetails, onClose, onConfirmPaid, onReject 
             </footer>
           </div>
         )}
+        <ConfirmModal
+          open={rejectConfirmOpen}
+          title="Từ chối yêu cầu rút tiền"
+          message={`Từ chối yêu cầu rút ${money(request.amount)}? Số tiền giữ chỗ sẽ được giải phóng về ví.`}
+          confirmText="Từ chối yêu cầu"
+          cancelText="Quay lại"
+          danger
+          isLoading={submitting}
+          onClose={() => setRejectConfirmOpen(false)}
+          onConfirm={doReject}
+        />
       </section>
     </div>,
     document.body
@@ -306,7 +329,16 @@ const Withdrawals = ({ url }) => {
       });
       setRequests(response.data.data || []);
     } catch (error) {
-      toast.error(error.response?.data?.message || "Không thể tải yêu cầu rút tiền.");
+      notificationService.error(
+        "Không thể tải yêu cầu rút tiền",
+        error.response?.data?.message || "Vui lòng kiểm tra kết nối mạng và thử lại.",
+        {
+          audience: "admin",
+          priority: "high",
+          key: "withdrawals-admin-load",
+          actions: [{ label: "Thử lại", onClick: load }],
+        }
+      );
     } finally {
       setLoading(false);
     }
@@ -327,23 +359,24 @@ const Withdrawals = ({ url }) => {
       setActiveDialogRequest(request);
       setActivePayoutDetails(response.data.data);
     } catch (error) {
-      toast.error(error.response?.data?.message || "Không thể tải thông tin chuyển khoản.");
+      notificationService.error(
+        "Không thể tải thông tin chuyển khoản",
+        error.response?.data?.message || "Vui lòng thử lại sau.",
+        {
+          audience: "admin",
+          priority: "high",
+          key: `withdrawals-payout-details-${request._id}`,
+          actions: [{ label: "Thử lại", onClick: () => openPayoutDialog(request) }],
+        }
+      );
     } finally {
       setDetailsLoadingId("");
     }
   };
 
-  // Thao tác duyệt/từ chối từ dòng thẻ
-  const act = async (request, action, payload = {}) => {
-    if (action === "rejected") {
-      if (
-        !window.confirm(
-          `Từ chối yêu cầu rút ${money(request.amount)}? Số tiền giữ chỗ sẽ được giải phóng về ví.`
-        )
-      ) {
-        return;
-      }
-    }
+  const [rejectingItem, setRejectingItem] = useState(null);
+
+  const executeAct = async (request, action, payload = {}) => {
     try {
       setSavingId(request._id);
       await axios.post(
@@ -351,19 +384,39 @@ const Withdrawals = ({ url }) => {
         payload,
         { headers: headers() }
       );
-      toast.success(
+      notificationService.success(
         action === "approved"
           ? "Đã duyệt yêu cầu rút tiền thành công."
           : action === "paid"
           ? "Đã xác nhận chuyển tiền và trừ ví."
-          : "Đã từ chối, số tiền giữ chỗ đã được giải phóng."
+          : "Đã từ chối, số tiền giữ chỗ đã được giải phóng.",
+        `Yêu cầu #${request._id.slice(-8).toUpperCase()} đã được cập nhật.`,
+        { audience: "admin" }
       );
       await load();
     } catch (error) {
-      toast.error(error.response?.data?.message || "Không thể cập nhật yêu cầu rút tiền.");
+      notificationService.error(
+        "Không thể cập nhật yêu cầu rút tiền",
+        error.response?.data?.message || "Lỗi khi xử lý yêu cầu rút tiền. Vui lòng thử lại.",
+        {
+          audience: "admin",
+          priority: "high",
+          key: `withdrawals-act-${request._id}-${action}`,
+          actions: [{ label: "Thử lại", onClick: () => executeAct(request, action, payload) }],
+        }
+      );
     } finally {
       setSavingId("");
     }
+  };
+
+  // Thao tác duyệt/từ chối từ dòng thẻ
+  const act = async (request, action, payload = {}) => {
+    if (action === "rejected") {
+      setRejectingItem({ request, action, payload });
+      return;
+    }
+    await executeAct(request, action, payload);
   };
 
   // Thống kê nhanh
@@ -724,6 +777,26 @@ const Withdrawals = ({ url }) => {
           onReject={(req) => act(req, "reject")}
         />
       )}
+
+      <ConfirmModal
+        open={Boolean(rejectingItem)}
+        title="Từ chối yêu cầu rút tiền"
+        message={
+          rejectingItem
+            ? `Từ chối yêu cầu rút ${money(rejectingItem.request.amount)}? Số tiền giữ chỗ sẽ được giải phóng về ví.`
+            : ""
+        }
+        confirmText="Từ chối yêu cầu"
+        cancelText="Quay lại"
+        danger
+        isLoading={Boolean(savingId)}
+        onClose={() => setRejectingItem(null)}
+        onConfirm={async () => {
+          const item = rejectingItem;
+          setRejectingItem(null);
+          await executeAct(item.request, item.action, item.payload);
+        }}
+      />
     </main>
   );
 };

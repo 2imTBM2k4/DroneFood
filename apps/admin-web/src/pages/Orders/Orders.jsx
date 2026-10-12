@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import "./Orders.css";
 import { assets } from "../../assets/assets";
 import { formatVND } from "@drone-food/web-ui/utils/money";
@@ -20,7 +20,11 @@ const Orders = ({ url }) => {
   const fetchAllOrders = async () => {
     const token = localStorage.getItem("token");
     if (!token) {
-      toast.error("Please login first");
+      notificationService.error(
+        "Phiên đăng nhập đã hết hạn",
+        "Vui lòng đăng nhập lại để tải danh sách đơn hàng.",
+        { audience: "admin", key: "admin-orders-load-auth" }
+      );
       return;
     }
     const response = await axios.get(url + "/api/order/list", {
@@ -29,7 +33,18 @@ const Orders = ({ url }) => {
     if (response.data.success) {
       setOrders(response.data.data);
     } else {
-      toast.error("Error");
+      notificationService.error(
+        "Không thể tải danh sách đơn hàng",
+        response.data.message || "Vui lòng thử tải lại danh sách đơn hàng.",
+        {
+          audience: "admin",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: "admin-orders-load",
+          actions: [{ label: "Thử lại", onClick: fetchAllOrders }],
+        }
+      );
     }
   };
 
@@ -50,11 +65,19 @@ const Orders = ({ url }) => {
 
   const handleAssignDrone = async () => {
     if (!selectedDrone || !selectedOrder) {
-      toast.error("Please select a drone");
+      notificationService.error(
+        "Chưa chọn drone",
+        "Vui lòng chọn drone trước khi phân công cho đơn hàng.",
+        { audience: "admin", key: `drone-assign-selection-${selectedOrder?._id || "new"}` }
+      );
       return;
     }
     if (modalMode === "reassign" && !reassignReason.trim()) {
-      toast.error("A reason is required when changing the drone");
+      notificationService.error(
+        "Chưa nhập lý do đổi drone",
+        "Vui lòng nhập lý do trước khi thay đổi drone của đơn hàng.",
+        { audience: "admin", key: `drone-reassign-reason-${selectedOrder._id}` }
+      );
       return;
     }
 
@@ -77,7 +100,7 @@ const Orders = ({ url }) => {
       );
 
       if (response.data.success) {
-        toast.success(response.data.message || "Drone assigned successfully!");
+        notificationService.success("Đã phân công drone thành công!", response.data.message, { audience: "admin" });
         setShowAssignModal(false);
         setSelectedOrder(null);
         setSelectedDrone("");
@@ -86,7 +109,18 @@ const Orders = ({ url }) => {
         fetchDrones();
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || "Error assigning drone");
+      notificationService.error(
+        "Không thể phân công drone",
+        error.response?.data?.message || "Vui lòng thử phân công drone lại.",
+        {
+          audience: "admin",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `drone-assign-${selectedOrder?._id || "unknown"}`,
+          actions: [{ label: "Thử lại", onClick: handleAssignDrone }],
+        }
+      );
     } finally {
       setSubmitting(false);
     }
@@ -96,7 +130,14 @@ const Orders = ({ url }) => {
 
   const handlePreflight = async (orderId, passed) => {
     const token = localStorage.getItem("token");
-    if (!token) return toast.error("Vui lòng đăng nhập lại!");
+    if (!token) {
+      notificationService.error(
+        "Phiên đăng nhập đã hết hạn",
+        "Vui lòng đăng nhập lại trước khi cập nhật trạng thái drone.",
+        { audience: "admin", key: `drone-status-auth-${orderId}` }
+      );
+      return;
+    }
     setActing(true);
     try {
       const res = await axios.post(
@@ -110,13 +151,37 @@ const Orders = ({ url }) => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.data.success) {
-        toast.success(res.data.message || "Preflight check thành công! Drone cất cánh.");
+        notificationService.success("Preflight check thành công!", "Drone đủ điều kiện an toàn và cất cánh.", { audience: "admin", key: `preflight-success-${orderId}` });
       } else {
-        toast.warn(res.data.message || "Preflight check không đạt.");
+        notificationService.warning(
+          "Kiểm tra tiền bay không đạt",
+          res.data.message || "Drone chưa đủ điều kiện an toàn để cất cánh.",
+          {
+            audience: "admin",
+            priority: "high",
+            persistent: true,
+            duration: 0,
+            key: `preflight-${orderId}`,
+            actions: [{ label: "Kiểm tra lại", onClick: () => handlePreflight(orderId, passed) }],
+          }
+        );
       }
       fetchAllOrders();
     } catch (err) {
-      toast.error(err.response?.data?.message || "Lỗi kiểm tra preflight");
+      notificationService.error(
+        "Kiểm tra tiền bay không đạt",
+        err.response?.data?.message || "Drone không đủ điều kiện an toàn để cất cánh. Vui lòng kiểm tra lại thiết bị.",
+        {
+          audience: "admin",
+          priority: "critical",
+          persistent: true,
+          duration: 0,
+          key: `preflight-${orderId}`,
+          actions: [
+            { label: "Kiểm tra lại", onClick: () => handlePreflight(orderId, false) },
+          ],
+        }
+      );
     } finally {
       setActing(false);
     }
@@ -124,18 +189,36 @@ const Orders = ({ url }) => {
 
   const handleArrivedRestaurant = async (orderId) => {
     const token = localStorage.getItem("token");
-    if (!token) return toast.error("Vui lòng đăng nhập lại!");
+    if (!token) {
+      notificationService.error(
+        "Phiên đăng nhập đã hết hạn",
+        "Vui lòng đăng nhập lại trước khi cập nhật trạng thái drone.",
+        { audience: "admin", key: `drone-status-auth-${orderId}` }
+      );
+      return;
+    }
     setActing(true);
     try {
-      const res = await axios.post(
+      await axios.post(
         url + "/api/drone/arrived-restaurant",
         { orderId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      toast.success(res.data.message || "Drone đã đáp tại bãi đáp nhà hàng!");
+      notificationService.success("Drone đã đến nhà hàng", "Drone đã hạ cánh an toàn tại bãi đáp nhà hàng.", { audience: "admin", key: `drone-arrived-rest-success-${orderId}` });
       fetchAllOrders();
     } catch (err) {
-      toast.error(err.response?.data?.message || "Lỗi cập nhật trạng thái");
+      notificationService.error(
+        "Không thể cập nhật trạng thái drone",
+        err.response?.data?.message || "Vui lòng thử xác nhận drone đã đến nhà hàng lại.",
+        {
+          audience: "admin",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `drone-arrived-restaurant-${orderId}`,
+          actions: [{ label: "Thử lại", onClick: () => handleArrivedRestaurant(orderId) }],
+        }
+      );
     } finally {
       setActing(false);
     }
@@ -143,18 +226,36 @@ const Orders = ({ url }) => {
 
   const handleArrivedCustomer = async (orderId) => {
     const token = localStorage.getItem("token");
-    if (!token) return toast.error("Vui lòng đăng nhập lại!");
+    if (!token) {
+      notificationService.error(
+        "Phiên đăng nhập đã hết hạn",
+        "Vui lòng đăng nhập lại trước khi cập nhật trạng thái drone.",
+        { audience: "admin", key: `drone-status-auth-${orderId}` }
+      );
+      return;
+    }
     setActing(true);
     try {
-      const res = await axios.post(
+      await axios.post(
         url + "/api/drone/arrived-customer",
         { orderId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      toast.success(res.data.message || "Drone đã tới vị trí khách hàng!");
+      notificationService.success("Drone đã tới vị trí khách", "Drone đã đến vị trí khách hàng để giao hàng.", { audience: "admin", key: `drone-arrived-cust-success-${orderId}` });
       fetchAllOrders();
     } catch (err) {
-      toast.error(err.response?.data?.message || "Lỗi cập nhật trạng thái");
+      notificationService.error(
+        "Không thể cập nhật trạng thái drone",
+        err.response?.data?.message || "Vui lòng thử xác nhận drone đã đến vị trí khách hàng lại.",
+        {
+          audience: "admin",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `drone-arrived-customer-${orderId}`,
+          actions: [{ label: "Thử lại", onClick: () => handleArrivedCustomer(orderId) }],
+        }
+      );
     } finally {
       setActing(false);
     }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
+import ConfirmModal from "@drone-food/web-ui/components/ConfirmModal";
 import "./Drones.css";
 
 const Drones = ({ url }) => {
@@ -21,6 +22,7 @@ const Drones = ({ url }) => {
     cargoLidStatus: "closed",
     batteryLevel: 100,
   });
+  const [confirmDialog, setConfirmDialog] = useState(null);
 
   useEffect(() => {
     fetchDrones();
@@ -74,7 +76,7 @@ const Drones = ({ url }) => {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    e?.preventDefault();
     try {
       const token = localStorage.getItem("token");
 
@@ -86,7 +88,7 @@ const Drones = ({ url }) => {
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (response.data.success) {
-          toast.success("Cập nhật drone thành công");
+          notificationService.success("Cập nhật drone thành công", `Drone ${formData.droneCode} đã được cập nhật.`, { audience: "admin" });
           fetchDrones();
           fetchFleetStats();
         }
@@ -98,7 +100,7 @@ const Drones = ({ url }) => {
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (response.data.success) {
-          toast.success("Tạo drone mới thành công");
+          notificationService.success("Tạo drone mới thành công", `Drone ${formData.droneCode} đã được thêm vào đội bay.`, { audience: "admin" });
           fetchDrones();
           fetchFleetStats();
         }
@@ -106,7 +108,18 @@ const Drones = ({ url }) => {
 
       handleCloseModal();
     } catch (error) {
-      toast.error(error.response?.data?.message || "Có lỗi xảy ra");
+      notificationService.error(
+        "Không thể lưu thông tin drone",
+        error.response?.data?.message || "Vui lòng kiểm tra thông tin drone và thử lại.",
+        {
+          audience: "admin",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `drone-save-${editingDrone?._id || formData.droneCode}`,
+          actions: [{ label: "Thử lại", onClick: () => handleSubmit() }],
+        }
+      );
       console.error(error);
     }
   };
@@ -123,11 +136,7 @@ const Drones = ({ url }) => {
     setShowModal(true);
   };
 
-  const handleResetDrone = async (droneId, droneCode) => {
-    if (!window.confirm(`Bạn có chắc muốn đặt lại ${droneCode} về trạng thái Sẵn sàng? Thao tác này sẽ xóa đơn kẹt và đặt trọng lượng về 0.`)) {
-      return;
-    }
-
+  const executeResetDrone = async (droneId, droneCode) => {
     try {
       setActionLoading((prev) => ({ ...prev, [droneId]: "reset" }));
       const token = localStorage.getItem("token");
@@ -137,16 +146,37 @@ const Drones = ({ url }) => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (response.data.success) {
-        toast.success(response.data.message || `Đã đặt lại ${droneCode} về sẵn sàng`);
+        notificationService.success("Đã đặt lại drone về sẵn sàng", `Drone ${droneCode} đã sẵn sàng nhận đơn.`, { audience: "admin", key: `drone-reset-success-${droneId}` });
         fetchDrones();
         fetchFleetStats();
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || "Không thể đặt lại drone");
+      notificationService.error(
+        "Không thể đặt lại drone",
+        error.response?.data?.message || "Vui lòng thử đặt lại drone một lần nữa.",
+        {
+          audience: "admin",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `drone-reset-${droneId}`,
+          actions: [{ label: "Thử lại", onClick: () => executeResetDrone(droneId, droneCode) }],
+        }
+      );
       console.error(error);
     } finally {
       setActionLoading((prev) => ({ ...prev, [droneId]: null }));
     }
+  };
+
+  const handleResetDrone = (droneId, droneCode) => {
+    setConfirmDialog({
+      title: "Đặt lại Drone",
+      message: `Bạn có chắc muốn đặt lại ${droneCode} về trạng thái Sẵn sàng? Thao tác này sẽ xóa đơn kẹt và đặt trọng lượng về 0.`,
+      confirmText: "Đặt lại về sẵn sàng",
+      danger: false,
+      onConfirm: () => executeResetDrone(droneId, droneCode),
+    });
   };
 
   const handleChargeDrone = async (droneId, droneCode) => {
@@ -159,23 +189,30 @@ const Drones = ({ url }) => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (response.data.success) {
-        toast.success(`Đã sạc đầy 100% pin cho ${droneCode}`);
+        notificationService.success("Sạc pin drone thành công", `Đã sạc đầy 100% pin cho ${droneCode}.`, { audience: "admin", key: `drone-charge-success-${droneId}` });
         fetchDrones();
         fetchFleetStats();
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || "Không thể sạc pin");
+      notificationService.error(
+        "Không thể sạc pin drone",
+        error.response?.data?.message || "Vui lòng thử sạc pin drone lại.",
+        {
+          audience: "admin",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `drone-charge-${droneId}`,
+          actions: [{ label: "Thử lại", onClick: () => handleChargeDrone(droneId, droneCode) }],
+        }
+      );
       console.error(error);
     } finally {
       setActionLoading((prev) => ({ ...prev, [droneId]: null }));
     }
   };
 
-  const handleResetAllStuck = async () => {
-    if (!window.confirm("Bạn có chắc muốn đặt lại TẤT CẢ drone đang bận / kẹt về trạng thái Sẵn sàng?")) {
-      return;
-    }
-
+  const executeResetAllStuck = async () => {
     try {
       const token = localStorage.getItem("token");
       const response = await axios.post(
@@ -184,33 +221,73 @@ const Drones = ({ url }) => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (response.data.success) {
-        toast.success(response.data.message || "Đã giải phóng toàn bộ drone kẹt");
+        notificationService.success("Đã giải phóng toàn bộ drone kẹt", "Các drone kẹt đã được đặt lại về trạng thái sẵn sàng.", { audience: "admin", key: "drone-reset-all-stuck-success" });
         fetchDrones();
         fetchFleetStats();
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || "Không thể đặt lại drone");
+      notificationService.error(
+        "Không thể giải phóng drone kẹt",
+        error.response?.data?.message || "Vui lòng thử giải phóng các drone kẹt lại.",
+        {
+          audience: "admin",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: "drone-reset-all-stuck",
+          actions: [{ label: "Thử lại", onClick: executeResetAllStuck }],
+        }
+      );
       console.error(error);
     }
   };
 
-  const handleDelete = async (droneId) => {
-    if (!window.confirm("Bạn có chắc muốn xóa drone này?")) return;
+  const handleResetAllStuck = () => {
+    setConfirmDialog({
+      title: "Giải phóng toàn bộ Drone",
+      message: "Bạn có chắc muốn đặt lại TẤT CẢ drone đang bận / kẹt về trạng thái Sẵn sàng?",
+      confirmText: "Đặt lại tất cả",
+      danger: true,
+      onConfirm: executeResetAllStuck,
+    });
+  };
 
+  const executeDelete = async (droneId) => {
     try {
       const token = localStorage.getItem("token");
       const response = await axios.delete(`${url}/api/drone/${droneId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.data.success) {
-        toast.success("Xóa drone thành công");
+        notificationService.success("Xóa drone thành công", undefined, { audience: "admin" });
         fetchDrones();
         fetchFleetStats();
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || "Không thể xóa drone");
+      notificationService.error(
+        "Không thể xóa drone",
+        error.response?.data?.message || "Vui lòng thử xóa drone lại.",
+        {
+          audience: "admin",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `drone-delete-${droneId}`,
+          actions: [{ label: "Thử lại", onClick: () => executeDelete(droneId) }],
+        }
+      );
       console.error(error);
     }
+  };
+
+  const handleDelete = (droneId) => {
+    setConfirmDialog({
+      title: "Xóa Drone",
+      message: "Bạn có chắc muốn xóa drone này khỏi hệ thống?",
+      confirmText: "Xóa drone",
+      danger: true,
+      onConfirm: () => executeDelete(droneId),
+    });
   };
 
   const handleCloseModal = () => {
@@ -239,7 +316,18 @@ const Drones = ({ url }) => {
         setHistoryData(response.data.data.history);
       }
     } catch (error) {
-      toast.error("Lỗi khi tải lịch sử giao hàng");
+      notificationService.error(
+        "Không thể tải lịch sử giao hàng",
+        "Vui lòng thử tải lại lịch sử hoạt động của drone.",
+        {
+          audience: "admin",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `drone-history-${drone._id}`,
+          actions: [{ label: "Thử lại", onClick: () => handleViewHistory(drone) }],
+        }
+      );
       console.error(error);
     } finally {
       setHistoryLoading(false);
@@ -599,6 +687,21 @@ const Drones = ({ url }) => {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={Boolean(confirmDialog)}
+        title={confirmDialog?.title || "Xác nhận"}
+        message={confirmDialog?.message || ""}
+        confirmText={confirmDialog?.confirmText || "Xác nhận"}
+        cancelText="Hủy"
+        danger={confirmDialog?.danger ?? false}
+        onClose={() => setConfirmDialog(null)}
+        onConfirm={async () => {
+          const action = confirmDialog?.onConfirm;
+          setConfirmDialog(null);
+          if (action) await action();
+        }}
+      />
     </div>
   );
 };

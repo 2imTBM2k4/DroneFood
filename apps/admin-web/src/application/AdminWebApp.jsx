@@ -1,8 +1,10 @@
-import React, { useContext, useEffect, useState } from "react";
-import Navbar from "../components/Navbar/Navbar";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar/Sidebar";
 import { Routes, Route, useLocation } from "react-router-dom";
+import { Menu } from "lucide-react";
 import ListRestaurant from "../pages/ListRestaurant/ListRestaurant";
+import Merchants from "../pages/Merchants/Merchants";
+import Branches from "../pages/Branches/Branches";
 import Orders from "../pages/Orders/Orders";
 import Dashboard from "../pages/Dashboard/Dashboard";
 import ListUsers from "../pages/ListUsers/ListUsers";
@@ -14,10 +16,13 @@ import Vouchers from "../pages/Vouchers/Vouchers";
 import Refunds from "../pages/Refunds/Refunds";
 import Withdrawals from "../pages/Withdrawals/Withdrawals";
 import Finance from "../pages/Finance/Finance";
-import { ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { ToastContainer } from "@drone-food/web-ui/utils/toast";
 import "@drone-food/web-ui/toast.css";
 import { AuthContext } from "../context/AuthContext";
+import {
+  readSidebarCollapsed,
+  writeSidebarCollapsed,
+} from "../components/Sidebar/sidebarState";
 
 const PageTransition = ({ children }) => {
   const location = useLocation();
@@ -46,32 +51,101 @@ const PageTransition = ({ children }) => {
 };
 
 const AdminWebApp = () => {
-  const { user, isLoading } = useContext(AuthContext);
+  const { user, isInitializing } = useContext(AuthContext);
+  const location = useLocation();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
+    readSidebarCollapsed()
+  );
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const mobileTriggerRef = useRef(null);
+  const mobileCloseRef = useRef(null);
+  const mobileSidebarWasOpen = useRef(false);
   const url = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
-  if (isLoading) {
+  useEffect(() => {
+    writeSidebarCollapsed(window.localStorage, sidebarCollapsed);
+  }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!mobileSidebarOpen) return undefined;
+
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setMobileSidebarOpen(false);
+    };
+
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [mobileSidebarOpen]);
+
+  useEffect(() => {
+    if (mobileSidebarOpen) {
+      mobileSidebarWasOpen.current = true;
+      mobileCloseRef.current?.focus();
+      return;
+    }
+
+    if (mobileSidebarWasOpen.current) {
+      mobileSidebarWasOpen.current = false;
+      mobileTriggerRef.current?.focus();
+    }
+  }, [mobileSidebarOpen]);
+
+  if (isInitializing) {
     return <div>Loading...</div>;
   }
 
   if (!user || user.role !== "admin") {
     return (
       <div className="app">
-        <ToastContainer position="bottom-center" pauseOnHover={false} />
+        <ToastContainer position="top-right" limit={4} pauseOnHover={false} autoClose={4000} closeButton={false} />
         <Login url={url} />
       </div>
     );
   }
 
   return (
-    <div className="app">
-      <ToastContainer position="bottom-center" pauseOnHover={false} />
-      <Sidebar />
+    <div
+      className={`app admin-shell ${
+        sidebarCollapsed ? "sidebar-is-collapsed" : ""
+      }`}
+    >
+      <ToastContainer position="top-right" limit={4} pauseOnHover={false} autoClose={4000} closeButton={false} />
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        mobileOpen={mobileSidebarOpen}
+        mobileCloseButtonRef={mobileCloseRef}
+        onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
+        onMobileClose={() => setMobileSidebarOpen(false)}
+      />
+      {mobileSidebarOpen && (
+        <button
+          type="button"
+          className="sidebar-scrim"
+          aria-label="Close navigation menu"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
       <div className="main-content-area">
-        <Navbar />
+        <button
+          type="button"
+          ref={mobileTriggerRef}
+          className="sidebar-mobile-trigger"
+          aria-label="Open navigation menu"
+          aria-expanded={mobileSidebarOpen}
+          onClick={() => setMobileSidebarOpen(true)}
+        >
+          <Menu size={20} aria-hidden="true" />
+        </button>
         <div className="page-content">
           <PageTransition>
             <Routes>
               <Route path="/" element={<Dashboard url={url} />} />
+              <Route path="/merchants" element={<Merchants url={url} />} />
+              <Route path="/branches" element={<Branches url={url} />} />
               <Route
                 path="/list-restaurants"
                 element={<ListRestaurant url={url} />}

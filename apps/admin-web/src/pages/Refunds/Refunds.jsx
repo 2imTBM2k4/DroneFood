@@ -17,7 +17,7 @@ import {
   Building2,
   Calendar,
 } from "lucide-react";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import "./Refunds.css";
 
 const money = (value) =>
@@ -28,9 +28,13 @@ const date = (value) => (value ? new Date(value).toLocaleString("vi-VN") : "—"
 const copyToClipboard = async (text, label) => {
   try {
     await navigator.clipboard.writeText(String(text));
-    toast.success(`Đã sao chép ${label}!`);
+    notificationService.success(`Đã sao chép ${label}!`, undefined, { audience: "admin" });
   } catch {
-    toast.error(`Không thể sao chép ${label}.`);
+    notificationService.warning(
+      "Không thể sao chép",
+      `Không thể sao chép ${label} vào khay nhớ tạm.`,
+      { audience: "admin", key: "copy-clipboard-failure" }
+    );
   }
 };
 
@@ -78,11 +82,19 @@ const RefundDialog = ({ refund, payoutDetails, onClose, onComplete }) => {
   const submit = async (event) => {
     event.preventDefault();
     if (mode === "paid" && !reference.trim()) {
-      toast.warning("Vui lòng nhập mã giao dịch chuyển khoản ngân hàng.");
+      notificationService.warning(
+        "Thiếu mã giao dịch",
+        "Vui lòng nhập mã giao dịch chuyển khoản ngân hàng.",
+        { audience: "admin", key: `refund-ref-missing-${refund._id}` }
+      );
       return;
     }
     if (mode === "rejected" && !note.trim()) {
-      toast.warning("Vui lòng nhập lý do từ chối để phản hồi khách hàng.");
+      notificationService.warning(
+        "Thiếu lý do từ chối",
+        "Vui lòng nhập lý do từ chối để phản hồi khách hàng.",
+        { audience: "admin", key: `refund-reject-reason-missing-${refund._id}` }
+      );
       return;
     }
     setSaving(true);
@@ -448,7 +460,16 @@ const Refunds = ({ url }) => {
       });
       setRefunds(response.data.data || []);
     } catch (error) {
-      toast.error(error.response?.data?.message || "Không thể tải danh sách hoàn tiền.");
+      notificationService.error(
+        "Không thể tải danh sách hoàn tiền",
+        error.response?.data?.message || "Vui lòng kiểm tra kết nối mạng và thử lại.",
+        {
+          audience: "admin",
+          priority: "high",
+          key: "refunds-admin-load",
+          actions: [{ label: "Thử lại", onClick: load }],
+        }
+      );
     } finally {
       setLoading(false);
     }
@@ -508,7 +529,16 @@ const Refunds = ({ url }) => {
       );
       setSelected({ refund, payoutDetails: response.data.data });
     } catch (error) {
-      toast.error(error.response?.data?.message || "Không thể tải thông tin chuyển khoản.");
+      notificationService.error(
+        "Không thể tải thông tin chuyển khoản",
+        error.response?.data?.message || "Không thể tải thông tin chuyển khoản hoàn tiền.",
+        {
+          audience: "admin",
+          priority: "high",
+          key: `refunds-payout-details-${refund._id}`,
+          actions: [{ label: "Thử lại", onClick: () => openRefund(refund) }],
+        }
+      );
     } finally {
       setOpeningId("");
     }
@@ -521,14 +551,25 @@ const Refunds = ({ url }) => {
         mode === "paid" ? payload : { adminNote: payload.adminNote },
         { headers: headers() }
       );
-      toast.success(
+      notificationService.success(
         mode === "paid"
           ? "Đã xác nhận hoàn tiền thành công."
-          : "Đã từ chối yêu cầu hoàn tiền."
+          : "Đã từ chối yêu cầu hoàn tiền.",
+        `Yêu cầu #${id.slice(-8).toUpperCase()} đã được cập nhật.`,
+        { audience: "admin" }
       );
       await load();
     } catch (error) {
-      toast.error(error.response?.data?.message || "Không thể cập nhật yêu cầu hoàn tiền.");
+      notificationService.error(
+        "Không thể cập nhật yêu cầu hoàn tiền",
+        error.response?.data?.message || "Lỗi khi xử lý hoàn tiền. Vui lòng thử lại.",
+        {
+          audience: "admin",
+          priority: "high",
+          key: `refunds-complete-${id}-${mode}`,
+          actions: [{ label: "Thử lại", onClick: () => complete(id, mode, payload) }],
+        }
+      );
       throw error;
     }
   };

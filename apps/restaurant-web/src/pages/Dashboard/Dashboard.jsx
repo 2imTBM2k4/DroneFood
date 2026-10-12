@@ -8,9 +8,10 @@ import {
   UtensilsCrossed,
   ArrowRight,
 } from "lucide-react";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import { AuthContext } from "../../context/AuthContext";
 import { ErrorState } from "@drone-food/web-ui/components/StateBlock";
+import { ConfirmModal } from "@drone-food/web-ui/components/ConfirmModal";
 import "./Dashboard.css";
 import { formatVND } from "@drone-food/web-ui/utils/money";
 
@@ -47,6 +48,7 @@ const Dashboard = ({ url }) => {
   // new orders, but never affects the owner's own access.
   const [isOpen, setIsOpen] = useState(true);
   const [savingOpen, setSavingOpen] = useState(false);
+  const [showConfirmClose, setShowConfirmClose] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -124,30 +126,57 @@ const Dashboard = ({ url }) => {
     };
   }, [orders]);
 
-  const toggleOpen = async () => {
+  const doToggleOpen = async (targetState) => {
     const token = localStorage.getItem("token");
     if (!token || savingOpen || !user?.restaurantId) return;
 
-    const next = !isOpen;
     setSavingOpen(true);
     try {
       const res = await axios.patch(
         `${url}/api/restaurant/${user.restaurantId}/open-state`,
-        { isOpen: next },
+        { isOpen: targetState },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.data.success) {
-        setIsOpen(next);
-        toast.success(res.data.message);
+        setIsOpen(targetState);
+        notificationService.success(res.data.message || (targetState ? "Cửa hàng đã mở bán" : "Cửa hàng đã tạm đóng"), undefined, { audience: "restaurant", key: `restaurant-open-success-${user?.restaurantId}` });
       } else {
-        toast.error(res.data.message || "Could not change status");
+        notificationService.error(
+          "Không thể đổi trạng thái nhà hàng",
+          res.data.message || "Không thể cập nhật trạng thái hoạt động của nhà hàng.",
+          {
+            audience: "restaurant",
+            priority: "high",
+            key: `restaurant-open-state-${user?.restaurantId}`,
+            actions: [{ label: "Thử lại", onClick: () => doToggleOpen(targetState) }],
+          }
+        );
       }
     } catch (err) {
-      toast.error(
-        err.response?.data?.message || "Could not change status"
+      notificationService.error(
+        "Không thể đổi trạng thái nhà hàng",
+        err.response?.data?.message || "Lỗi máy chủ khi cập nhật trạng thái hoạt động.",
+        {
+          audience: "restaurant",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `restaurant-open-state-${user?.restaurantId}`,
+          actions: [{ label: "Thử lại", onClick: () => doToggleOpen(targetState) }],
+        }
       );
     } finally {
       setSavingOpen(false);
+    }
+  };
+
+  const handleToggleClick = () => {
+    if (isOpen) {
+      // Khi chuyển từ mở sang đóng -> hiện ConfirmModal
+      setShowConfirmClose(true);
+    } else {
+      // Khi chuyển từ đóng sang mở -> thực hiện luôn
+      doToggleOpen(true);
     }
   };
 
@@ -188,7 +217,7 @@ const Dashboard = ({ url }) => {
               aria-checked={isOpen}
               aria-label="Toggle whether the restaurant is open"
               className="dash-open-track"
-              onClick={toggleOpen}
+              onClick={handleToggleClick}
               disabled={savingOpen}
             >
               <span className="dash-open-thumb" />
@@ -200,6 +229,21 @@ const Dashboard = ({ url }) => {
           </Link>
         </div>
       </header>
+
+      <ConfirmModal
+        open={showConfirmClose}
+        title="Tạm đóng cửa hàng?"
+        message="Khách hàng sẽ không thể đặt đơn mới cho đến khi bạn mở lại."
+        confirmText="Đóng cửa hàng"
+        cancelText="Hủy"
+        danger={true}
+        isLoading={savingOpen}
+        onConfirm={() => {
+          setShowConfirmClose(false);
+          doToggleOpen(false);
+        }}
+        onClose={() => setShowConfirmClose(false)}
+      />
 
       {!isOpen && (
         <p className="dash-closed-note">

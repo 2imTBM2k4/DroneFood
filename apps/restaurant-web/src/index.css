@@ -2,24 +2,11 @@
 
 .app-content {
   display: flex;
-  min-height: calc(100vh - 64px);
-}
-
-.page-content {
-  flex: 1;
-  min-width: 0;
-  padding: 32px 40px;
-  max-width: 1400px;
+  min-height: 100vh;
 }
 
 .flex-col {
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-@media (max-width: 900px) {
-  .page-content {
-    padding: 24px 20px;
-  }
 }

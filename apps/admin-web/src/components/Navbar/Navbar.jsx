@@ -7,11 +7,13 @@ import { assets } from "../../assets/assets";
 import { AuthContext } from "../../context/AuthContext";
 import { formatVND } from "@drone-food/web-ui/utils/money";
 import NotificationBell from "@drone-food/web-ui/components/NotificationBell";
+import ConfirmModal from "@drone-food/web-ui/components/ConfirmModal";
 
 const Navbar = () => {
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
   const [isDark, setIsDark] = useState(() => localStorage.getItem("mode") === "dark");
+  const [logoutModalOpen, setLogoutModalOpen] = useState(false);
   const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
   const token = localStorage.getItem("token") || "";
   const connectRealtime = useCallback(() => io(apiUrl, { auth: { token } }), [apiUrl, token]);
@@ -28,9 +30,7 @@ const Navbar = () => {
   }, [isDark]);
 
   const handleLogout = () => {
-    if (window.confirm("Are you sure you want to logout?")) {
-      logout();
-    }
+    setLogoutModalOpen(true);
   };
 
   return (
@@ -58,6 +58,16 @@ const Navbar = () => {
           Logout
         </button>
       </div>
+      <ConfirmModal
+        open={logoutModalOpen}
+        title="Đăng xuất"
+        message="Bạn có chắc chắn muốn đăng xuất khỏi trang Quản trị?"
+        confirmText="Đăng xuất"
+        cancelText="Ở lại"
+        danger
+        onClose={() => setLogoutModalOpen(false)}
+        onConfirm={logout}
+      />
     </div>
   );
 };

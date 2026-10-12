@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import './Add.css'
 import axios from "axios"
-import { toast } from 'react-toastify'
+import { notificationService } from "@drone-food/web-ui/utils/toast"
 
 const Add = ({url}) => {  
     const [data,setData] = useState({
@@ -31,12 +31,32 @@ const Add = ({url}) => {
                     description:"",
                     ownerEmail:""
                 })
-                toast.success(response.data.message)
+                notificationService.success(response.data.message || "Tạo nhà hàng thành công!", undefined, { audience: "admin" })
             } else {
-                toast.error(response.data.message)
+                notificationService.error(
+                    "Không thể thêm nhà hàng",
+                    response.data.message || "Vui lòng kiểm tra lại thông tin nhà hàng và thử lại.",
+                    {
+                        audience: "admin",
+                        priority: "high",
+                        key: `restaurant-create-${data.name}`,
+                        actions: [{ label: "Thử lại", onClick: onSubmitHandler }],
+                    }
+                )
             }
         } catch (error) {
-            toast.error("Network error")
+            notificationService.error(
+                "Không thể thêm nhà hàng",
+                error.response?.data?.message || "Lỗi kết nối máy chủ khi tạo nhà hàng.",
+                {
+                    audience: "admin",
+                    priority: "high",
+                    persistent: true,
+                    duration: 0,
+                    key: `restaurant-create-${data.name}`,
+                    actions: [{ label: "Thử lại", onClick: onSubmitHandler }],
+                }
+            )
         }
     }
 

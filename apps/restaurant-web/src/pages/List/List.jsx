@@ -4,7 +4,7 @@ import { AuthContext } from "../../context/AuthContext";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import "./List.css";
 import axios from "axios";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import EditProduct from "../Products/EditProduct";
 import { Pencil, Trash2, Search, X, Plus, Power } from "lucide-react";
 import Add from "../Add/Add";
@@ -26,7 +26,11 @@ const List = ({ url }) => {
 
   useEffect(() => {
     if (!user) {
-      toast.error("Please login to view your foods.");
+      notificationService.warning(
+        "Vui lòng đăng nhập",
+        "Bạn cần đăng nhập để quản lý thực đơn món ăn.",
+        { audience: "restaurant", key: "food-list-login-required" }
+      );
       navigate("/login");
       return;
     }
@@ -36,7 +40,11 @@ const List = ({ url }) => {
   const fetchList = async () => {
     const token = localStorage.getItem("token");
     if (!token || !user) {
-      toast.error("No authentication. Please login again.");
+      notificationService.warning(
+        "Phiên đăng nhập hết hạn",
+        "Vui lòng đăng nhập lại để xem danh sách món ăn.",
+        { audience: "restaurant", key: "food-list-auth-expired" }
+      );
       navigate("/login");
       return;
     }
@@ -50,18 +58,40 @@ const List = ({ url }) => {
       if (response.data.success) {
         setList(response.data.data);
       } else {
-        toast.error(
-          "Error fetching list: " + (response.data.message || "Unknown error")
+        notificationService.error(
+          "Không thể tải danh sách món",
+          response.data.message || "Vui lòng kiểm tra lại kết nối.",
+          {
+            audience: "restaurant",
+            priority: "high",
+            key: "food-list-load",
+            actions: [{ label: "Thử lại", onClick: fetchList }],
+          }
         );
       }
     } catch (error) {
       console.error("Fetch list error:", error);
       if (error.response?.status === 403) {
-        toast.error("Access denied. Your account may be pending approval.");
+        notificationService.warning(
+          "Tài khoản chưa được kích hoạt",
+          "Tài khoản của bạn có thể đang chờ admin phê duyệt.",
+          { audience: "restaurant", key: "food-list-pending-approval" }
+        );
         localStorage.removeItem("token");
         navigate("/login");
       } else {
-        toast.error("Error fetching food list");
+        notificationService.error(
+          "Không thể tải danh sách món",
+          "Lỗi kết nối máy chủ khi lấy danh sách món ăn.",
+          {
+            audience: "restaurant",
+            priority: "high",
+            persistent: true,
+            duration: 0,
+            key: "food-list-load",
+            actions: [{ label: "Thử lại", onClick: fetchList }],
+          }
+        );
       }
     }
   };
@@ -69,7 +99,11 @@ const List = ({ url }) => {
   const confirmRemove = async () => {
     const token = localStorage.getItem("token");
     if (!token) {
-      toast.error("No authentication token found. Please login again.");
+      notificationService.warning(
+        "Phiên đăng nhập hết hạn",
+        "Vui lòng đăng nhập lại để thực hiện thao tác xóa món.",
+        { audience: "restaurant", key: "food-remove-auth-expired" }
+      );
       return;
     }
     if (!pendingDelete || deleting) return;
@@ -87,14 +121,30 @@ const List = ({ url }) => {
         }
       );
       if (response.data.success) {
-        toast.success(response.data.message);
+        notificationService.success(response.data.message || "Đã xóa món ăn thành công", undefined, { audience: "restaurant" });
         await fetchList();
       } else {
-        toast.error("Error removing food");
+        notificationService.error(
+          "Không thể xóa món ăn",
+          response.data.message || "Lỗi khi xóa món khỏi thực đơn. Vui lòng thử lại.",
+          {
+            audience: "restaurant",
+            priority: "high",
+            key: `food-remove-${foodId}`,
+          }
+        );
       }
     } catch (error) {
       console.error("Remove food error:", error);
-      toast.error("Error removing food");
+      notificationService.error(
+        "Không thể xóa món ăn",
+        error.response?.data?.message || "Lỗi khi xóa món khỏi thực đơn. Vui lòng thử lại.",
+        {
+          audience: "restaurant",
+          priority: "high",
+          key: `food-remove-${foodId}`,
+        }
+      );
     } finally {
       // Always clear the target, or the next delete could hit the wrong dish.
       setDeleting(false);
@@ -114,8 +164,18 @@ const List = ({ url }) => {
       const response = await axios.patch(`${url}/api/food/${item._id}/availability`, { isAvailable: item.isAvailable === false }, { headers: { Authorization: `Bearer ${token}` } });
       if (!response.data.success) throw new Error(response.data.message);
       setList((current) => current.map((food) => food._id === item._id ? { ...food, isAvailable: response.data.food.isAvailable } : food));
-      toast.success(item.isAvailable === false ? "Dish is available" : "Dish marked sold out");
-    } catch (error) { toast.error(error.response?.data?.message || error.message || "Could not update availability"); }
+      notificationService.success(item.isAvailable === false ? "Món ăn đã bật bán" : "Món ăn đã chuyển sang hết hàng", undefined, { audience: "restaurant", key: `food-avail-success-${item._id}` });
+    } catch (error) {
+      notificationService.error(
+        "Không thể cập nhật trạng thái món",
+        error.response?.data?.message || error.message || "Không thể cập nhật trạng thái bán.",
+        {
+          audience: "restaurant",
+          priority: "high",
+          key: `food-avail-${item._id}`,
+        }
+      );
+    }
     finally { setChangingAvailability(""); }
   };
 
@@ -132,6 +192,20 @@ const List = ({ url }) => {
     closeAddModal();
     await fetchList();
   };
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        if (editingProduct) closeEditModal();
+        if (addOpen) closeAddModal();
+        if (pendingDelete && !deleting) setPendingDelete(null);
+      }
+    };
+    if (editingProduct || addOpen || pendingDelete) {
+      window.addEventListener("keydown", handleKeyDown);
+      return () => window.removeEventListener("keydown", handleKeyDown);
+    }
+  }, [editingProduct, addOpen, pendingDelete, deleting]);
 
   const getImgSrc = (img) => {
     if (!img) return "/placeholder.jpg";
@@ -299,13 +373,37 @@ const List = ({ url }) => {
         </div>
       )}
 
-      {editingProduct && (
-        <EditProduct
-          url={url}
-          product={editingProduct}
-          onClose={closeEditModal}
-          onUpdate={fetchList}
-        />
+      {editingProduct && createPortal(
+        <div
+          className="edit-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Edit menu item"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeEditModal();
+          }}
+        >
+          <div className="modal-content list-add-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-header list-add-modal-header">
+              <h3>Edit menu item</h3>
+              <button
+                type="button"
+                className="close"
+                aria-label="Close edit item form"
+                onClick={closeEditModal}
+              >
+                ×
+              </button>
+            </div>
+            <EditProduct
+              url={url}
+              product={editingProduct}
+              onClose={closeEditModal}
+              onUpdate={fetchList}
+            />
+          </div>
+        </div>,
+        document.body
       )}
       {addOpen && createPortal(
         <div

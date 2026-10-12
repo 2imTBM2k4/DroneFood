@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import "./Orders.css";
 import { assets } from "../../assets/assets";
 import io from "socket.io-client";
@@ -59,14 +59,22 @@ const Orders = ({ url }) => {
     try {
       const token = localStorage.getItem("token");
       if (!token) {
-        toast.error("Please login as restaurant owner");
+        notificationService.error(
+          "Phiên đăng nhập đã hết hạn",
+          "Vui lòng đăng nhập lại với tài khoản chủ nhà hàng để cập nhật đơn hàng.",
+          { audience: "restaurant", key: `restaurant-order-auth-${orderId}` }
+        );
         return;
       }
 
       // Second line of defence: the modal already requires a reason, and so
       // does the API, but never send a cancellation without one.
       if (status === "cancelled" && !reason.trim()) {
-        toast.error("Reason is required for cancellation");
+        notificationService.error(
+          "Chưa nhập lý do hủy đơn",
+          "Vui lòng nhập lý do trước khi xác nhận hủy đơn hàng.",
+          { audience: "restaurant", key: `restaurant-order-cancel-reason-${orderId}` }
+        );
         return;
       }
 
@@ -83,23 +91,40 @@ const Orders = ({ url }) => {
 
       if (response.data.success) {
         await fetchAllOrders();
-        toast.success("Status updated");
+        notificationService.success("Cập nhật trạng thái thành công", undefined, { audience: "restaurant", key: `restaurant-order-status-success-${orderId}-${status}` });
       } else {
-        toast.error(response.data.message || "Error updating status");
+        notificationService.error(
+          "Không thể cập nhật trạng thái đơn hàng",
+          response.data.message || "Vui lòng thử cập nhật trạng thái đơn hàng lại.",
+          {
+            audience: "restaurant",
+            priority: "high",
+            persistent: true,
+            duration: 0,
+            key: `restaurant-order-status-${orderId}-${status}`,
+            actions: [{ label: "Thử lại", onClick: () => updateStatus(orderId, status, reason) }],
+          }
+        );
       }
     } catch (error) {
       console.error("Update status error:", error.response?.data || error);
-      // Xử lý lỗi chi tiết hơn (không còn 404 fallback)
-      if (error.response?.status === 401 || error.response?.status === 403) {
-        toast.error(
-          error.response?.data?.message ||
-            "Unauthorized - Check login/restaurant"
-        );
-      } else if (error.response?.status === 404) {
-        toast.error("Endpoint not found - Check server routes");
-      } else {
-        toast.error(error.response?.data?.message || "Error updating status");
-      }
+      const message = error.response?.status === 401 || error.response?.status === 403
+        ? error.response?.data?.message || "Bạn không có quyền cập nhật đơn hàng này."
+        : error.response?.status === 404
+          ? "Không tìm thấy dịch vụ cập nhật đơn hàng. Vui lòng thử lại sau."
+          : error.response?.data?.message || "Không thể cập nhật trạng thái đơn hàng.";
+      notificationService.error(
+        "Không thể cập nhật trạng thái đơn hàng",
+        message,
+        {
+          audience: "restaurant",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `restaurant-order-status-${orderId}-${status}`,
+          actions: [{ label: "Thử lại", onClick: () => updateStatus(orderId, status, reason) }],
+        }
+      );
     }
   };
   const closeCancelModal = () => {
@@ -125,18 +150,47 @@ const Orders = ({ url }) => {
     if (restaurantId) {
       socket.emit("joinRestaurant", restaurantId);
     } else {
-      toast.warn("Please re-login to enable notifications");
+      notificationService.warning(
+        "Chưa thể bật thông báo đơn hàng",
+        "Vui lòng đăng nhập lại để nhận thông báo đơn hàng mới.",
+        { audience: "restaurant", key: "restaurant-notifications-auth" }
+      );
     }
 
     socket.on("newOrder", (newOrder) => {
-      toast.info("Có đơn hàng mới!");
+      const orderCode = newOrder._id?.slice(-8)?.toUpperCase() || "mới";
+      notificationService.info(
+        "Có đơn hàng mới",
+        `Đơn #${orderCode} - ${formatVND(newOrder.totalPrice)}`,
+        {
+          audience: "restaurant",
+          key: `new-order-${newOrder._id}`,
+          actions: [
+            {
+              label: "Xem đơn hàng",
+              onClick: () => {
+                setFilter("all");
+                requestAnimationFrame(() => {
+                  document
+                    .getElementById(`restaurant-order-${newOrder._id}`)
+                    ?.scrollIntoView({ behavior: "smooth", block: "center" });
+                });
+              },
+            },
+          ],
+        }
+      );
       // Normalize status và thêm vào đầu danh sách
       newOrder.orderStatus = newOrder.orderStatus?.toLowerCase() || "pending";
       setOrders((prev) => [newOrder, ...prev]); // THÊM MỚI VÀO ĐẦU DANH SÁCH
     });
 
     socket.on("connect_error", () => {
-      toast.error("Notification connection failed");
+      notificationService.error(
+        "Không thể kết nối thông báo đơn hàng",
+        "Hệ thống sẽ tự thử kết nối lại. Vui lòng kiểm tra kết nối mạng.",
+        { audience: "restaurant", key: "restaurant-notification-connection" }
+      );
     });
 
     return () => {
@@ -284,7 +338,7 @@ const Orders = ({ url }) => {
           />
         ) : (
           visibleOrders.map((order, index) => (
-            <div key={order._id || index} className="order-item">
+            <div id={`restaurant-order-${order._id}`} key={order._id || index} className="order-item">
               <div className="order-item-header">
                 <img src={assets.parcel_icon} alt="Order" />
                 <div className="order-meta">

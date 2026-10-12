@@ -1,6 +1,6 @@
 import React, { useState, useContext } from "react";
 import "./Login.css";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import { AuthContext } from "../../context/AuthContext";
 
 const Login = () => {
@@ -16,10 +16,18 @@ const Login = () => {
 
     try {
       await login(email, password);
-      toast.success("Login successful!");
       setLoading(false);
     } catch (error) {
-      toast.error(error.message || "Login failed");
+      notificationService.error(
+        "Đăng nhập không thành công",
+        error.message || "Tài khoản hoặc mật khẩu không chính xác. Vui lòng thử lại.",
+        {
+          audience: "admin",
+          priority: "high",
+          key: "admin-login-failed",
+          actions: [{ label: "Thử lại", onClick: onSubmit }],
+        }
+      );
       setLoading(false);
     }
   };

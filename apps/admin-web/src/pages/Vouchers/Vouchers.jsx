@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import axios from "axios";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import { Pencil, Plus, Power, Ticket, X } from "lucide-react";
 import "./Vouchers.css";
 
@@ -154,7 +154,16 @@ const Vouchers = ({ url }) => {
       const response = await axios.get(`${url}/api/vouchers`, { headers: headers() });
       setVouchers(response.data.data || []);
     } catch (error) {
-      toast.error(error.response?.data?.message || "Không thể tải danh sách voucher.");
+      notificationService.error(
+        "Không thể tải danh sách voucher",
+        error.response?.data?.message || "Vui lòng kiểm tra kết nối mạng và thử lại.",
+        {
+          audience: "admin",
+          priority: "high",
+          key: "vouchers-load",
+          actions: [{ label: "Thử lại", onClick: loadVouchers }],
+        }
+      );
     } finally {
       setLoading(false);
     }
@@ -210,10 +219,10 @@ const Vouchers = ({ url }) => {
       };
       if (editing) {
         await axios.put(`${url}/api/vouchers/${editing.id}`, payload, { headers: headers() });
-        toast.success("Đã cập nhật voucher.");
+        notificationService.success("Đã cập nhật voucher", `Mã voucher ${payload.code} đã được lưu.`, { audience: "admin" });
       } else {
         await axios.post(`${url}/api/vouchers`, payload, { headers: headers() });
-        toast.success("Đã tạo voucher.");
+        notificationService.success("Đã tạo voucher mới", `Mã voucher ${payload.code} đã sẵn sàng áp dụng.`, { audience: "admin" });
       }
       setModalOpen(false);
       setEditing(null);
@@ -231,9 +240,18 @@ const Vouchers = ({ url }) => {
     try {
       await axios.patch(`${url}/api/vouchers/${voucherId}/enabled`, { enabled: !voucher.enabled }, { headers: headers() });
       setVouchers((current) => current.map((item) => ((item.id || item._id) === voucherId ? { ...item, enabled: !voucher.enabled } : item)));
-      toast.success(voucher.enabled ? "Voucher đã được tắt." : "Voucher đã được bật.");
+      notificationService.success(voucher.enabled ? "Voucher đã được tắt" : "Voucher đã được bật", undefined, { audience: "admin", key: `voucher-toggle-success-${voucherId}` });
     } catch (error) {
-      toast.error(error.response?.data?.message || "Không thể đổi trạng thái voucher.");
+      notificationService.error(
+        "Không thể đổi trạng thái voucher",
+        error.response?.data?.message || "Lỗi khi cập nhật trạng thái voucher. Vui lòng thử lại.",
+        {
+          audience: "admin",
+          priority: "high",
+          key: `voucher-toggle-${voucherId}`,
+          actions: [{ label: "Thử lại", onClick: () => toggleEnabled(voucher) }],
+        }
+      );
     }
   };
 

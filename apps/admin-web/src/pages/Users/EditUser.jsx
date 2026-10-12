@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import "./EditUser.css";
 
 const EditUser = ({ url, user, onClose, onUpdate }) => {
@@ -34,7 +34,11 @@ const EditUser = ({ url, user, onClose, onUpdate }) => {
     event.preventDefault();
     const token = localStorage.getItem("token");
     if (!token) {
-      toast.error("Please login first");
+      notificationService.warning(
+        "Phiên đăng nhập hết hạn",
+        "Vui lòng đăng nhập lại để cập nhật thông tin người dùng.",
+        { audience: "admin", key: "admin-auth-required" }
+      );
       return;
     }
     const updateData = {
@@ -51,14 +55,34 @@ const EditUser = ({ url, user, onClose, onUpdate }) => {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.data.success) {
-        toast.success(response.data.message);
+        notificationService.success(response.data.message || "Cập nhật người dùng thành công", undefined, { audience: "admin" });
         onUpdate();
         onClose();
       } else {
-        toast.error(response.data.message);
+        notificationService.error(
+          "Không thể cập nhật người dùng",
+          response.data.message || "Vui lòng kiểm tra lại thông tin và thử lại.",
+          {
+            audience: "admin",
+            priority: "high",
+            key: `user-update-${user._id}`,
+            actions: [{ label: "Thử lại", onClick: onSubmitHandler }],
+          }
+        );
       }
     } catch (error) {
-      toast.error("Error updating user");
+      notificationService.error(
+        "Không thể cập nhật người dùng",
+        error.response?.data?.message || "Không thể cập nhật người dùng. Vui lòng thử lại.",
+        {
+          audience: "admin",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `user-update-${user._id}`,
+          actions: [{ label: "Thử lại", onClick: onSubmitHandler }],
+        }
+      );
     }
   };
 

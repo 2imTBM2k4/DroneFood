@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import { ScrollText, ChevronLeft, ChevronRight } from "lucide-react";
 import "./AuditLog.css";
 
@@ -54,7 +54,11 @@ const AuditLog = ({ url }) => {
   const fetchLogs = useCallback(async () => {
     const token = localStorage.getItem("token");
     if (!token) {
-      toast.error("Please log in again.");
+      notificationService.warning(
+        "Phiên đăng nhập hết hạn",
+        "Vui lòng đăng nhập lại để xem nhật ký hoạt động hệ thống.",
+        { audience: "admin", key: "audit-log-auth-expired" }
+      );
       return;
     }
 

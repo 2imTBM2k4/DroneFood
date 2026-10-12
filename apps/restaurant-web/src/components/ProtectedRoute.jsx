@@ -1,22 +1,20 @@
 import React, { useContext } from 'react';
 import { Navigate } from 'react-router-dom';
-import { AuthContext } from '../context/AuthContext';
+import { AuthContext, RESTAURANT_ROLES } from '../context/AuthContext';
 
 const ProtectedRoute = ({ children }) => {
-  const { user, isLoading } = useContext(AuthContext); // MỚI: Lấy isLoading
+  const { user, isLoading } = useContext(AuthContext);
 
-  // MỚI: Nếu đang loading (init auth), hiển thị spinner thay vì redirect
   if (isLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <div>Loading...</div> {/* Có thể thay bằng spinner component */}
+        <div>Loading...</div>
       </div>
     );
   }
 
-  // Nếu không loading và có user: render children
-  // Nếu không loading và không user: redirect
-  return user ? children : <Navigate to="/login" />;
+  const isAllowed = user && RESTAURANT_ROLES.includes(user.role);
+  return isAllowed ? children : <Navigate to="/login" replace />;
 };
 
 export default ProtectedRoute;

@@ -1,4 +1,3 @@
-/* Reset và Base Styles */
 * {
   margin: 0;
   padding: 0;
@@ -7,47 +6,35 @@
 
 .app {
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--body-color);
-  display: flex;
 }
 
-/* Sidebar cố định bên trái */
-.sidebar {
-  /* Styles từ Sidebar.css - giữ nguyên */
-  position: fixed;
-  left: 0;
-  top: 0;
-  z-index: 1000;
-}
-
-/* Main content area - chiếm toàn bộ không gian còn lại */
 .main-content-area {
-  flex: 1;
-  margin-left: 260px; /* Đúng bằng width của sidebar */
+  min-width: 0;
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+  min-height: 100dvh;
+  margin-left: 260px;
   background: var(--body-color);
+  transition: margin-left 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* Navbar trong main content */
-.main-content-area .navbar {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  background: var(--navbar-bg);
-  border-bottom: 1px solid var(--border-color);
+.admin-shell.sidebar-is-collapsed .main-content-area {
+  margin-left: 80px;
 }
 
-/* Nội dung trang - chiếm toàn bộ không gian còn lại */
 .page-content {
-  flex: 1;
+  min-width: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
   padding: 20px;
   background: var(--body-color);
-  min-height: calc(100vh - 80px); /* Trừ chiều cao navbar */
 }
 
-/* Đảm bảo tất cả các trang đều chiếm full width */
+.page-transition {
+  min-width: 0;
+}
+
 .dashboard,
 .add,
 .list.add,
@@ -57,20 +44,66 @@
   min-height: 100%;
 }
 
-/* Responsive Design */
-@media (max-width: 1024px) {
-  .main-content-area {
-    margin-left: 80px;
-  }
+.sidebar-mobile-trigger,
+.sidebar-scrim {
+  display: none;
+}
+
+.sidebar-mobile-trigger {
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-color);
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 11px;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+.sidebar-mobile-trigger:focus-visible,
+.sidebar-scrim:focus-visible {
+  outline: 3px solid var(--accent-color);
+  outline-offset: 2px;
 }
 
 @media (max-width: 768px) {
-  .main-content-area {
-    margin-left: 0;
+  .main-content-area,
+  .admin-shell.sidebar-is-collapsed .main-content-area {
     width: 100%;
+    margin-left: 0;
   }
 
   .page-content {
-    padding: 15px;
+    padding: 68px 12px 16px;
+  }
+
+  .sidebar-mobile-trigger {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 850;
+    display: flex;
+  }
+
+  .sidebar-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 900;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    background: rgba(15, 23, 42, 0.48);
+    border: 0;
+    cursor: pointer;
+    backdrop-filter: blur(2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main-content-area {
+    transition: none;
   }
 }
