@@ -144,3 +144,9 @@ dronefood-payment-plan.md
 /docs/superpowers/
 /.superpowers/
 .codegraph
+/apps/api/migration-artifacts/
+/backups
+/docs/design
+/docs/operations/
+/docs/plans
+/dump/

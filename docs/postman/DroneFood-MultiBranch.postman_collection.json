@@ -1,0 +1,401 @@
+{
+  "info": {
+    "_postman_id": "d982b6a2-e6e7-4b44-9331-dronefood-multibranch",
+    "name": "DroneFood - Multi-Branch Architecture API",
+    "description": "Collection kiểm thử toàn diện các API Multi-Branch (Phase 2): Merchant, Branch, Order, Drone, Cart, Audit.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "adminToken", "value": "", "type": "string" },
+    { "key": "merchantId", "value": "", "type": "string" },
+    { "key": "branchId", "value": "", "type": "string" },
+    { "key": "cartId", "value": "", "type": "string" },
+    { "key": "cartVersion", "value": "0", "type": "string" },
+    { "key": "orderId", "value": "", "type": "string" },
+    { "key": "droneId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "0. Authentication",
+      "item": [
+        {
+          "name": "Login User / Merchant Owner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "if (res.token) {",
+                  "  pm.collectionVariables.set('token', res.token);",
+                  "  console.log('Saved token successfully');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"owner@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/user/login", "host": ["{{baseUrl}}"], "path": ["api", "user", "login"] }
+          }
+        },
+        {
+          "name": "Login Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "if (res.token) {",
+                  "  pm.collectionVariables.set('adminToken', res.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/user/login", "host": ["{{baseUrl}}"], "path": ["api", "user", "login"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Merchant API",
+      "item": [
+        {
+          "name": "Register Merchant",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status is 201 Created', () => pm.response.to.have.status(201));",
+                  "if (res.data?.merchant?._id) {",
+                  "  pm.collectionVariables.set('merchantId', res.data.merchant._id);",
+                  "  pm.collectionVariables.set('branchId', res.data.branch._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Phở Hà Nội 36 Phố Phường\",\n  \"address\": {\n    \"text\": \"123 Hàng Bạc, Hoàn Kiếm, Hà Nội\",\n    \"lat\": 21.034,\n    \"lng\": 105.852\n  },\n  \"phone\": \"0987654321\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/merchant/register", "host": ["{{baseUrl}}"], "path": ["api", "merchant", "register"] }
+          }
+        },
+        {
+          "name": "Get My Merchant Info (/me)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status is 200', () => pm.response.to.have.status(200));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/api/merchant/me", "host": ["{{baseUrl}}"], "path": ["api", "merchant", "me"] }
+          }
+        },
+        {
+          "name": "Get Public Merchant by Slug",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/merchant/pho-ha-noi-36-pho-phuong/public", "host": ["{{baseUrl}}"], "path": ["api", "merchant", "pho-ha-noi-36-pho-phuong", "public"] }
+          }
+        },
+        {
+          "name": "Update Merchant Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Chuyên các món phở truyền thống gia truyền lâu đời\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/merchant/{{merchantId}}", "host": ["{{baseUrl}}"], "path": ["api", "merchant", "{{merchantId}}"] }
+          }
+        },
+        {
+          "name": "Admin Approve Merchant",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/merchant/{{merchantId}}/approve", "host": ["{{baseUrl}}"], "path": ["api", "merchant", "{{merchantId}}", "approve"] }
+          }
+        },
+        {
+          "name": "Admin Suspend Merchant",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Tạm đình chỉ kiểm tra vệ sinh an toàn thực phẩm\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/merchant/{{merchantId}}/suspend", "host": ["{{baseUrl}}"], "path": ["api", "merchant", "{{merchantId}}", "suspend"] }
+          }
+        },
+        {
+          "name": "Admin List Merchants",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/merchant/list?status=active&page=1&limit=20", "host": ["{{baseUrl}}"], "path": ["api", "merchant", "list"], "query": [{ "key": "status", "value": "active" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Branch API",
+      "item": [
+        {
+          "name": "Get Nearby Branches (Radius Search)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test('Returns array of results', () => pm.expect(res.data).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/branch/nearby?lat=10.7769&lng=106.7009&radius=15", "host": ["{{baseUrl}}"], "path": ["api", "branch", "nearby"], "query": [{ "key": "lat", "value": "10.7769" }, { "key": "lng", "value": "106.7009" }, { "key": "radius", "value": "15" }] }
+          }
+        },
+        {
+          "name": "List Branches by MerchantId",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/branch/list?merchantId={{merchantId}}", "host": ["{{baseUrl}}"], "path": ["api", "branch", "list"], "query": [{ "key": "merchantId", "value": "{{merchantId}}" }] }
+          }
+        },
+        {
+          "name": "Create Second Branch",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchantId\": \"{{merchantId}}\",\n  \"name\": \"Chi nhánh Cầu Giấy\",\n  \"code\": \"CG\",\n  \"address\": {\n    \"text\": \"50 Cầu Giấy, Hà Nội\",\n    \"lat\": 21.033,\n    \"lng\": 105.795\n  },\n  \"deliveryRadiusKm\": 8\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/branch", "host": ["{{baseUrl}}"], "path": ["api", "branch"] }
+          }
+        },
+        {
+          "name": "Toggle Open State",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isOpen\": true\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/branch/{{branchId}}/open-state", "host": ["{{baseUrl}}"], "path": ["api", "branch", "{{branchId}}", "open-state"] }
+          }
+        },
+        {
+          "name": "Assign Branch Managers",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userIds\": [\"670000000000000000000001\"]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/branch/{{branchId}}/managers", "host": ["{{baseUrl}}"], "path": ["api", "branch", "{{branchId}}", "managers"] }
+          }
+        },
+        {
+          "name": "Lock / Unlock Branch (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isLocked\": false\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/branch/{{branchId}}/lock", "host": ["{{baseUrl}}"], "path": ["api", "branch", "{{branchId}}", "lock"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Cart & Order API",
+      "item": [
+        {
+          "name": "Add to Cart (with branchId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "if (res.cartId) {",
+                  "  pm.collectionVariables.set('cartId', res.cartId);",
+                  "  pm.collectionVariables.set('cartVersion', String(res.cartVersion));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"itemId\": \"670000000000000000000002\",\n  \"quantity\": 1,\n  \"branchId\": \"{{branchId}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/cart/add", "host": ["{{baseUrl}}"], "path": ["api", "cart", "add"] }
+          }
+        },
+        {
+          "name": "Place Order (with branchId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "if (res.orderId) {",
+                  "  pm.collectionVariables.set('orderId', res.orderId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cartId\": \"{{cartId}}\",\n  \"cartVersion\": {{cartVersion}},\n  \"branchId\": \"{{branchId}}\",\n  \"paymentMethod\": \"COD\",\n  \"deliveryMethod\": \"shipper\",\n  \"address\": {\n    \"fullName\": \"Nguyễn Khách Hàng\",\n    \"phone\": \"0900000000\",\n    \"address\": \"123 Phố Huế, Hà Nội\",\n    \"city\": \"Hà Nội\",\n    \"state\": \"Hà Nội\",\n    \"country\": \"Vietnam\",\n    \"lat\": 21.015,\n    \"lng\": 105.850\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/order/place", "host": ["{{baseUrl}}"], "path": ["api", "order", "place"] }
+          }
+        },
+        {
+          "name": "List Orders Filtered by Branch",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/api/order/list?branchId={{branchId}}", "host": ["{{baseUrl}}"], "path": ["api", "order", "list"], "query": [{ "key": "branchId", "value": "{{branchId}}" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Drone Fleet API",
+      "item": [
+        {
+          "name": "Create Drone for Branch",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"branchId\": \"{{branchId}}\",\n  \"droneCode\": \"DRONE-HN-01\",\n  \"batteryLevel\": 100\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/drone/create", "host": ["{{baseUrl}}"], "path": ["api", "drone", "create"] }
+          }
+        },
+        {
+          "name": "Assign Drone to Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/drone/assign", "host": ["{{baseUrl}}"], "path": ["api", "drone", "assign"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Audit Log API",
+      "item": [
+        {
+          "name": "List Audit Logs Filtered by Merchant/Branch",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/api/audit?merchantId={{merchantId}}&branchId={{branchId}}", "host": ["{{baseUrl}}"], "path": ["api", "audit"], "query": [{ "key": "merchantId", "value": "{{merchantId}}" }, { "key": "branchId", "value": "{{branchId}}" }] }
+          }
+        }
+      ]
+    }
+  ]
+}

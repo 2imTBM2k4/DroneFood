@@ -101,8 +101,9 @@ export const authApi = {
     const res = await api.post<{ token: string; role: string }>("/api/user/login", {
       email: email.trim(),
       password,
+      portal: "restaurant",
     });
-    if (res.data.role !== "restaurant_owner" && res.data.role !== "admin") {
+    if (!["restaurant_owner", "merchant_owner", "branch_manager"].includes(res.data.role)) {
       throw new Error("Tài khoản này không phải tài khoản Nhà hàng.");
     }
     return res.data;

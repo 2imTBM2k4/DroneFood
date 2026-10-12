@@ -277,7 +277,8 @@ function RestaurantAppContent() {
     );
   }
 
-  if (userQuery.data?.role !== "restaurant_owner" || !restaurantId) {
+  const OWNER_ROLES = ["restaurant_owner", "merchant_owner"];
+  if (!OWNER_ROLES.includes(userQuery.data?.role ?? "") || !restaurantId) {
     return (
       <SafeAreaView style={styles.centerContainer}>
         <Text style={styles.errorText}>

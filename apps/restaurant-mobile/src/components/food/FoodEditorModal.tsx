@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  Alert,
   Image,
   StyleSheet,
   Text,
@@ -35,7 +36,7 @@ export const FoodEditorModal: React.FC<FoodEditorModalProps> = ({
   const handlePickImage = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      alert("Vui lòng cấp quyền truy cập thư viện ảnh để đăng món.");
+      Alert.alert("Quyền truy cập", "Vui lòng cấp quyền truy cập thư viện ảnh để đăng món.");
       return;
     }
     const res = await ImagePicker.launchImageLibraryAsync({
