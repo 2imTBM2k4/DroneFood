@@ -51,8 +51,6 @@ const Profile = () => {
   const [isFirstNameFocused, setIsFirstNameFocused] = useState(false);
   const [isLastNameFocused, setIsLastNameFocused] = useState(false);
 
-  const [phoneState, setPhoneState] = useState("");
-  const [emailState, setEmailState] = useState("");
   const [savingField, setSavingField] = useState(false);
 
   // Email change state (Phương án B: 2 bước bảo mật)
@@ -82,8 +80,6 @@ const Profile = () => {
     if (!user) return;
     const { firstName, lastName } = parseName(user.name || "");
     setNameState({ firstName, lastName });
-    setPhoneState(user.phone || "");
-    setEmailState(user.email || "");
   }, [user]);
 
   // Countdown timer for email OTP

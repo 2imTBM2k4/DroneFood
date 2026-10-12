@@ -10,7 +10,6 @@ import {
   Loader2,
   X,
   ExternalLink,
-  CheckCircle2,
   AlertCircle,
   HelpCircle,
 } from "lucide-react";
@@ -452,7 +451,7 @@ const LoginPopup = ({ setShowLogin }) => {
                 <li>
                   <span className="apple-step-marker">2</span>
                   <div className="apple-step-desc">
-                    Tìm thư từ <strong>Drone Food</strong> và bấm nút <strong>"Kích hoạt tài khoản ngay"</strong>.
+                    Tìm thư từ <strong>Drone Food</strong> và bấm nút <strong>&quot;Kích hoạt tài khoản ngay&quot;</strong>.
                   </div>
                 </li>
                 <li>

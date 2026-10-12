@@ -17,8 +17,6 @@ import {
   X,
   Eye,
   EyeOff,
-  Clock,
-  Store,
 } from "lucide-react";
 
 const TABS = [
@@ -28,7 +26,7 @@ const TABS = [
 ];
 
 const EditRestaurant = ({ url = import.meta.env.VITE_API_URL || "http://localhost:4000" }) => {
-  const { user, setUser, fetchUserInfo } = useContext(AuthContext);
+  const { user, fetchUserInfo } = useContext(AuthContext);
   const [activeTab, setActiveTab] = useState("info");
   const [subView, setSubView] = useState("overview"); // "overview" | "name" | "phone" | "email" | "description" | "address" | "hours"
 

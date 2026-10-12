@@ -4,6 +4,7 @@ import { notificationService } from "@drone-food/web-ui/utils/toast";
 
 export const AuthContext = createContext();
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const RESTAURANT_ROLES = [
   "restaurant_owner",
   "merchant_owner",
