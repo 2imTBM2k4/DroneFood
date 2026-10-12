@@ -1,5 +1,5 @@
 /* ============================================================
-   Apple Modal Dialog — LoginPopup (docs/design/DESIGN-apple.md)
+   Apple Modal Dialog — LoginPopup
    White canvas · Hairline border (1px) · 18px radius (rounded.lg)
    Backdrop filter blur · SF Pro typography · Action Blue pill button
    NO box-shadow on inputs or cards · 11px radius on inputs
@@ -24,7 +24,7 @@
   background-color: var(--apple-canvas);
   border: 1px solid var(--apple-hairline);
   border-radius: var(--radius-lg);
-  padding: 36px 32px;
+  padding: 32px 28px;
   display: flex;
   flex-direction: column;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.2);
@@ -36,6 +36,11 @@
   background-color: var(--apple-surface-tile-1);
   border-color: rgba(255, 255, 255, 0.12);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+}
+
+.apple-verify-card {
+  max-width: 460px;
+  padding: 28px 26px;
 }
 
 .apple-modal-header {
@@ -73,6 +78,11 @@
   color: var(--apple-ink);
 }
 
+.apple-modal-close-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .apple-modal-back-btn {
   background: transparent;
   border: none;
@@ -92,16 +102,16 @@
   font-family: var(--font-text);
   font-size: 14px;
   font-weight: 400;
-  line-height: 1.43;
+  line-height: 1.45;
   color: var(--apple-body-muted);
-  margin-bottom: 24px;
+  margin-bottom: 22px;
 }
 
 .apple-modal-inputs {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 /* Apple Input: 11px radius, hairline border, clean focus ring */
@@ -128,6 +138,11 @@
   border-color: var(--apple-primary-focus);
 }
 
+.apple-modal-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .apple-modal-input::placeholder {
   color: var(--apple-body-muted);
 }
@@ -138,6 +153,15 @@
   height: 44px;
   font-size: 15px !important;
   margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.apple-modal-action:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .apple-forgot-link {
@@ -192,4 +216,320 @@
   100% {
     transform: rotate(360deg);
   }
+}
+
+/* ============================================================
+   Enhanced Email Verification Flow (Step 2/2)
+   ============================================================ */
+
+.apple-verify-step-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 12px;
+  background-color: rgba(255, 107, 53, 0.12);
+  color: #ff6b35;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.apple-verify-step-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #ff6b35;
+  box-shadow: 0 0 8px rgba(255, 107, 53, 0.8);
+}
+
+.apple-verify-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 8px 0 0 0;
+  width: 100%;
+}
+
+.apple-verify-hero-icon-wrap {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.apple-verify-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(255, 107, 53, 0.16), rgba(255, 159, 28, 0.24));
+  color: #ff6b35;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 20px rgba(255, 107, 53, 0.18);
+  position: relative;
+  z-index: 1;
+}
+
+.apple-verify-main-title {
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--apple-ink);
+  margin: 0 0 6px 0;
+}
+
+.apple-verify-lead-desc {
+  font-size: 14px;
+  color: var(--apple-body-muted);
+  line-height: 1.45;
+  margin: 0 0 8px 0;
+}
+
+.apple-verify-email-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--apple-canvas-parchment);
+  border: 1px solid var(--apple-hairline);
+  padding: 7px 16px;
+  border-radius: 999px;
+  color: var(--apple-ink);
+  font-size: 14px;
+  max-width: 100%;
+  word-break: break-all;
+  margin-bottom: 14px;
+}
+
+.dark-mode .apple-verify-email-pill {
+  background-color: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.apple-verify-email-icon {
+  color: #ff6b35;
+  flex-shrink: 0;
+}
+
+.apple-verify-email-text {
+  font-weight: 600;
+}
+
+.apple-verify-guide-box {
+  width: 100%;
+  background-color: var(--apple-canvas-parchment);
+  border: 1px solid var(--apple-hairline);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  text-align: left;
+  margin-bottom: 18px;
+}
+
+.dark-mode .apple-verify-guide-box {
+  background-color: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.apple-verify-guide-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--apple-ink);
+  margin-bottom: 10px;
+}
+
+.apple-verify-guide-icon {
+  color: #ff6b35;
+}
+
+.apple-verify-steps-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.apple-verify-steps-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--apple-ink);
+}
+
+.apple-step-marker {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: #ff6b35;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.apple-step-desc {
+  flex: 1;
+}
+
+.apple-step-desc em {
+  color: var(--apple-body-muted);
+  font-style: normal;
+  display: block;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.apple-verify-actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.apple-verify-openmail-btn {
+  width: 100%;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: 600;
+  background-color: #ff6b35;
+  color: #ffffff;
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 14px rgba(255, 107, 53, 0.28);
+  transition: transform 0.16s ease, opacity 0.16s ease;
+}
+
+.apple-verify-openmail-btn:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.apple-verify-back-login-btn {
+  width: 100%;
+  height: 42px;
+  background: transparent;
+  border: 1px solid var(--apple-hairline);
+  color: var(--apple-ink);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.dark-mode .apple-verify-back-login-btn {
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.apple-verify-back-login-btn:hover {
+  background-color: var(--apple-canvas-parchment);
+}
+
+.apple-verify-resend-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--apple-body-muted);
+  flex-wrap: wrap;
+}
+
+.apple-resend-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+}
+
+.apple-resend-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+/* ============================================================
+   Inline Form Errors & Unverified State
+   ============================================================ */
+
+.apple-error-box {
+  background-color: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.apple-error-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.apple-error-icon {
+  color: #ef4444;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.login-error-text {
+  color: #ef4444;
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.apple-unverified-cta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(239, 68, 68, 0.15);
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.apple-unverified-guide-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #ff6b35;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.apple-unverified-guide-link:hover {
+  opacity: 0.85;
+}
+
+.apple-dot-divider {
+  color: var(--apple-body-muted);
+  font-size: 12px;
 }

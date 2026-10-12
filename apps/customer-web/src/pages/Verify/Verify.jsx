@@ -3,7 +3,7 @@ import "./Verify.css";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { StoreContext } from "../../context/StoreContext";
 import axios from "axios";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 
 const Verify = () => {
   const [searchParams] = useSearchParams();
@@ -15,18 +15,30 @@ const Verify = () => {
 
   const verifyPayment = useCallback(async () => {
     if (!orderId) {
-      toast.error("Invalid order");
+      notificationService.error(
+        "Đơn hàng không hợp lệ",
+        "Không tìm thấy thông tin đơn hàng cần xác thực.",
+        { audience: "user", key: "verify-order-invalid" }
+      );
       navigate("/");
       return;
     }
     if (!token) {
-      toast.error("Please sign in again to verify this payment.");
+      notificationService.warning(
+        "Phiên đăng nhập đã hết hạn",
+        "Vui lòng đăng nhập lại để xác thực thanh toán đơn hàng này.",
+        { audience: "user", key: `verify-order-auth-${orderId}` }
+      );
       navigate("/");
       return;
     }
 
     if (paymentCancelled) {
-      toast.info("Payment was cancelled. You can retry from your order.");
+      notificationService.info(
+        "Thanh toán đã bị hủy",
+        "Bạn có thể thanh toán lại từ danh sách đơn hàng của mình.",
+        { audience: "user", key: `verify-cancel-${orderId}` }
+      );
       navigate("/myorders");
       return;
     }
@@ -43,17 +55,32 @@ const Verify = () => {
         );
         if (response.data.success) {
           await loadCartData();
-          toast.success("Payment verified! Check My Orders.");
+          notificationService.success("Thanh toán thành công!", "Giao dịch đã được xác thực. Vui lòng kiểm tra đơn hàng.", { audience: "user" });
           navigate("/myorders");
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, 1500));
       }
-      toast.info("Your payment is still being confirmed. Please check My Orders shortly.");
+      notificationService.info(
+        "Đang chờ xác nhận thanh toán",
+        "Giao dịch của bạn đang được hệ thống xử lý. Vui lòng kiểm tra lại đơn hàng sau ít phút.",
+        { audience: "user", key: `verify-confirming-${orderId}` }
+      );
       navigate("/myorders");
     } catch (error) {
       console.error("Verify error:", error);
-      toast.error(error.response?.data?.message || "Verification error");
+      notificationService.error(
+        "Xác thực thanh toán thất bại",
+        error.response?.data?.message || "Không thể xác thực giao dịch vào lúc này. Vui lòng kiểm tra lại đơn hàng.",
+        {
+          audience: "user",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: `verify-order-failure-${orderId}`,
+          actions: [{ label: "Thử lại", onClick: verifyPayment }],
+        }
+      );
       navigate("/");
     }
   }, [loadCartData, navigate, orderId, paymentCancelled, token, url]);

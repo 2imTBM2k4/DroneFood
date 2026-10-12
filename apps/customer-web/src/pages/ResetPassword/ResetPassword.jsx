@@ -1,7 +1,7 @@
 import { useContext, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { StoreContext } from "../../context/StoreContext";
-import { toast } from "react-toastify";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import axios from "axios";
 import { Lock, CheckCircle, Eye, EyeOff, Loader2 } from "lucide-react";
 import "./ResetPassword.css";
@@ -22,12 +22,10 @@ const ResetPassword = () => {
     e.preventDefault();
 
     if (password.length < 8) {
-      toast.error("Password must be at least 8 characters");
       return;
     }
 
     if (password !== confirmPassword) {
-      toast.error("Passwords do not match");
       return;
     }
 
@@ -40,11 +38,29 @@ const ResetPassword = () => {
       if (response.data.success) {
         setSuccess(true);
       } else {
-        toast.error(response.data.message);
+        notificationService.error(
+          "Đặt lại mật khẩu không thành công",
+          response.data.message || "Không thể đặt lại mật khẩu. Vui lòng thử lại.",
+          {
+            audience: "user",
+            priority: "high",
+            key: "reset-password-api-failure",
+            actions: [{ label: "Thử lại", onClick: onSubmit }],
+          }
+        );
       }
     } catch (err) {
-      toast.error(
-        err?.response?.data?.message || "Failed to reset password. The link may have expired."
+      notificationService.error(
+        "Đặt lại mật khẩu không thành công",
+        err?.response?.data?.message || "Không thể đặt lại mật khẩu. Liên kết có thể đã hết hạn.",
+        {
+          audience: "user",
+          priority: "high",
+          persistent: true,
+          duration: 0,
+          key: "reset-password-catch-failure",
+          actions: [{ label: "Thử lại", onClick: onSubmit }],
+        }
       );
     } finally {
       setLoading(false);
@@ -84,6 +100,7 @@ const ResetPassword = () => {
         <form onSubmit={onSubmit} className="reset-form">
           <div className="reset-input-group">
             <input
+              id="reset-new-password"
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -91,6 +108,8 @@ const ResetPassword = () => {
               required
               minLength={8}
               autoFocus
+              aria-invalid={password.length > 0 && password.length < 8}
+              aria-describedby={password.length > 0 && password.length < 8 ? "reset-pwd-error" : undefined}
             />
             <button
               type="button"
@@ -102,14 +121,27 @@ const ResetPassword = () => {
             </button>
           </div>
 
+          {password && password.length < 8 && (
+            <p id="reset-pwd-error" className="reset-mismatch" role="alert">
+              Mật khẩu phải có ít nhất 8 ký tự
+            </p>
+          )}
+
           <div className="reset-input-group">
             <input
+              id="reset-confirm-password"
               type={showConfirm ? "text" : "password"}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Confirm new password"
               required
               minLength={8}
+              aria-invalid={!!(password && confirmPassword && password !== confirmPassword)}
+              aria-describedby={
+                password && confirmPassword && password !== confirmPassword
+                  ? "reset-confirm-error"
+                  : undefined
+              }
             />
             <button
               type="button"
@@ -122,7 +154,9 @@ const ResetPassword = () => {
           </div>
 
           {password && confirmPassword && password !== confirmPassword && (
-            <p className="reset-mismatch">Passwords do not match</p>
+            <p id="reset-confirm-error" className="reset-mismatch" role="alert">
+              Mật khẩu xác nhận không khớp
+            </p>
           )}
 
           <button
