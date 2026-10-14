@@ -63,10 +63,20 @@ export const verifyTurnstile = async ({ token, expectedAction, remoteIp }) => {
   }
 
   const verifiedHostname = String(verification?.hostname || "").toLowerCase();
+  const isTestingKey = Boolean(verification?.metadata?.result_with_testing_key);
+
+  const isValidAction = isTestingKey && !verification?.action
+    ? true
+    : verification?.action === expectedAction;
+
+  const isValidHostname = isTestingKey && (verifiedHostname === "example.com" || verifiedHostname === "localhost")
+    ? true
+    : hostnames.includes(verifiedHostname);
+
   if (
     verification?.success !== true ||
-    verification?.action !== expectedAction ||
-    !hostnames.includes(verifiedHostname)
+    !isValidAction ||
+    !isValidHostname
   ) {
     throw createError(
       "Không thể xác minh bạn là người dùng hợp lệ.",

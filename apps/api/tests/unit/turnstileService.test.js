@@ -102,4 +102,27 @@ describe("turnstileService", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("accepts Cloudflare official test key response where action is omitted and hostname is example.com", async () => {
+    process.env.TURNSTILE_ENABLED = "true";
+    process.env.TURNSTILE_SECRET_KEY = "1x0000000000000000000000000000000AA";
+    process.env.TURNSTILE_EXPECTED_HOSTNAMES = "dronefood.io.vn,localhost";
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        hostname: "example.com",
+        metadata: { result_with_testing_key: true },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      verifyTurnstile({
+        token: "XXXX.DUMMY.TOKEN.XXXX",
+        expectedAction: "register",
+        remoteIp: "127.0.0.1",
+      })
+    ).resolves.toBeUndefined();
+  });
 });
