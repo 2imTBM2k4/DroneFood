@@ -14,6 +14,7 @@ services:
       dockerfile: apps/customer-web/Dockerfile
       args:
         VITE_API_URL: ${CUSTOMER_WEB_API_URL:-http://localhost:4000}
+        VITE_TURNSTILE_SITE_KEY: ${CUSTOMER_WEB_TURNSTILE_SITE_KEY:-${VITE_TURNSTILE_SITE_KEY:-}}
     container_name: dronefood-user
     ports:
       - "5173:80"
@@ -36,6 +37,9 @@ services:
     build:
       context: .
       dockerfile: apps/restaurant-web/Dockerfile
+      args:
+        VITE_API_URL: ${RESTAURANT_WEB_API_URL:-http://localhost:4000}
+        VITE_TURNSTILE_SITE_KEY: ${RESTAURANT_WEB_TURNSTILE_SITE_KEY:-${VITE_TURNSTILE_SITE_KEY:-}}
     container_name: dronefood-restaurant
     ports:
       - "5175:80"

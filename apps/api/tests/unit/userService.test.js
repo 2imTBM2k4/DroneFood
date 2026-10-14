@@ -137,13 +137,16 @@ describe("userService", () => {
       ).rejects.toThrow("chưa được kích hoạt");
     });
 
-    it("should reject non-existent email", async () => {
+    it("returns the generic credential error for a non-existent email", async () => {
       await expect(
         userService.loginUser({
           email: "nouser@test.com",
           password: "password123",
         })
-      ).rejects.toThrow("doesn't exist");
+      ).rejects.toMatchObject({
+        message: "Invalid credentials",
+        code: "INVALID_CREDENTIALS",
+      });
     });
 
     it("should reject wrong password", async () => {

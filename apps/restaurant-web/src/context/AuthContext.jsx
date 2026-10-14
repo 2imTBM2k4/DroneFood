@@ -141,13 +141,18 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (email, password) => {
+  const login = async (email, password, turnstileToken) => {
     try {
       setIsLoading(true);
       const response = await fetch(`${apiUrl}/api/user/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, portal: "restaurant" }),
+        body: JSON.stringify({
+          email,
+          password,
+          portal: "restaurant",
+          ...(turnstileToken && { turnstileToken }),
+        }),
       });
       const data = await response.json();
       if (data.success) {
@@ -165,7 +170,7 @@ export const AuthProvider = ({ children }) => {
           localStorage.removeItem("token");
           localStorage.removeItem("restaurantId");
           setUser(null);
-          return;
+          return { success: false, message: "Tài khoản không có quyền truy cập giao diện Nhà hàng." };
         }
         localStorage.setItem("token", token);
         const fetchedUser = await fetchUserInfo(token);
@@ -185,6 +190,7 @@ export const AuthProvider = ({ children }) => {
           localStorage.removeItem("restaurantId");
           setUser(null);
         }
+        return { success: true };
       } else {
         const msg = data.message || "Đăng nhập không thành công";
         notificationService.error(
@@ -192,6 +198,11 @@ export const AuthProvider = ({ children }) => {
           msg.includes("pending") ? "Tài khoản nhà hàng của bạn đang chờ quản trị viên duyệt." : msg,
           { audience: "restaurant", priority: "high", key: "restaurant-login-failed" }
         );
+        return {
+          success: false,
+          message: msg,
+          captchaRequired: Boolean(data.captchaRequired),
+        };
       }
     } catch (error) {
       console.error("Login error:", error);
@@ -209,11 +220,12 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem("token");
       localStorage.removeItem("restaurantId");
       setUser(null);
+      return { success: false, message: errorMsg };
     } finally {
       setIsLoading(false);
     }
   };
-  const register = async (formData) => {
+  const register = async (formData, turnstileToken) => {
     try {
       setIsLoading(true);
       const response = await fetch(`${apiUrl}/api/user/register`, {
@@ -222,6 +234,7 @@ export const AuthProvider = ({ children }) => {
         body: JSON.stringify({
           ...formData,
           role: "restaurant_owner",
+          turnstileToken,
         }),
       });
       const data = await response.json();

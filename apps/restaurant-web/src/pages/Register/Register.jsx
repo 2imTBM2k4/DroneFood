@@ -1,5 +1,6 @@
-import React, { useState, useContext } from "react";
+import React, { useCallback, useState, useContext } from "react";
 import { AuthContext } from "../../context/AuthContext";
+import TurnstileWidget from "../../components/auth/TurnstileWidget";
 import { useNavigate } from "react-router-dom";
 import { notificationService } from "@drone-food/web-ui/utils/toast";
 import "./Register.css";
@@ -15,6 +16,16 @@ const Register = () => {
   });
   const { register } = useContext(AuthContext);
   const navigate = useNavigate();
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+
+  const handleTurnstileError = useCallback(() => {
+    setTurnstileToken("");
+  }, []);
+
+  const handleTurnstileExpired = useCallback(() => {
+    setTurnstileToken("");
+  }, []);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -22,9 +33,18 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!turnstileToken) {
+      notificationService.error(
+        "Không thể đăng ký",
+        "Vui lòng hoàn tất bước xác minh bảo mật.",
+        { audience: "restaurant", priority: "high", key: "restaurant-register-captcha-required" }
+      );
+      return;
+    }
+
     try {
       const registerData = { ...formData, role: "restaurant_owner" };
-      const response = await register(registerData);
+      const response = await register(registerData, turnstileToken);
 
       if (response && response.success) {
         notificationService.success(
@@ -64,6 +84,9 @@ const Register = () => {
           actions: [{ label: "Thử lại", onClick: handleSubmit }],
         }
       );
+    } finally {
+      setTurnstileToken("");
+      setTurnstileResetKey((current) => current + 1);
     }
   };
 
@@ -121,7 +144,14 @@ const Register = () => {
           required
           minLength={8}
         />
-        <button type="submit">Register</button>
+        <TurnstileWidget
+          action="register"
+          onToken={setTurnstileToken}
+          onExpired={handleTurnstileExpired}
+          onError={handleTurnstileError}
+          resetKey={turnstileResetKey}
+        />
+        <button type="submit" disabled={!turnstileToken}>Register</button>
         <p>
           Already have an account?{" "}
           <a href="/login" onClick={() => navigate("/login")}>

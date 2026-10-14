@@ -1,9 +1,10 @@
-import { useContext, useState, useEffect, useRef } from "react";
+import { useCallback, useContext, useState, useEffect, useRef } from "react";
 import "./LoginPopup.css";
 import { StoreContext } from "../../context/StoreContext";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { notificationService } from "@drone-food/web-ui/utils/toast";
+import TurnstileWidget from "../auth/TurnstileWidget";
 import {
   Mail,
   ArrowLeft,
@@ -55,6 +56,9 @@ const LoginPopup = ({ setShowLogin }) => {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [captchaRequired, setCaptchaRequired] = useState(false);
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
 
   useEffect(() => {
     let timer;
@@ -136,22 +140,47 @@ const LoginPopup = ({ setShowLogin }) => {
     }
   };
 
+  const isTurnstileRequired = currState === "Sign Up" || captchaRequired;
+
+  const handleTurnstileToken = useCallback((token) => {
+    setTurnstileToken(token || "");
+    setLoginError(null);
+  }, []);
+
+  const handleTurnstileExpired = useCallback(() => {
+    setTurnstileToken("");
+  }, []);
+
+  const handleTurnstileError = useCallback(() => {
+    setTurnstileToken("");
+    setLoginError("Không thể tải bước xác minh bảo mật. Vui lòng thử lại.");
+  }, []);
+
   const onLogin = async (event) => {
     event.preventDefault();
     if (isSubmitting) return;
 
     setLoginError(null);
     setIsUnverifiedError(false);
+    if (isTurnstileRequired && !turnstileToken) {
+      setLoginError("Vui lòng hoàn tất bước xác minh bảo mật.");
+      return;
+    }
     setIsSubmitting(true);
 
     let newUrl = url;
     let postData;
     if (currState === "Login") {
       newUrl += "/api/user/login";
-      postData = { email: data.email, password: data.password, portal: "customer" };
+      postData = {
+        email: data.email,
+        password: data.password,
+        portal: "customer",
+        ...(turnstileToken && { turnstileToken }),
+      };
     } else {
       newUrl += "/api/user/register";
-      postData = { ...data, role: "user" };
+      postData = { ...data, role: "user", turnstileToken };
     }
 
     try {
@@ -193,6 +222,9 @@ const LoginPopup = ({ setShowLogin }) => {
         );
       }
     } catch (err) {
+      if (err?.response?.data?.captchaRequired) {
+        setCaptchaRequired(true);
+      }
       if (err?.response?.data?.isUnverified) {
         setIsUnverifiedError(true);
         const unverified = err.response.data.email || data.email;
@@ -235,6 +267,10 @@ const LoginPopup = ({ setShowLogin }) => {
         );
       }
     } finally {
+      if (isTurnstileRequired) {
+        setTurnstileToken("");
+        setTurnstileResetKey((current) => current + 1);
+      }
       setIsSubmitting(false);
     }
   };
@@ -588,6 +624,15 @@ const LoginPopup = ({ setShowLogin }) => {
             aria-invalid={!!loginError}
             aria-describedby={loginError ? "login-error" : undefined}
           />
+          {isTurnstileRequired && (
+            <TurnstileWidget
+              action={currState === "Sign Up" ? "register" : "login"}
+              onToken={handleTurnstileToken}
+              onExpired={handleTurnstileExpired}
+              onError={handleTurnstileError}
+              resetKey={turnstileResetKey}
+            />
+          )}
           {loginError && (
             <div className="apple-error-box">
               <div className="apple-error-header">

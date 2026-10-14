@@ -132,9 +132,12 @@ app.use((err, req, res, next) => {
       statusCode,
     }, "Unhandled server error occurred");
   }
-  res
-    .status(statusCode)
-    .json({ success: false, message: err.message || "Server error" });
+  res.status(statusCode).json({
+    success: false,
+    message: err.message || "Server error",
+    code: err.code || undefined,
+    captchaRequired: !!err.captchaRequired,
+  });
 });
 
 app.use((req, res) => {

@@ -1,5 +1,9 @@
 # --- Build stage ---
 FROM node:22.13-alpine AS build
+ARG VITE_API_URL=http://localhost:4000
+ENV VITE_API_URL=$VITE_API_URL
+ARG VITE_TURNSTILE_SITE_KEY
+ENV VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY
 WORKDIR /app
 COPY packages/web-ui/ ./packages/web-ui/
 COPY apps/restaurant-web/package*.json ./apps/restaurant-web/
