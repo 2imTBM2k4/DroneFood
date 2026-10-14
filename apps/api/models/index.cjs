@@ -46,6 +46,7 @@ const Notification = require("./notificationModel.cjs");
 const ExpoPushToken = require("./expoPushTokenModel.cjs");
 const PlatformVoucherFundingLedger = require("./platformVoucherFundingLedgerModel.cjs");
 const AuditLog = require("./auditLogModel.cjs");
+const LoginAttempt = require("./loginAttemptModel.cjs");
 
 module.exports = {
   User,
@@ -61,6 +62,7 @@ module.exports = {
   Drone,
   Cart,
   AuditLog,
+  LoginAttempt,
   ShipperProfile,
   ShipperDeposit,
   ShipperEarningsWallet,
