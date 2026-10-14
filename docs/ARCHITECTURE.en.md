@@ -891,9 +891,18 @@ A **404 handler** comes last: `Cannot <METHOD> <path>`.
 Only origins listed in `ALLOWED_ORIGINS`, with `credentials: true`. Socket.io uses the **same list**.
 
 ### 17.2 Rate limiting
-`express-rate-limit`: **10 requests / 15 minutes** on the sensitive routes — `register`, `login`, `forgot-password`, `reset-password`, `refresh-token`.
+`express-rate-limit`: **10 requests / 15 minutes** with separate limiters for `register`, `login`, recovery (`forgot-password`, `reset-password`, email/phone verification), and `refresh-token`. Separate quotas prevent login attempts from exhausting refresh-token or password-recovery capacity.
 
-### 17.3 Input validation
+### 17.3 Cloudflare Turnstile and credential-stuffing protection
+When `TURNSTILE_ENABLED=true`, the backend verifies a token at Cloudflare Siteverify before account creation. `POST /api/user/register` always requires a valid token with the `register` action.
+
+Login starts CAPTCHA-free. MongoDB stores TTL records for 15 minutes by **normalized email** and **IP**; after **five** failures for either subject, the next login request requires a `login` action token before the password is checked. A correct password clears both counters before role, portal, or email-activation checks. Credential failures share `code: "INVALID_CREDENTIALS"` so the API does not reveal whether an email exists; a required challenge adds `captchaRequired: true`. Missing, invalid, expired, wrong-action, or wrong-hostname tokens return `403` with `code: "CAPTCHA_VERIFICATION_FAILED"`.
+
+The API accepts only hostnames in `TURNSTILE_EXPECTED_HOSTNAMES`; production includes `dronefood.io.vn`, `restaurant.dronefood.io.vn`, and `api.dronefood.io.vn`. `TURNSTILE_SECRET_KEY` exists only in the API environment; `VITE_TURNSTILE_SITE_KEY`/`EXPO_PUBLIC_TURNSTILE_SITE_KEY` are public site keys. Widgets must reset after every request that sends a token because Turnstile tokens are single-use.
+
+**Rollout:** Customer Web and Restaurant Web support the widget. The approved immediate production rollout means mobile, until its WebView bridge task is completed, is blocked for registration and after the failed-login threshold.
+
+### 17.4 Input validation
 Every writing route goes through Joi with `stripUnknown: true`.
 
 **Mass-assignment protection:** fields not declared in the schema are **stripped**. This is why an owner cannot smuggle `isLocked`, `balance` or `owner` into an update to escalate privilege.

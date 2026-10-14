@@ -891,9 +891,18 @@ Sau đó là **404 handler** (đặt cuối cùng): `Cannot <METHOD> <path>`.
 Chỉ chấp nhận origin nằm trong `ALLOWED_ORIGINS`, `credentials: true`. Socket.io dùng **cùng danh sách**.
 
 ### 17.2 Rate limiting
-`express-rate-limit`: **10 request / 15 phút** cho các route nhạy cảm: `register`, `login`, `forgot-password`, `reset-password`, `refresh-token`.
+`express-rate-limit`: **10 request / 15 phút** với limiter riêng cho `register`, `login`, recovery (`forgot-password`, `reset-password`, email/phone verification) và `refresh-token`. Tách quota tránh login làm cạn quota refresh token hoặc luồng khôi phục mật khẩu.
 
-### 17.3 Validate đầu vào
+### 17.3 Cloudflare Turnstile và chống dò mật khẩu
+Khi `TURNSTILE_ENABLED=true`, backend xác minh token tại Cloudflare Siteverify trước khi tạo tài khoản. `POST /api/user/register` luôn cần token hợp lệ với action `register`.
+
+Đăng nhập giữ trải nghiệm không CAPTCHA ban đầu. Hệ thống lưu MongoDB TTL record trong 15 phút theo **email chuẩn hoá** và **IP**; sau **5** lỗi ở một trong hai subject, request đăng nhập tiếp theo cần token action `login` trước khi kiểm tra mật khẩu. Mật khẩu đúng sẽ xoá cả hai counter trước khi kiểm tra role, portal, hoặc email activation. Lỗi credentials dùng chung `code: "INVALID_CREDENTIALS"` để không lộ email có tồn tại hay không; khi thử thách cần thiết response thêm `captchaRequired: true`. Token thiếu, sai, hết hạn, action/hostname không khớp trả `403` với `code: "CAPTCHA_VERIFICATION_FAILED"`.
+
+API chỉ chấp nhận hostname từ `TURNSTILE_EXPECTED_HOSTNAMES`; production gồm `dronefood.io.vn`, `restaurant.dronefood.io.vn`, `api.dronefood.io.vn`. `TURNSTILE_SECRET_KEY` chỉ tồn tại ở API; `VITE_TURNSTILE_SITE_KEY`/`EXPO_PUBLIC_TURNSTILE_SITE_KEY` là site key công khai. Widget phải được reset sau mọi request đã gửi token vì token Turnstile dùng một lần.
+
+**Rollout:** Customer Web và Restaurant Web đã hỗ trợ widget. Theo quyết định bật production ngay, mobile chưa có WebView bridge sẽ bị chặn ở đăng ký và sau ngưỡng đăng nhập lỗi cho đến task mobile Turnstile tiếp theo.
+
+### 17.4 Validate đầu vào
 Mọi route ghi dữ liệu đều qua Joi với `stripUnknown: true`.
 
 **Chống mass-assignment:** field không khai báo trong schema **bị loại bỏ**. Nhờ vậy chủ quán không thể gửi kèm `isLocked`, `balance`, `owner` để leo thang đặc quyền.
