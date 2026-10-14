@@ -12,6 +12,11 @@ import sendEmail from "../utils/sendEmail.js";
 import { geocodeAddress } from "../utils/geocode.js";
 import { recordAudit } from "../utils/auditLog.js";
 import { ShipperProfile } from "../models/index.cjs";
+import {
+  clearLoginAttempts,
+  isCaptchaRequired,
+  recordFailedLogin,
+} from "./loginAttemptService.js";
 
 const maskEmail = (email = "") => {
   const [local, domain] = email.split("@");
@@ -26,17 +31,29 @@ const createRefreshToken = (id) => {
   return jwt.sign({ id, type: "refresh" }, process.env.JWT_SECRET, { expiresIn: "7d" });
 };
 
-export const loginUser = async ({ email, password, portal, clientType }) => {
+const invalidCredentialsError = async ({ email, ip }) => {
+  await recordFailedLogin({ email, ip });
+  const error = new AppError("Invalid credentials", 401);
+  error.code = "INVALID_CREDENTIALS";
+  error.captchaRequired = await isCaptchaRequired({ email, ip });
+  return error;
+};
+
+export const loginUser = async ({ email, password, portal, clientType, ip }) => {
   const user = await userRepo.findByEmail(email);
   if (!user) {
-    throw new AppError("User doesn't exist.", 401);
+    throw await invalidCredentialsError({ email, ip });
   }
-  if (user.locked) {
-    throw new AppError("Account is locked.", 403);
-  }
+
   const isMatch = await bcrypt.compare(password, user.password);
   if (!isMatch) {
-    throw new AppError("Invalid credentials", 401);
+    throw await invalidCredentialsError({ email, ip });
+  }
+
+  await clearLoginAttempts({ email, ip });
+
+  if (user.locked) {
+    throw new AppError("Account is locked.", 403);
   }
 
   if (user.role !== "admin" && user.isEmailVerified === false) {

@@ -31,6 +31,7 @@ export const registerSchema = Joi.object({
     .messages({
       "string.pattern.base": "Số điện thoại không hợp lệ",
     }),
+  turnstileToken: Joi.string().trim().max(4096).optional(),
 });
 
 export const loginSchema = Joi.object({
@@ -43,6 +44,7 @@ export const loginSchema = Joi.object({
   }),
   portal: Joi.string().valid("admin", "restaurant", "customer", "user", "shipper").optional(),
   clientType: Joi.string().valid("admin", "restaurant", "customer", "user", "shipper").optional(),
+  turnstileToken: Joi.string().trim().max(4096).optional(),
 });
 
 export const updateAddressSchema = Joi.object({

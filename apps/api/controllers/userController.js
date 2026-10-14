@@ -14,7 +14,7 @@ export const loginUser = async (req, res) => {
         portal = "customer";
       }
     }
-    const result = await userService.loginUser({ ...req.body, portal });
+    const result = await userService.loginUser({ ...req.body, portal, ip: req.ip });
     res.json(result);
   } catch (error) {
     const { recordAudit } = await import("../utils/auditLog.js");
@@ -24,6 +24,8 @@ export const loginUser = async (req, res) => {
       .json({
         success: false,
         message: error.message,
+        code: error.code || undefined,
+        captchaRequired: !!error.captchaRequired,
         isUnverified: !!error.isUnverified,
         email: error.email || undefined,
       });
@@ -37,7 +39,11 @@ export const registerUser = async (req, res) => {
   } catch (error) {
     res
       .status(error.statusCode || 500)
-      .json({ success: false, message: error.message });
+      .json({
+        success: false,
+        message: error.message,
+        code: error.code || undefined,
+      });
   }
 };
 
