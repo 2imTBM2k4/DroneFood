@@ -76,7 +76,7 @@ const ActiveOrderBar = () => {
         </span>
         <span>
           <strong>Đơn hàng · {statusLabel}</strong>
-          <small>#{order._id?.slice(-8).toUpperCase()}</small>
+          <small>#{order.orderCode || order._id?.slice(-8).toUpperCase()}</small>
         </span>
       </div>
       <button

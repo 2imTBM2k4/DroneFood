@@ -109,9 +109,7 @@ const RefundDialog = ({ refund, payoutDetails, onClose, onComplete }) => {
     }
   };
 
-  const orderCode = refund.order?._id
-    ? refund.order._id.slice(-8).toUpperCase()
-    : "—";
+  const orderCode = refund.order?.orderCode || (refund.order?._id ? refund.order._id.slice(-8).toUpperCase() : "—");
 
   return createPortal(
     <div className="refund-dialog-backdrop" onMouseDown={onClose} role="presentation">
@@ -499,7 +497,7 @@ const Refunds = ({ url }) => {
       }
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase().trim();
-      const orderCode = refund.order?._id ? refund.order._id.toLowerCase() : "";
+      const orderCode = (refund.order?.orderCode || refund.order?._id || "").toLowerCase();
       const customerName = refund.customer?.name ? refund.customer.name.toLowerCase() : "";
       const customerPhone = refund.customer?.phone ? refund.customer.phone.toLowerCase() : "";
       const bankName = refund.bank?.bankName ? refund.bank.bankName.toLowerCase() : "";
@@ -748,9 +746,7 @@ const Refunds = ({ url }) => {
             const statusConfig = STATUS_CONFIG[refund.status] || STATUS_CONFIG.requested;
             const StatusIcon = statusConfig.icon;
             const isPending = refund.status === "requested";
-            const orderCode = refund.order?._id
-              ? refund.order._id.slice(-8).toUpperCase()
-              : "—";
+            const orderCode = refund.order?.orderCode || (refund.order?._id ? refund.order._id.slice(-8).toUpperCase() : "—");
 
             return (
               <article key={refund._id} className="refund-item-card">

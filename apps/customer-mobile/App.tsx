@@ -856,7 +856,7 @@ function CustomerApp() {
         showToast({
           type: "success",
           title: "Đặt đơn thành công",
-          message: `Mã đơn hàng: #${res.orderId.slice(-6).toUpperCase()}`,
+          message: `Mã đơn hàng: #${res.orderCode || res.orderId.slice(-6).toUpperCase()}`,
         });
       }
     } catch (cause) {

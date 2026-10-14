@@ -27,7 +27,8 @@
     "jobs:expire-shipper-orders": "node jobs/expireShipperOrders.js",
     "lint": "eslint . --max-warnings 0",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "migrate:order-codes": "node seeds/migrateOrderCodes.cjs"
   },
   "author": "",
   "license": "ISC",

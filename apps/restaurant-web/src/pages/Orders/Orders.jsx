@@ -158,7 +158,7 @@ const Orders = ({ url }) => {
     }
 
     socket.on("newOrder", (newOrder) => {
-      const orderCode = newOrder._id?.slice(-8)?.toUpperCase() || "mới";
+      const orderCode = newOrder.orderCode || newOrder._id?.slice(-8)?.toUpperCase() || "mới";
       notificationService.info(
         "Có đơn hàng mới",
         `Đơn #${orderCode} - ${formatVND(newOrder.totalPrice)}`,
@@ -343,7 +343,7 @@ const Orders = ({ url }) => {
                 <img src={assets.parcel_icon} alt="Order" />
                 <div className="order-meta">
                   <span className="order-id">
-                    Order #{order._id?.slice(-8)?.toUpperCase()}
+                    Order #{order.orderCode || order._id?.slice(-8)?.toUpperCase()}
                   </span>
                   <span className="order-date">
                     {formatDate(order.createdAt || order.orderDate)}
@@ -469,7 +469,7 @@ const Orders = ({ url }) => {
             </div>
 
             <p className="cancel-modal-lead">
-              Order #{cancelTarget._id?.slice(-8)?.toUpperCase()} for{" "}
+              Order #{cancelTarget.orderCode || cancelTarget._id?.slice(-8)?.toUpperCase()} for{" "}
               <strong>
                 {cancelTarget.shippingAddress?.fullName || "the customer"}
               </strong>{" "}

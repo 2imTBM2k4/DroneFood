@@ -34,7 +34,7 @@ export const CompletedOrderDetailScreen: React.FC<CompletedOrderDetailScreenProp
   const isShipper = order.deliveryMethod === "shipper";
 
   return <View style={styles.container}>
-    <Header title={`Đơn #${order._id.slice(-6).toUpperCase()}`} subtitle="Đã giao thành công" onBack={onBack} />
+    <Header title={`Đơn #${order.orderCode || order._id.slice(-6).toUpperCase()}`} subtitle="Đã giao thành công" onBack={onBack} />
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <GlassSurface tone="soft" contentStyle={styles.successCard}>
         <View style={styles.successIcon}><Icon name={isShipper ? "motorcycle" : "drone"} size={25} color={colors.primary} /></View>

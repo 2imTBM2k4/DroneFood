@@ -1,4 +1,22 @@
 const mongoose = require("mongoose");
+const crypto = require("crypto");
+
+const generateOrderCode = (date = new Date()) => {
+  const validDate = date instanceof Date && !isNaN(date.getTime()) ? date : new Date(date || Date.now());
+  const finalDate = !isNaN(validDate.getTime()) ? validDate : new Date();
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  });
+  const parts = formatter.formatToParts(finalDate);
+  const day = parts.find((p) => p.type === "day")?.value || "";
+  const month = parts.find((p) => p.type === "month")?.value || "";
+  const year = parts.find((p) => p.type === "year")?.value || "";
+  const randomSuffix = crypto.randomInt(100000000, 1000000000);
+  return `${day}${month}${year}-${randomSuffix}`;
+};
 
 // Snapshot of a pick at order time — the menu may change afterwards, so the
 // surcharge is frozen here rather than looked up again later.
@@ -270,6 +288,13 @@ const orderSchema = new mongoose.Schema(
     // matched safely and idempotently.
     // Omit this property (rather than store null) for COD/VNPay records so
     // the sparse unique index permits any number of non-PayOS orders.
+    orderCode: {
+      type: String,
+      default: function () { return generateOrderCode(this.createdAt || new Date()); },
+      unique: true,
+      sparse: true,
+      index: true,
+    },
     payosOrderCode: { type: Number, default: undefined, unique: true, sparse: true },
     payosPaymentLinkId: { type: String, default: null },
     refundStatus: { type: String, enum: ["not_required", "requested", "paid", "rejected", "failed"], default: "not_required" },
@@ -373,4 +398,13 @@ const orderSchema = new mongoose.Schema(
 orderSchema.index({ pickupLocation: "2dsphere" });
 orderSchema.index({ deliveryMethod: 1, shipperAssignmentStatus: 1, shipperAssignmentDeadlineAt: 1 });
 
-module.exports = mongoose.models.Order || mongoose.model("Order", orderSchema);
+orderSchema.pre("validate", function (next) {
+  if (!this.orderCode) {
+    this.orderCode = generateOrderCode(this.createdAt || new Date());
+  }
+  next();
+});
+
+const Order = mongoose.models.Order || mongoose.model("Order", orderSchema);
+Order.generateOrderCode = generateOrderCode;
+module.exports = Order;

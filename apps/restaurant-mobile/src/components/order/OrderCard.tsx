@@ -36,7 +36,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
       <View style={styles.headerRow}>
         <View>
           <Text style={styles.orderId}>
-            #{order._id.slice(-6).toUpperCase()}
+            #{order.orderCode || order._id.slice(-6).toUpperCase()}
           </Text>
           <Text style={styles.orderTime}>
             {new Date(order.createdAt).toLocaleTimeString("vi-VN", {

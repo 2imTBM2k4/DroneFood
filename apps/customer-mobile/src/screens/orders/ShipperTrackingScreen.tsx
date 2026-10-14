@@ -73,7 +73,7 @@ export const ShipperTrackingScreen: React.FC<ShipperTrackingScreenProps> = ({ or
   const itemsPrice = order.itemsPrice ?? calculatedItemsPrice;
 
   return <View style={styles.container}>
-    <Header title={`Theo dõi tài xế #${order._id.slice(-6).toUpperCase()}`} subtitle="Vị trí và lộ trình được cập nhật trực tiếp" onBack={onBack} />
+    <Header title={`Theo dõi tài xế #${order.orderCode || order._id.slice(-6).toUpperCase()}`} subtitle="Vị trí và lộ trình được cập nhật trực tiếp" onBack={onBack} />
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.mapWrap}>
         <MapView style={styles.map} initialRegion={mapRegion}>

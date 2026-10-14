@@ -107,7 +107,7 @@ describe("mobile history APIs", () => {
       transactionType: "voucher_payment",
       paymentMethod: "VOUCHER",
       amount: 0,
-      title: `Thanh toán bằng voucher - Đơn #${order._id.toString().slice(-6).toUpperCase()}`,
+      title: `Thanh toán bằng voucher - Đơn #${order.orderCode}`,
     }));
   });
 });

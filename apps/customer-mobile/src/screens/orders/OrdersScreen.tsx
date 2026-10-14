@@ -44,7 +44,7 @@ export const OrdersScreen: React.FC<OrdersScreenProps> = ({ orders, loading, onR
           return (
             <GlassSurface tone="strong" contentStyle={styles.card}>
               <View style={styles.cardTop}>
-                <View><Text style={styles.code}>#{item._id.slice(-6).toUpperCase()}</Text><Text style={styles.date}>{new Date(item.createdAt).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}</Text></View>
+                <View><Text style={styles.code}>#{item.orderCode || item._id.slice(-6).toUpperCase()}</Text><Text style={styles.date}>{new Date(item.createdAt).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}</Text></View>
                 <Badge status={item.orderStatus} />
               </View>
 

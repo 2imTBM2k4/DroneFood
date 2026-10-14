@@ -9,12 +9,12 @@ const safelyNotify = async (io, draft) => {
 const orderPath = (orderId) => `/myorders/${orderId}`;
 
 export const notifyRestaurantNewOrder = async (io, orderId) => {
-  const order = await Order.findById(orderId).populate("restaurantId", "owner").lean();
+  const order = await Order.findById(orderId).populate("restaurantId", "owner").select("_id orderCode restaurantId").lean();
   const ownerId = order?.restaurantId?.owner;
   if (!ownerId) return null;
   return safelyNotify(io, {
     recipient: ownerId, role: "restaurant_owner", type: "order.new",
-    title: "Có đơn hàng mới", body: `Đơn #${String(order._id).slice(-6).toUpperCase()} đang chờ xử lý.`,
+    title: "Có đơn hàng mới", body: `Đơn #${order?.orderCode || String(order?._id).slice(-6).toUpperCase()} đang chờ xử lý.`,
     data: { orderId: String(order._id), path: "/orders" }, eventKey: `order:${order._id}:restaurant:new`,
   });
 };
@@ -41,11 +41,11 @@ export const notifyCustomerOrderStatus = async (io, orderId) => {
 };
 
 export const notifyCustomerPaymentConfirmed = async (io, orderId) => {
-  const order = await Order.findById(orderId).select("user").lean();
+  const order = await Order.findById(orderId).select("user orderCode").lean();
   if (!order?.user) return null;
   return safelyNotify(io, {
     recipient: order.user, role: "user", type: "payment.confirmed", title: "Thanh toán thành công",
-    body: `Đơn #${String(order._id).slice(-6).toUpperCase()} đã được xác nhận thanh toán.`,
+    body: `Đơn #${order?.orderCode || String(order?._id).slice(-6).toUpperCase()} đã được xác nhận thanh toán.`,
     data: { orderId: String(order._id), path: orderPath(order._id) }, eventKey: `order:${order._id}:payment:confirmed`,
   });
 };
@@ -62,9 +62,9 @@ export const notifyCustomerShipperAccepted = async (io, orderId) => {
 
 export const notifyShippersNewOrder = async (io, orderId, shipperIds) => {
   if (!shipperIds?.length) return [];
-  const order = await Order.findById(orderId).select("_id").lean();
+  const order = await Order.findById(orderId).select("_id orderCode").lean();
   if (!order) return [];
-  const shortId = String(order._id).slice(-6).toUpperCase();
+  const shortId = order?.orderCode || String(order?._id).slice(-6).toUpperCase();
   return Promise.all(shipperIds.map((shipperId) => safelyNotify(io, {
     recipient: shipperId,
     role: "shipper",

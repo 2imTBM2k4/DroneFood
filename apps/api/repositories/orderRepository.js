@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 // backend/repositories/orderRepository.js
 import { Order } from "../models/index.cjs";
 

@@ -270,7 +270,7 @@ const MyOrders = () => {
       // Search query filter
       if (searchQuery.trim()) {
         const query = searchQuery.trim().toLowerCase();
-        const matchesId = order._id?.toLowerCase().includes(query);
+        const matchesId = (order.orderCode || order._id)?.toLowerCase().includes(query);
         const matchesRestaurant = order.restaurantId?.name?.toLowerCase().includes(query);
         const matchesItem = order.orderItems?.some((item) => item.name?.toLowerCase().includes(query));
         return matchesId || matchesRestaurant || matchesItem;
@@ -440,7 +440,7 @@ const MyOrders = () => {
                     colorClass: "status-default",
                   };
                   const isDrone = order.deliveryMethod === "drone";
-                  const orderCode = order._id.slice(-8).toUpperCase();
+                  const orderCode = order.orderCode || order._id.slice(-8).toUpperCase();
                   const orderDate = formatDate(order.createdAt || order.orderDate);
                   const restaurantName = order.restaurantId?.name || "Nhà hàng đối tác";
                   const restaurantImage = getRestaurantImage(order.restaurantId);

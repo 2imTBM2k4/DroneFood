@@ -116,7 +116,7 @@ export const DroneTrackingScreen: React.FC<DroneTrackingScreenProps> = ({
   return (
     <View style={styles.container}>
       <Header
-        title={`Đơn #${order._id.slice(-6).toUpperCase()}`}
+        title={`Đơn #${order.orderCode || order._id.slice(-6).toUpperCase()}`}
         subtitle={isDrone ? "Giao hàng bằng Drone" : "Giao bằng Shipper"}
         onBack={onBack}
       />

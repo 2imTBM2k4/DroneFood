@@ -391,7 +391,7 @@ const OrderDetail = () => {
   const liveRoutePositions = routeUnavailable ? [] : routePositions(order.tracking?.route);
   const remainingMinutes = routeUnavailable ? null : etaMinutes(order.tracking?.route);
 
-  const orderCode = order._id.slice(-8).toUpperCase();
+  const orderCode = order.orderCode || order._id.slice(-8).toUpperCase();
   const isDrone = order.deliveryMethod === "drone";
   const statusClass = STATUS_CLASSES[order.orderStatus] || "status-default";
 

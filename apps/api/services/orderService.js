@@ -487,7 +487,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
       vnp_ExpireDate: vnpayDate(expiresAt),
       vnp_IpAddr: vnpayIpAddress(clientIp),
       vnp_Locale: "vn",
-      vnp_OrderInfo: `Thanh toan don hang ${newOrder._id}`,
+      vnp_OrderInfo: `Thanh toan don hang ${newOrder.orderCode || newOrder._id}`,
       vnp_OrderType: "other",
       vnp_ReturnUrl: returnUrl,
       vnp_TmnCode: tmnCode,
@@ -510,7 +510,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
       const paymentLink = await payos.payOS.paymentRequests.create({
         orderCode,
         amount: Math.round(payableTotal),
-        description: orderPaymentDescription(newOrder._id),
+        description: orderPaymentDescription(newOrder._id, newOrder.orderCode),
         items: [
           ...orderItems.map((item) => ({ name: item.name.slice(0, 50), quantity: item.quantity, price: Math.round(item.price) })),
           ...(totals.shippingPrice > 0 ? [{ name: "Phi giao hang", quantity: 1, price: Math.round(totals.shippingPrice) }] : []),
@@ -565,6 +565,7 @@ export const placeOrder = async (user, orderData, clientIp) => {
     success: true,
     ...(paymentUrl && { paymentUrl, checkoutUrl: paymentUrl }),
     orderId: newOrder._id,
+    orderCode: newOrder.orderCode,
     restaurantId: (newOrder.restaurantId || newOrder.branchId || "").toString(),
     branchId: newOrder.branchId?.toString?.() || null,
     merchantId: newOrder.merchantId?.toString?.() || null,

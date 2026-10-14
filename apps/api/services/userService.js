@@ -785,7 +785,7 @@ export const getUserTransactions = async (userId) => {
       events.push({
         _id: `order_${o._id}`,
         transactionType: voucherSettled ? "voucher_payment" : "payos_payment",
-        title: `${voucherSettled ? "Thanh toán bằng voucher" : "Thanh toán PayOS"} - Đơn #${o._id.toString().slice(-6).toUpperCase()}`,
+        title: `${voucherSettled ? "Thanh toán bằng voucher" : "Thanh toán PayOS"} - Đơn #${o.orderCode || o._id.toString().slice(-6).toUpperCase()}`,
         // This is the customer's cash movement, not the gross order value.
         amount: voucherSettled ? 0 : -o.totalPrice,
         status: o.isPaid ? "paid" : o.orderStatus,
@@ -801,7 +801,7 @@ export const getUserTransactions = async (userId) => {
       events.push({
         _id: `refund_${r._id}`,
         transactionType: "payos_refund",
-        title: `Hoàn tiền PayOS - Đơn #${r.order ? r.order.toString().slice(-6).toUpperCase() : ""}`,
+        title: `Hoàn tiền PayOS - Đơn #${r.order ? (r.order.orderCode || r.order.toString().slice(-6).toUpperCase()) : ""}`,
         amount: r.amount,
         status: r.status,
         paymentMethod: "PAYOS",

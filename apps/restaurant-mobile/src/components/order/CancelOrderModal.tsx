@@ -57,7 +57,7 @@ export const CancelOrderModal: React.FC<CancelOrderModalProps> = ({
       <View style={styles.backdrop}>
         <View style={styles.dialog}>
           <Text style={styles.title}>
-            Từ chối đơn #{order._id.slice(-6).toUpperCase()}
+            Từ chối đơn #{order.orderCode || order._id.slice(-6).toUpperCase()}
           </Text>
           <Text style={styles.subtitle}>
             Chọn hoặc nhập lý do để thông báo rõ cho khách hàng:

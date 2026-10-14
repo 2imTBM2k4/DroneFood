@@ -272,6 +272,7 @@ const Orders = ({ url }) => {
       <div className="order-list">
         {orders.map((order, index) => (
           <div key={index} className="order-item">
+            <p style={{ fontWeight: 700, color: "#1e293b", margin: "0 0 6px 0" }}>Đơn #{order.orderCode || order._id?.slice(-8)?.toUpperCase()}</p>
             <img src={assets.parcel_icon} alt="Order" />
             <div>
               <p className="order-item-food">
@@ -439,7 +440,7 @@ const Orders = ({ url }) => {
             </div>
             
             <div className="modal-body">
-              <p>Order ID: {selectedOrder?._id}</p>
+              <p>Order: #{selectedOrder?.orderCode || selectedOrder?._id}</p>
               <p>Customer: {selectedOrder?.shippingAddress?.fullName}</p>
               {modalMode === "reassign" && (
                 <p className="modal-note">

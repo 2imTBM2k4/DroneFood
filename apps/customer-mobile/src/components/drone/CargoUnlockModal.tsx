@@ -55,7 +55,7 @@ export const CargoUnlockModal: React.FC<CargoUnlockModalProps> = ({
       visible={visible}
       onClose={onClose}
       title="Mở Khoang Hàng Drone"
-      subtitle={`Đơn hàng #${order._id.slice(-6).toUpperCase()}`}
+      subtitle={`Đơn hàng #${order.orderCode || order._id.slice(-6).toUpperCase()}`}
     >
       <View style={styles.container}>
         <View style={styles.qrCard}>
