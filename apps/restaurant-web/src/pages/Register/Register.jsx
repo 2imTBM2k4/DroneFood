@@ -1,7 +1,7 @@
 import React, { useCallback, useState, useContext } from "react";
 import { AuthContext } from "../../context/AuthContext";
 import TurnstileWidget from "../../components/auth/TurnstileWidget";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { notificationService } from "@drone-food/web-ui/utils/toast";
 import "./Register.css";
 
@@ -153,10 +153,7 @@ const Register = () => {
         />
         <button type="submit" disabled={!turnstileToken}>Register</button>
         <p>
-          Already have an account?{" "}
-          <a href="/login" onClick={() => navigate("/login")}>
-            Login here
-          </a>
+          Already have an account? <Link to="/login">Login here</Link>
         </p>
       </form>
     </div>

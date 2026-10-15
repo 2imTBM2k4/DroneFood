@@ -301,7 +301,8 @@ const List = ({ url }) => {
                   src={getImgSrc(item.image)}
                   alt={item.name}
                   onError={(e) => {
-                    e.target.src = "/placeholder.jpg";
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = "/placeholder.jpg";
                   }}
                 />
                 <p className="item-name">{item.name}</p>
@@ -332,7 +333,7 @@ const List = ({ url }) => {
         </div>
       </div>
 
-      {pendingDelete && (
+      {pendingDelete && createPortal(
         <div
           className="edit-modal"
           onClick={() => !deleting && setPendingDelete(null)}
@@ -370,7 +371,8 @@ const List = ({ url }) => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {editingProduct && createPortal(

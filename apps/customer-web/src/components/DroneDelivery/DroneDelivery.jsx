@@ -14,6 +14,7 @@ import QRScanner from "../QRScanner/QRScanner";
 import "leaflet/dist/leaflet.css";
 import "./DroneDelivery.css";
 import { API_URL } from "../../config/api";
+import droneImg from "../../assets/drone.png";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -57,7 +58,7 @@ const createStraightPath = (start, end, numPoints = 100) => {
 };
 
 const droneIcon = L.icon({
-  iconUrl: "./../src/assets/drone.png",
+  iconUrl: droneImg,
   iconSize: [25, 41],
   iconAnchor: [12, 41],
 });

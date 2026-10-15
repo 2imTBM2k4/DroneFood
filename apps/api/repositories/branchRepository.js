@@ -38,7 +38,7 @@ export const deleteById = async (id, options = {}) => {
 
 export const findAll = async (
   filter = {},
-  { page, limit, sort, sortBy, order, q = "" } = {}
+  { page, limit, sort, sortBy, order, q = "", includeApplication = false } = {}
 ) => {
   const match = { ...filter };
   const queryText = String(q).trim();
@@ -66,6 +66,8 @@ export const findAll = async (
       .populate("managerUserIds", "name email")
       .sort(resolvedSort);
 
+    if (includeApplication) query = query.select("+droneDeliveryApplication");
+
     if (page && limit) {
       const total = await Branch.countDocuments(match);
       const data = await query.skip((page - 1) * limit).limit(limit);
@@ -90,6 +92,7 @@ export const findAll = async (
   );
   const basePipeline = [
     { $match: match },
+    ...(!includeApplication ? [{ $unset: "droneDeliveryApplication" }] : []),
     {
       $lookup: {
         from: "merchants",
@@ -199,6 +202,7 @@ export const findNearbyBranchesWithMerchant = async ({
           "merchant.status": "active",
         },
       },
+      { $unset: "droneDeliveryApplication" },
     ]);
 
   try {

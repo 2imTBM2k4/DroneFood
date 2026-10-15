@@ -24,6 +24,7 @@ import DroneDelivery from "../../components/DroneDelivery/DroneDelivery";
 import { formatVND } from "@drone-food/web-ui/utils/money";
 import ConfirmModal from "@drone-food/web-ui/components/ConfirmModal";
 import "./OrderDetail.css";
+import { usePaymentVerification } from "../../hooks/usePaymentVerification";
 
 // Setup Leaflet default marker icons
 delete L.Icon.Default.prototype._getIconUrl;
@@ -148,6 +149,8 @@ const OrderDetail = () => {
     }
   }, [customerApi, id]);
 
+  const { checkPayment, checkingOrderId } = usePaymentVerification(load, id);
+
   useEffect(() => {
     load();
   }, [load]);
@@ -227,7 +230,7 @@ const OrderDetail = () => {
   };
 
   const retryPayosPayment = async () => {
-    if (!order || retryingPayment) return;
+    if (!order || retryingPayment || checkingOrderId) return;
     setRetryingPayment(true);
     try {
       const response = await customerApi.post("/api/order/retry-payos", { orderId: order._id });
@@ -397,7 +400,7 @@ const OrderDetail = () => {
 
   // Build steps for progress stepper
   const isDelivered = order.orderStatus === "delivered";
-  const isDelivering = order.orderStatus === "delivering";
+  const isDelivering = ["delivering", "arrived_at_delivery"].includes(order.orderStatus);
   const isPreparing = order.orderStatus === "preparing";
   const isCancelled = order.orderStatus === "cancelled";
   const canRetryPayosPayment =
@@ -405,7 +408,7 @@ const OrderDetail = () => {
     !order.isPaid &&
     order.orderStatus === "pending_payment";
   const isCancellationLockedByShipper =
-    hasShipperAcceptedOrder(order) && ["pending", "preparing", "delivering"].includes(order.orderStatus);
+    hasShipperAcceptedOrder(order) && ["pending", "preparing", "delivering", "arrived_at_delivery"].includes(order.orderStatus);
 
   return (
     <main className="order-detail-page">
@@ -459,7 +462,7 @@ const OrderDetail = () => {
                 type="button"
                 className="btn-retry-payos"
                 onClick={retryPayosPayment}
-                disabled={retryingPayment}
+                disabled={retryingPayment || Boolean(checkingOrderId)}
                 aria-busy={retryingPayment}
               >
                 <span>{retryingPayment ? "Đang tạo link…" : "Thanh toán lại"}</span>
@@ -950,13 +953,22 @@ const OrderDetail = () => {
                   <div className="retry-payment-callout" role="status">
                     <div>
                       <strong>Đơn hàng đang chờ thanh toán</strong>
-                      <p>Liên kết trước có thể đã hết hạn hoặc bị hủy. Bạn có thể tạo liên kết PayOS mới cho đơn này.</p>
+                      <p>Đã chuyển khoản? Hãy kiểm tra thanh toán trước, không thanh toán lại. Chỉ tạo liên kết mới nếu bạn chưa trả tiền.</p>
                     </div>
                     <button
                       type="button"
                       className="btn-retry-payment-detail"
+                      onClick={() => checkPayment(order._id)}
+                      disabled={Boolean(checkingOrderId) || retryingPayment}
+                      aria-busy={Boolean(checkingOrderId)}
+                    >
+                      {checkingOrderId ? "Đang kiểm tra…" : "Kiểm tra thanh toán"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-retry-payment-detail"
                       onClick={retryPayosPayment}
-                      disabled={retryingPayment}
+                      disabled={retryingPayment || Boolean(checkingOrderId)}
                       aria-busy={retryingPayment}
                     >
                       <span>{retryingPayment ? "Đang tạo link…" : "Thanh toán lại"}</span>

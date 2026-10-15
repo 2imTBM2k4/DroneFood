@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import axios from "axios";
 import { notificationService } from "@drone-food/web-ui/utils/toast";
 import ConfirmModal from "@drone-food/web-ui/components/ConfirmModal";
@@ -560,7 +561,7 @@ const Drones = ({ url }) => {
       )}
 
       {/* MODAL LỊCH SỬ GIAO HÀNG */}
-      {showHistoryModal && selectedDroneHistory && (
+      {showHistoryModal && selectedDroneHistory && createPortal(
         <div className="modal-overlay" onClick={handleCloseHistoryModal}>
           <div className="modal-content history-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -601,11 +602,12 @@ const Drones = ({ url }) => {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* MODAL THÊM / SỬA DRONE */}
-      {showModal && (
+      {showModal && createPortal(
         <div className="modal-overlay" onClick={handleCloseModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -685,7 +687,8 @@ const Drones = ({ url }) => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <ConfirmModal

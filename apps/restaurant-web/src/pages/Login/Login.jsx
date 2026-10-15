@@ -1,4 +1,5 @@
 import React, { useCallback, useState, useContext } from "react";
+import { Link } from "react-router-dom";
 import { AuthContext } from "../../context/AuthContext";
 import TurnstileWidget from "../../components/auth/TurnstileWidget";
 import "./Login.css";
@@ -60,7 +61,7 @@ const Login = () => {
         )}
         <button type="submit" disabled={captchaRequired && !turnstileToken}>Login</button>
         <p>
-          Don't have an account? <a href="/register">Register now</a>
+          Don't have an account? <Link to="/register">Register now</Link>
         </p>
       </form>
     </div>

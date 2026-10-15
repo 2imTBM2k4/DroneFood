@@ -374,8 +374,58 @@
   width: min(360px, calc(100vw - var(--container-pad) - var(--container-pad)));
 }
 
+.apple-mobile-auth-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 6px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background-color: var(--apple-primary);
+  color: #fff;
+  font-family: var(--font-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.18s ease;
+}
+
+.apple-mobile-auth-btn:hover {
+  background-color: var(--apple-primary-focus);
+}
+
+.apple-mobile-user-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.apple-mobile-user-link,
+.apple-mobile-logout {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--apple-hairline-soft);
+  text-align: left;
+  font-family: var(--font-text);
+  cursor: pointer;
+}
+
+.apple-mobile-logout {
+  color: var(--danger) !important;
+}
+
 /* ── Responsive ───────────────────────────────────────────── */
 @media (max-width: 768px) {
+  .apple-nav-actions .btn-apple-dark-utility {
+    display: none;
+  }
+
   .apple-navbar-wrapper.scrolled {
     width: calc(100% - 16px);
   }

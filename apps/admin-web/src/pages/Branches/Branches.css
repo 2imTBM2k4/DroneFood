@@ -406,6 +406,371 @@
 .branch-lock-dialog-footer { display: flex; justify-content: flex-end; gap: 9px; margin-top: 24px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
+/* ── Drone Delivery Column & Status Pills in Table ──────────────────── */
+.branch-drone-cell {
+  vertical-align: middle;
+}
+
+.branch-drone-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.drone-app-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+.drone-app-pill--approved {
+  background: var(--success-bg, #ecfdf5);
+  color: var(--success-text, #065f46);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.drone-app-pill--pending {
+  background: var(--warning-bg, #fffbeb);
+  color: var(--warning-text, #92400e);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.drone-app-pill--rejected {
+  background: var(--danger-bg, #fef2f2);
+  color: var(--danger-text, #991b1b);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.drone-app-pill--not_registered {
+  background: var(--background-secondary, #f3f4f6);
+  color: var(--text-secondary, #6b7280);
+  border: 1px solid var(--border-color, #e5e7eb);
+}
+
+/* ── Admin Drone Approval Section in Detail Modal ──────────────────── */
+.admin-drone-section {
+  background: var(--card-bg, #ffffff);
+  border-radius: var(--radius-md);
+  margin-top: 24px;
+}
+
+.admin-drone-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.admin-drone-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-drone-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--accent-light, #eff6ff);
+  color: var(--accent-color, #2563eb);
+  flex-shrink: 0;
+}
+
+.admin-drone-title h3 {
+  margin: 0 0 2px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-color);
+}
+
+.admin-drone-title p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Empty State Card */
+.admin-drone-empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 16px;
+  background: var(--background-secondary, #f9fafb);
+  border: 1px dashed var(--border-color, #e5e7eb);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* Info Cards */
+.admin-drone-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-drone-info-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.admin-drone-card {
+  padding: 12px 14px;
+  background: var(--background-secondary, #f9fafb);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-drone-card--wide {
+  grid-column: 1 / -1;
+}
+
+.admin-drone-card-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+}
+
+.admin-drone-card-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-color);
+}
+
+.admin-drone-card-value span {
+  word-break: break-word;
+}
+
+.admin-drone-coords {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.admin-drone-coords strong {
+  color: var(--text-color);
+  font-family: var(--font-mono);
+}
+
+.admin-drone-handover-notes {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-color);
+  line-height: 1.5;
+}
+
+.admin-drone-handover-notes p {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.admin-drone-meta-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 4px 2px;
+}
+
+/* Past Review Decision Box */
+.admin-drone-past-reason {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.admin-drone-past-reason--approved {
+  background: var(--success-bg, #ecfdf5);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: var(--success-text, #065f46);
+}
+
+.admin-drone-past-reason--rejected {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.admin-drone-past-reason--pending {
+  background: var(--warning-bg, #fffbeb);
+  border-color: #fde68a;
+  color: var(--warning-text, #92400e);
+}
+
+.admin-drone-past-reason-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.admin-drone-past-reason p {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Pending Review Action Panel */
+.admin-drone-review-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid #fde68a;
+  background: #fffdf5;
+}
+
+.admin-drone-review-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #92400e;
+  line-height: 1.4;
+}
+
+.admin-drone-reason-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-drone-reason-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-color);
+}
+
+.admin-drone-reason-header em {
+  font-weight: 400;
+  font-style: normal;
+  color: var(--text-secondary);
+}
+
+.admin-drone-reason-header small {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.admin-drone-reason-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg, #ffffff);
+  color: var(--text-color);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.admin-drone-reason-field textarea:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.admin-drone-review-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-sm);
+  color: #b91c1c;
+  font-size: 12px;
+}
+
+.admin-drone-review-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.admin-drone-reject-btn,
+.admin-drone-approve-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.admin-drone-reject-btn {
+  background: var(--card-bg, #ffffff);
+  border: 1px solid #fca5a5;
+  color: #dc2626;
+}
+
+.admin-drone-reject-btn:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #ef4444;
+}
+
+.admin-drone-reject-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.admin-drone-approve-btn {
+  background: #059669;
+  border: 1px solid #047857;
+  color: #ffffff;
+}
+
+.admin-drone-approve-btn:hover:not(:disabled) {
+  background: #047857;
+}
+
+.admin-drone-approve-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 @media (max-width: 1040px) { .branches-toolbar { grid-template-columns: minmax(240px, 1fr) repeat(2, minmax(140px, 180px)); } .branch-refresh { grid-column: 1 / -1; justify-self: end; } }
 @media (max-width: 760px) {
   .branches-page { padding-top: 4px; }

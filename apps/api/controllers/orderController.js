@@ -7,16 +7,20 @@ const notifyPaidOrder = async (req, result) => {
   if (!result.newlyPaid) return;
   const { Order } = await import("../models/index.cjs");
   const { nearbyAvailableShipperIds } = await import("../services/shipperService.js");
-  const order = await Order.findById(result.orderId).select("restaurantId deliveryMethod pickupLocation shipperAssignmentDeadlineAt");
+  const order = await Order.findById(result.orderId).select("restaurantId deliveryMethod pickupLocation shipperAssignmentDeadlineAt orderStatus");
   if (!order) return;
-  req.app.get("io")?.to(`restaurant_${order.restaurantId}`).emit("newOrder", result.orderId);
+  const io = req.app.get("io");
   await Promise.all([
-    notifyRestaurantNewOrder(req.app.get("io"), result.orderId),
-    notifyCustomerPaymentConfirmed(req.app.get("io"), result.orderId),
+    notifyCustomerPaymentConfirmed(io, result.orderId),
+    emitCustomerOrderUpdate(io, result.orderId),
   ]);
+  if (result.canFulfill === false || result.startsOrder === false ||
+      ["cancelled", "refund_pending", "delivered"].includes(order.orderStatus)) return;
+  io?.to(`restaurant_${order.restaurantId}`).emit("newOrder", result.orderId);
+  await notifyRestaurantNewOrder(io, result.orderId);
   if (order.deliveryMethod === "shipper") {
     const shipperIds = await nearbyAvailableShipperIds(order.pickupLocation);
-    shipperIds.forEach((shipperId) => req.app.get("io").to(`shipper_${shipperId}`).emit("shipperOrderOffer", {
+    shipperIds.forEach((shipperId) => io?.to(`shipper_${shipperId}`).emit("shipperOrderOffer", {
       orderId: result.orderId, expiresAt: order.shipperAssignmentDeadlineAt,
     }));
     await notifyShippersNewOrder(req.app.get("io"), result.orderId, shipperIds);
@@ -70,7 +74,8 @@ export const quoteDelivery = async (req, res) => {
 export const verifyOrder = async (req, res) => {
   try {
     const result = await orderService.verifyOrder(req.user, req.body.orderId);
-    res.json(result);
+    await notifyPaidOrder(req, result);
+    res.json({ success: result.success, message: result.message, code: result.code });
   } catch (error) {
     res
       .status(error.statusCode || 500)

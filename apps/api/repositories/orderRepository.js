@@ -81,6 +81,35 @@ export const updateById = async (id, updates, { session } = {}) => {
   }).populate("orderItems.product");
 };
 
+/** Claims payment only for the same gateway attempt and observed order state. */
+export const claimPayosPayment = async (order, updates) => Order.findOneAndUpdate(
+  {
+    _id: order._id,
+    paymentMethod: "PAYOS",
+    payosOrderCode: order.payosOrderCode,
+    payosPaymentLinkId: order.payosPaymentLinkId,
+    totalPrice: order.totalPrice,
+    orderStatus: order.orderStatus,
+    isPaid: false,
+  },
+  { $set: updates },
+  { new: true, runValidators: true }
+);
+
+/** Prevents a cancellation from overwriting a concurrent payment confirmation. */
+export const claimUnpaidPayosCancellation = async (order, updates) => Order.findOneAndUpdate(
+  {
+    _id: order._id,
+    paymentMethod: "PAYOS",
+    payosOrderCode: order.payosOrderCode,
+    payosPaymentLinkId: order.payosPaymentLinkId,
+    orderStatus: order.orderStatus,
+    isPaid: false,
+  },
+  { $set: updates },
+  { new: true, runValidators: true }
+);
+
 // A conditional transition is the cancellation claim: only the request that
 // still sees the expected active state may pair cancellation with releasing
 // its voucher reservations inside the same transaction.

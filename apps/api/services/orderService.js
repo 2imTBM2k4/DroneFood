@@ -17,7 +17,7 @@ import { attachReviewFlows } from "./orderReviewService.js";
 import { Cart, Order, ShipperProfile } from "../models/index.cjs";
 import { isCustomerTrackableShipperOrder, serialiseLiveShipperRoute } from "../utils/orderRealtime.js";
 import { logger } from "../utils/logger.js";
-import { isRestaurantOpenNow } from "../utils/openingHours.js";
+import { resolveCheckoutLocation } from "./checkoutLocationService.js";
 import { ZERO_PAYABLE_VOUCHER_STATUS, isZeroPayableVoucherOrder } from "../utils/zeroPayableVoucher.js";
 
 const VNPAY_DEFAULT_URL = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
@@ -81,15 +81,34 @@ const withOrderId = (url, orderId) => {
 
 const isOnlinePayment = (paymentMethod) => ["VNPAY", "PAYOS"].includes(paymentMethod);
 
-// Bank transfer descriptions need to remain compact. DDMMYY is the Vietnam
-// payment date while the final six Mongo id characters remain the human-facing
-// order reference shown throughout the app.
-const paymentDate = (date = new Date()) => new Intl.DateTimeFormat("en-GB", {
-  timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "2-digit",
-}).format(date).replace(/\//g, "");
+// Bank transfer descriptions need to remain compact (<= 25 chars for PayOS).
+// DDMMYY is the Vietnam payment date while the final six characters of the orderCode
+// (or MongoDB ObjectId) remain the human-facing reference shown throughout the app.
+const paymentDate = (date = new Date()) => {
+  const validDate = date instanceof Date && !isNaN(date.getTime()) ? date : new Date();
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "2-digit",
+  }).format(validDate).replace(/\//g, "");
+};
 
-const orderPaymentDescription = (orderId, date = new Date()) =>
-  `DroneFood DH${String(orderId).slice(-6).toUpperCase()} ${paymentDate(date)}`;
+export const orderPaymentDescription = (orderId, orderCode, date = new Date()) => {
+  let refCode = "";
+  let targetDate = date;
+
+  if (orderCode instanceof Date) {
+    targetDate = orderCode;
+    refCode = String(orderId || "").slice(-6).toUpperCase();
+  } else if (typeof orderCode === "string" && orderCode.trim()) {
+    const cleanCode = orderCode.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+    refCode = cleanCode.slice(-6);
+  } else {
+    refCode = String(orderId || "").slice(-6).toUpperCase();
+  }
+
+  const validDate = targetDate instanceof Date && !isNaN(targetDate.getTime()) ? targetDate : new Date();
+  const dateStr = paymentDate(validDate);
+  return `DroneFood DH${refCode} ${dateStr}`.slice(0, 25);
+};
 
 // PayOS requires a numeric merchant order code. The timestamp plus random
 // suffix stays below JavaScript's safe-integer limit and avoids collisions.
@@ -119,23 +138,7 @@ const loadCheckoutCart = async (userId, cartId) => {
 export const quoteDelivery = async (user, { cartId, address, addressEntryId, deliveryMethod, voucherCode, voucherCodes }) => {
   const shippingAddress = await resolveShippingAddress(user._id, { address, addressEntryId });
   const { cart, restaurantId, branchId } = await loadCheckoutCart(user._id, cartId);
-  let origin = null;
-
-  if (branchId) {
-    const { assertBranchOperational } = await import("./branchService.js");
-    const { branch } = await assertBranchOperational(branchId);
-    origin = {
-      lat: branch.address?.lat ?? branch.location?.coordinates?.[1],
-      lng: branch.address?.lng ?? branch.location?.coordinates?.[0],
-    };
-  } else {
-    const restaurant = await restaurantRepo.findById(restaurantId);
-    if (!restaurant) throw new AppError("Restaurant not found.", 404);
-    if (!isRestaurantOpenNow(restaurant)) {
-      throw new AppError("Nhà hàng hiện đang đóng cửa và tạm ngưng nhận đơn.", 409);
-    }
-    origin = { lat: restaurant.lat, lng: restaurant.lng };
-  }
+  const { origin } = await resolveCheckoutLocation({ branchId, restaurantId, deliveryMethod });
 
   const deliveryQuote = await calculateShippingQuote({
     deliveryMethod,
@@ -245,67 +248,15 @@ export const placeOrder = async (user, orderData, clientIp) => {
     throw new AppError("Cart changed. Please review your order and try again.", 409);
   }
 
-  let effectiveBranchId = orderData.branchId;
-  let effectiveRestaurantId = orderData.restaurantId;
-
-  if (!effectiveBranchId && !effectiveRestaurantId) {
-    if (cartBranchId) effectiveBranchId = cartBranchId.toString();
-    else if (cartRestId) effectiveRestaurantId = cartRestId.toString();
-    else throw new AppError("Đơn hàng yêu cầu branchId hoặc restaurantId", 400);
+  if (orderData.branchId && String(orderData.branchId) !== String(cartBranchId || "")) {
+    throw new AppError("Giỏ hàng không khớp với chi nhánh đặt hàng", 400);
   }
-
-  let targetBranch = null;
-  let targetMerchant = null;
-  let targetRestaurant = null;
-
-  if (effectiveBranchId) {
-    const { assertBranchOperational } = await import("./branchService.js");
-    const operational = await assertBranchOperational(effectiveBranchId);
-    targetBranch = operational.branch;
-    targetMerchant = operational.merchant;
-
-    if (cartBranchId && cartBranchId.toString() !== effectiveBranchId.toString()) {
-      throw new AppError("Giỏ hàng không khớp với chi nhánh đặt hàng", 400);
-    }
-  } else {
-    // Legacy restaurantId flow
-    targetRestaurant = await restaurantRepo.findById(effectiveRestaurantId);
-    if (!targetRestaurant) {
-      throw new AppError("Restaurant not found.", 404);
-    }
-    if (!isRestaurantOpenNow(targetRestaurant)) {
-      const hoursText =
-        targetRestaurant.openingHours?.openTime && targetRestaurant.openingHours?.closeTime
-          ? ` (Giờ mở cửa: ${targetRestaurant.openingHours.openTime} - ${targetRestaurant.openingHours.closeTime})`
-          : "";
-      throw new AppError(
-        `Nhà hàng hiện đang đóng cửa và tạm ngưng nhận đơn${hoursText}. Quý khách vui lòng quay lại sau.`,
-        409
-      );
-    }
-
-    const { Merchant, Branch } = await import("../models/index.cjs");
-    targetMerchant = await Merchant.findOne({
-      $or: [{ _id: effectiveRestaurantId }, { legacyRestaurantId: effectiveRestaurantId }],
-    });
-    if (targetMerchant) {
-      targetBranch = await Branch.findOne({ merchantId: targetMerchant._id, code: "MAIN" });
-    }
+  if (orderData.restaurantId && (cartBranchId || String(orderData.restaurantId) !== String(cartRestId || ""))) {
+    throw new AppError("Giỏ hàng không khớp với nhà hàng đặt hàng", 400);
   }
-
-  if (deliveryMethod === "drone" && targetBranch && !targetBranch.droneDeliveryEnabled) {
-    throw new AppError("Chi nhánh không hỗ trợ giao hàng bằng drone", 400);
-  }
-
-  const originCoordinates = targetBranch
-    ? {
-        lat: targetBranch.address?.lat ?? targetBranch.location?.coordinates?.[1],
-        lng: targetBranch.address?.lng ?? targetBranch.location?.coordinates?.[0],
-      }
-    : {
-        lat: targetRestaurant?.lat,
-        lng: targetRestaurant?.lng,
-      };
+  const {
+    branch: targetBranch, merchant: targetMerchant, restaurant: targetRestaurant, origin: originCoordinates,
+  } = await resolveCheckoutLocation({ branchId: cartBranchId, restaurantId: cartRestId, deliveryMethod });
 
   const orderItems = cartLines.map((line) => {
     const food = line.foodId;
@@ -663,75 +614,109 @@ export const handleVnpayIpn = async (query) => {
   return { RspCode: "02", Message: "Order already confirmed", ...recorded };
 };
 
-/** Verifies a PayOS-signed webhook and settles the matching order once. */
+/** Checks gateway evidence against the persisted payment attempt. */
+const validatePayosPayment = (order, payment) => {
+  if (order.paymentMethod !== "PAYOS") throw new AppError("Payment method does not match PayOS", 409);
+  if (!Number.isSafeInteger(payment.orderCode) || payment.orderCode !== order.payosOrderCode ||
+      !Number.isFinite(payment.amount) || payment.amount !== Math.round(order.totalPrice) ||
+      (order.payosPaymentLinkId && payment.paymentLinkId !== order.payosPaymentLinkId)) {
+    throw new AppError("PayOS payment evidence does not match the order", 400);
+  }
+};
+
+/** Settles a verified attempt once without reviving cancelled or completed orders. */
+const settlePayosPayment = async (initialOrder, payment) => {
+  let order = initialOrder;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    validatePayosPayment(order, payment);
+    const canFulfill = ["pending_payment", "pending", "preparing", "delivering", "arrived_at_delivery"].includes(order.orderStatus);
+    if (order.isPaid) {
+      if (canFulfill) await cleanupPurchasedCart(order);
+      return { paid: true, newlyPaid: false, orderId: order._id, canFulfill };
+    }
+    const startsOrder = order.orderStatus === "pending_payment";
+    const updated = await orderRepo.claimPayosPayment(order, {
+      isPaid: true,
+      paidAt: new Date(),
+      ...(startsOrder && { orderStatus: "pending" }),
+      ...(startsOrder && order.deliveryMethod === "shipper" && {
+        shipperAssignmentStatus: "unassigned",
+        shipperAssignmentDeadlineAt: new Date(Date.now() + SHIPPER_ASSIGNMENT_WINDOW_MS),
+      }),
+      payosPaymentLinkId: payment.paymentLinkId || order.payosPaymentLinkId,
+      paymentResult: { id: payment.reference || payment.paymentLinkId, status: "00", update_time: payment.transactionDateTime },
+    });
+    if (!updated) {
+      order = await orderRepo.findById(order._id);
+      if (!order) throw new AppError("Order not found", 404);
+      continue;
+    }
+    if (canFulfill) await cleanupPurchasedCart(updated);
+    if (startsOrder && updated.deliveryMethod === "drone") {
+      try {
+        const { dispatchPaidDroneOrder } = await import("./droneService.js");
+        await dispatchPaidDroneOrder(updated._id);
+      } catch {
+        logger.error({ orderId: updated._id }, "Không thể điều phối drone sau xác nhận PayOS");
+      }
+    }
+    logger[canFulfill ? "info" : "warn"]({
+      event: canFulfill ? "order.payment_confirmed" : "order.late_payment_requires_review",
+      orderId: updated._id, provider: "PAYOS", amount: updated.totalPrice,
+    }, canFulfill ? "Đã xác nhận thanh toán PayOS" : "Đơn đã kết thúc nhận tiền PayOS, cần kiểm tra thủ công");
+    return { paid: true, newlyPaid: true, orderId: updated._id, canFulfill, startsOrder };
+  }
+  throw new AppError("Order changed during payment confirmation. Please retry.", 409);
+};
+
+/** Verifies a PayOS-signed webhook before claiming the matching payment. */
 export const handlePayosWebhook = async (payload) => {
   const { payOS } = payosConfig();
   const payment = await payOS.webhooks.verify(payload);
-  const orderCode = Number(payment.orderCode);
-  if (!Number.isSafeInteger(orderCode)) throw new AppError("Invalid PayOS order code", 400);
-
-  const order = await orderRepo.findByPayosOrderCode(orderCode);
-  // PayOS sends a signed sample event while its dashboard validates the
-  // webhook URL. Acknowledging an unknown code lets that handshake succeed
-  // without ever changing application data.
+  if (!Number.isSafeInteger(payment.orderCode)) throw new AppError("Invalid PayOS order code", 400);
+  const order = await orderRepo.findByPayosOrderCode(payment.orderCode);
+  // Signed setup events have no matching order and must not mutate any data.
   if (!order) return { paid: false, newlyPaid: false, orderId: null, ignored: true };
-  if (order.paymentMethod !== "PAYOS") throw new AppError("Payment method does not match PayOS", 409);
-  if (Math.round(Number(payment.amount)) !== Math.round(order.totalPrice)) {
-    throw new AppError("PayOS payment amount does not match the order", 400);
-  }
+  validatePayosPayment(order, payment);
   if (String(payment.code) !== "00") {
     return { paid: Boolean(order.isPaid), newlyPaid: false, orderId: order._id, ignored: true };
   }
-  if (order.isPaid) {
-    await cleanupPurchasedCart(order);
-    return { paid: true, newlyPaid: false, orderId: order._id };
-  }
-
-  await orderRepo.updateById(order._id, {
-    isPaid: true,
-    paidAt: new Date(),
-    orderStatus: "pending",
-    ...(order.deliveryMethod === "shipper" && {
-      shipperAssignmentStatus: "unassigned",
-      shipperAssignmentDeadlineAt: new Date(Date.now() + SHIPPER_ASSIGNMENT_WINDOW_MS),
-    }),
-    payosPaymentLinkId: payment.paymentLinkId || order.payosPaymentLinkId,
-    paymentResult: {
-      id: payment.reference || payment.paymentLinkId,
-      status: payment.code,
-      update_time: payment.transactionDateTime,
-    },
-  });
-  await cleanupPurchasedCart(order);
-  if (order.deliveryMethod === "drone") {
-    try {
-      const { dispatchPaidDroneOrder } = await import("./droneService.js");
-      await dispatchPaidDroneOrder(order._id);
-    } catch (dispatchErr) {
-      logger.error({ err: dispatchErr, orderId: order._id }, "Lỗi khi tự động điều phối drone cho đơn đã thanh toán PayOS");
-    }
-  }
-  logger.info({
-    event: "order.payment_confirmed",
-    orderId: order._id,
-    userId: order.user,
-    provider: "PAYOS",
-    amount: order.totalPrice,
-    orderCode,
-  }, `Xác nhận thanh toán PayOS thành công cho đơn [${order._id}] (${order.totalPrice} VND)`);
-  return { paid: true, newlyPaid: true, orderId: order._id };
+  return settlePayosPayment(order, payment);
 };
 
+/** Reconciles an owned unpaid order using a signed server-to-server PayOS response. */
 export const verifyOrder = async (user, orderId) => {
   const order = await orderRepo.findById(orderId);
-  if (!order) {
-    throw new AppError("Order not found", 404);
-  }
-  if (order.user._id.toString() !== user._id.toString()) {
+  if (!order) throw new AppError("Order not found", 404);
+  if (String(order.user?._id || order.user) !== String(user._id)) {
     throw new AppError("Unauthorized: Not your order", 403);
   }
-
-  return { success: order.isPaid, message: order.isPaid ? "Paid" : "Payment has not been confirmed" };
+  if (order.isPaid) return { success: true, message: "Paid", code: "PAYMENT_CONFIRMED" };
+  if (order.paymentMethod !== "PAYOS" || order.orderStatus !== "pending_payment" ||
+      !Number.isSafeInteger(order.payosOrderCode) || order.payosOrderCode <= 0 ||
+      order.payosPaymentLinkId === "__retrying__") {
+    return { success: false, message: "Payment has not been confirmed", code: "PAYMENT_PENDING" };
+  }
+  let link;
+  try {
+    const { payOS } = payosConfig();
+    link = await payOS.paymentRequests.get(order.payosPaymentLinkId || order.payosOrderCode, { timeout: 8000, maxRetries: 0 });
+  } catch {
+    logger.warn({ event: "order.payment_verification_unavailable", orderId: order._id }, "Không thể đối soát PayOS");
+    return { success: false, message: "Chưa thể kiểm tra PayOS. Vui lòng thử lại.", code: "PAYMENT_CHECK_UNAVAILABLE" };
+  }
+  if (link.status !== "PAID") return { success: false, message: "Payment has not been confirmed", code: "PAYMENT_PENDING" };
+  const payment = {
+    orderCode: link.orderCode, amount: link.amount, paymentLinkId: link.id,
+    reference: link.transactions?.at(-1)?.reference,
+    transactionDateTime: link.transactions?.at(-1)?.transactionDateTime,
+  };
+  validatePayosPayment(order, payment);
+  if (!Number.isFinite(link.amountPaid) || link.amountPaid < Math.round(order.totalPrice) || link.amountRemaining !== 0) {
+    throw new AppError("PayOS payment amount is incomplete", 400);
+  }
+  const result = await settlePayosPayment(order, payment);
+  return { ...result, success: result.paid, message: "Paid", code: "PAYMENT_CONFIRMED" };
 };
 
 export const userOrders = async (userId) => {
@@ -1162,14 +1147,24 @@ export const updateStatus = async (user, updateData) => {
     }
 
     if (order.paymentMethod === "PAYOS" && !order.isPaid) {
+      if (order.payosPaymentLinkId === "__retrying__" ||
+          (!order.payosPaymentLinkId && !Number.isSafeInteger(order.payosOrderCode))) {
+        throw new AppError("Cannot verify the PayOS payment attempt. Please retry later.", 409);
+      }
+      let cancelledLink;
       try {
         const { payOS } = payosConfig();
-        const linkRef = order.payosPaymentLinkId || Number(order.payosOrderCode);
-        if (linkRef) {
-          await payOS.paymentRequests.cancel(linkRef, reason || "Customer cancelled unpaid order");
-        }
-      } catch (err) {
-        // Safe to ignore if link was already cancelled or expired
+        cancelledLink = await payOS.paymentRequests.cancel(
+          order.payosPaymentLinkId || order.payosOrderCode,
+          reason,
+          { timeout: 8000, maxRetries: 0 }
+        );
+      } catch {
+        throw new AppError("Không thể xác nhận hủy thanh toán PayOS. Vui lòng kiểm tra thanh toán và thử lại.", 503);
+      }
+      validatePayosPayment(order, { orderCode: cancelledLink.orderCode, amount: cancelledLink.amount, paymentLinkId: cancelledLink.id });
+      if (!["CANCELLED", "EXPIRED"].includes(cancelledLink.status) || cancelledLink.amountPaid !== 0) {
+        throw new AppError("PayOS has not confirmed an unpaid cancellation. Check payment before cancelling.", 409);
       }
     }
 
@@ -1183,8 +1178,6 @@ export const updateStatus = async (user, updateData) => {
       updateDataObj.refundRequestId = refundRequestId;
       updateDataObj.refundRequestedAt = new Date();
     }
-    
-    await releaseCancelledDrone(order);
   }
 
   if (status === "delivered") {
@@ -1237,8 +1230,14 @@ export const updateStatus = async (user, updateData) => {
       shipperCompletedAt: updateDataObj.shipperCompletedAt,
     });
   } else {
-    await orderRepo.updateById(orderId, updateDataObj);
+    if (status === "cancelled" && order.paymentMethod === "PAYOS" && !order.isPaid) {
+      const cancelled = await orderRepo.claimUnpaidPayosCancellation(order, updateDataObj);
+      if (!cancelled) throw new AppError("Order or payment changed while cancelling. Check payment and retry.", 409);
+    } else {
+      await orderRepo.updateById(orderId, updateDataObj);
+    }
     if (status === "cancelled") {
+      await releaseCancelledDrone(order);
       await Order.updateOne({ _id: orderId }, { $unset: { liveShipperRoute: 1 } });
       await voucherRepo.releaseForOrder(orderId, "order_cancelled");
     }

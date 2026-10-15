@@ -39,6 +39,23 @@ const operatingHourSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const droneDeliveryApplicationSchema = new mongoose.Schema(
+  {
+    status: { type: String, enum: ["not_registered", "pending", "approved", "rejected"], default: "not_registered" },
+    submissionId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    address: { type: addressSchema, default: () => ({}) },
+    contactName: { type: String, trim: true, maxlength: 100, default: "" },
+    contactPhone: { type: String, trim: true, maxlength: 15, default: "" },
+    handoverNotes: { type: String, trim: true, maxlength: 1000, default: "" },
+    submittedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    submittedAt: { type: Date, default: null },
+    reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    reviewedAt: { type: Date, default: null },
+    reviewReason: { type: String, trim: true, maxlength: 255, default: "" },
+  },
+  { _id: false }
+);
+
 const branchSchema = new mongoose.Schema(
   {
     merchantId: {
@@ -65,6 +82,7 @@ const branchSchema = new mongoose.Schema(
     ],
     deliveryRadiusKm: { type: Number, default: null, min: 0 },
     droneDeliveryEnabled: { type: Boolean, default: false },
+    droneDeliveryApplication: { type: droneDeliveryApplicationSchema, default: () => ({}), select: false },
   },
   { timestamps: true }
 );

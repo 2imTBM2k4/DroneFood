@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Order } from "../../models/index.cjs";
+import { orderPaymentDescription } from "../../services/orderService.js";
 
 describe("Order Code Generator & Format", () => {
   it("generates orderCode following format <DD><MM><YY>-<9 digits>", () => {
@@ -53,5 +54,16 @@ describe("Order Code Generator & Format", () => {
 
     order.validateSync();
     expect(order.orderCode).toBe(customCode);
+  });
+
+  it("formats PayOS payment description safely when passed orderCode without throwing RangeError", () => {
+    const orderId = "670ca735e5b38d3886576839";
+    const orderCode = "141026-123456789";
+    // Before fix, this call throws RangeError: Invalid time value
+    const desc = orderPaymentDescription(orderId, orderCode);
+    expect(desc).toBeDefined();
+    expect(desc.length).toBeLessThanOrEqual(25);
+    expect(desc).not.toContain("NaN");
+    expect(desc).toMatch(/^DroneFood DH[A-Z0-9]{6} \d{6}$/);
   });
 });

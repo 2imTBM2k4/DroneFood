@@ -247,6 +247,42 @@ const Navbar = ({ setShowLogin }) => {
               ) : <span>{deliveryAddress}</span>}
             </div>
           )}
+
+          {!token ? (
+            <button
+              type="button"
+              className="apple-mobile-auth-btn"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                setShowLogin(true);
+              }}
+            >
+              <UserRound size={16} />
+              <span>Đăng nhập / Đăng ký</span>
+            </button>
+          ) : (
+            <div className="apple-mobile-user-section">
+              <Link
+                to="/profile"
+                className="apple-mobile-link apple-mobile-user-link"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <UserRound size={16} />
+                <span>Tài khoản ({user?.name || "Khách hàng"})</span>
+              </Link>
+              <button
+                type="button"
+                className="apple-mobile-link apple-mobile-logout"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  logout();
+                }}
+              >
+                <LogOut size={16} />
+                <span>Đăng xuất</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
     </header>

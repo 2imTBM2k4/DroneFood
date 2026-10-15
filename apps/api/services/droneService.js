@@ -117,8 +117,8 @@ export const assignDroneToOrder = async (orderId, droneId = null, actorUser = nu
   let branch = null;
   if (order.branchId) {
     branch = await Branch.findById(order.branchId);
-    if (!branch || !branch.droneDeliveryEnabled) {
-      throw new AppError("Chi nhánh không hỗ trợ giao hàng bằng drone", 400);
+    if (!branch) {
+      throw new AppError("Chi nhánh không tồn tại", 404);
     }
   }
 

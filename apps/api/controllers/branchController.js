@@ -1,5 +1,47 @@
 import * as branchService from "../services/branchService.js";
 import * as branchRepo from "../repositories/branchRepository.js";
+import * as applicationService from "../services/droneDeliveryApplicationService.js";
+
+export const managed = async (req, res, next) => {
+  try {
+    res.json({ success: true, code: "MANAGED_BRANCHES", data: await applicationService.listManagedBranches(req.user) });
+  } catch (error) { next(error); }
+};
+
+export const adminList = async (req, res, next) => {
+  try {
+    const { applicationStatus, merchantId, status, droneDeliveryEnabled, q, ...options } = req.query;
+    const filter = {
+      ...(merchantId && { merchantId }), ...(status && { status }),
+      ...(droneDeliveryEnabled !== undefined && { droneDeliveryEnabled }),
+      ...(applicationStatus && (applicationStatus === "not_registered"
+        ? { $or: [{ "droneDeliveryApplication.status": "not_registered" }, { "droneDeliveryApplication.status": { $exists: false } }] }
+        : { "droneDeliveryApplication.status": applicationStatus })),
+    };
+    const result = await branchRepo.findAll(filter, { ...options, q: q ? q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : "", includeApplication: true });
+    res.json({ success: true, code: "ADMIN_BRANCHES", ...result });
+  } catch (error) { next(error); }
+};
+
+export const getApplication = async (req, res, next) => {
+  try {
+    res.json({ success: true, code: "DRONE_APPLICATION", data: await applicationService.getApplication(req.params.id) });
+  } catch (error) { next(error); }
+};
+
+export const submitApplication = async (req, res, next) => {
+  try {
+    const data = await applicationService.submitApplication(req.params.id, req.body, req.user);
+    res.status(201).json({ success: true, code: "DRONE_APPLICATION_SUBMITTED", message: "Đã gửi hồ sơ, vui lòng chờ xét duyệt", data });
+  } catch (error) { next(error); }
+};
+
+export const decideApplication = async (req, res, next) => {
+  try {
+    const data = await applicationService.decideApplication(req.params.id, req.body, req.user);
+    res.json({ success: true, code: "DRONE_APPLICATION_REVIEWED", message: "Đã lưu kết quả xét duyệt", data });
+  } catch (error) { next(error); }
+};
 
 export const nearby = async (req, res) => {
   try {

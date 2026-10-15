@@ -383,11 +383,15 @@ export const assignBranchManagers = async (branchId, managerUserIds, actorUser) 
  * Bật/tắt dịch vụ giao hàng bằng drone cho chi nhánh.
  */
 export const setDroneDelivery = async (branchId, enabled, actorUser) => {
-  const branch = await branchRepo.updateById(branchId, {
-    droneDeliveryEnabled: Boolean(enabled),
-  });
+  const { Branch } = await import("../models/index.cjs");
+  const branch = await Branch.findOneAndUpdate(
+    { _id: branchId, ...(enabled && { "droneDeliveryApplication.status": "approved" }) },
+    { $set: { droneDeliveryEnabled: Boolean(enabled) } },
+    { new: true, runValidators: true }
+  );
   if (!branch) {
-    throw new AppError("Chi nhánh không tồn tại", 404);
+    if (!(await Branch.exists({ _id: branchId }))) throw new AppError("Chi nhánh không tồn tại", 404);
+    throw new AppError("Chi nhánh chưa được duyệt giao hàng bằng drone", 403);
   }
 
   await recordAudit({

@@ -7,6 +7,8 @@ import * as orderService from "../../services/orderService.js";
 import * as shipperService from "../../services/shipperService.js";
 import * as walletService from "../../services/walletService.js";
 import * as droneService from "../../services/droneService.js";
+import { ensureLegacyBranch, submitApplication, decideApplication } from "../../services/droneDeliveryApplicationService.js";
+import { setDroneDelivery } from "../../services/branchService.js";
 import * as voucherRepo from "../../repositories/voucherRepository.js";
 import { createAdmin, createRestaurantOwner, createUser, generateToken } from "../helpers.js";
 
@@ -128,10 +130,17 @@ describe("zero-payable voucher checkout", () => {
   it("checks out through the API when stacked item and shipping vouchers reduce the payable total to zero", async () => {
     const admin = await createAdmin();
     const customer = await createUser({ email: "zero-voucher-api-stacking@test.com" });
-    const { restaurant } = await createRestaurantOwner();
+    const { owner, restaurant } = await createRestaurantOwner();
     restaurant.lat = 10.7;
     restaurant.lng = 106.6;
     await restaurant.save();
+    const branch = await ensureLegacyBranch(restaurant);
+    const submitted = await submitApplication(branch._id, {
+      address: { text: restaurant.address, lat: restaurant.lat, lng: restaurant.lng },
+      contactName: owner.name, contactPhone: "0901234567", handoverNotes: "Bàn giao sân trước",
+    }, owner);
+    await decideApplication(branch._id, { submissionId: submitted.droneDeliveryApplication.submissionId, decision: "approved", reason: "Vị trí phù hợp" }, admin);
+    await setDroneDelivery(branch._id, true, owner);
     const itemVoucher = await Voucher.create(voucherData(admin._id, "APIITEMS", {
       value: 100000,
       appliesTo: "items_subtotal",

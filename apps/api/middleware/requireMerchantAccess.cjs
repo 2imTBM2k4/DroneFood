@@ -30,10 +30,10 @@ const requireMerchantAccess = async (req, res, next) => {
       return next(new AppError("Yêu cầu đăng nhập để thực hiện thao tác này", 401));
     }
 
-    let rawMerchantId = resolveMerchantId(req);
+    let rawMerchantId = null;
     let merchant = null;
 
-    if (!rawMerchantId && req.params?.id) {
+    if (req.params?.id) {
       const targetId = req.params.id;
       if (!mongoose.Types.ObjectId.isValid(targetId)) {
         return next(new AppError("ID không hợp lệ", 400));
@@ -48,21 +48,23 @@ const requireMerchantAccess = async (req, res, next) => {
           merchant = await Merchant.findById(rawMerchantId);
         }
       }
-    }
+      if (!merchant) {
+        return next(new AppError("Merchant không tồn tại", 404));
+      }
+    } else {
+      rawMerchantId = resolveMerchantId(req);
+      if (!rawMerchantId) {
+        return next(new AppError("merchantId là bắt buộc", 400));
+      }
 
-    if (!rawMerchantId && !merchant) {
-      return next(new AppError("merchantId là bắt buộc", 400));
-    }
-
-    if (rawMerchantId && !merchant) {
       if (!mongoose.Types.ObjectId.isValid(rawMerchantId)) {
         return next(new AppError("merchantId không hợp lệ", 400));
       }
-      merchant = await Merchant.findById(rawMerchantId);
-    }
 
-    if (!merchant) {
-      return next(new AppError("Merchant không tồn tại", 404));
+      merchant = await Merchant.findById(rawMerchantId);
+      if (!merchant) {
+        return next(new AppError("Merchant không tồn tại", 404));
+      }
     }
 
     req.merchant = merchant;

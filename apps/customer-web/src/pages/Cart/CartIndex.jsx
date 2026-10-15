@@ -198,7 +198,10 @@ const CartIndex = () => {
                     src={restaurantImageUrl(url, restaurantImage)}
                     alt={`Ảnh cửa hàng ${cart.restaurant.name}`}
                     loading="lazy"
-                    onError={(event) => { event.currentTarget.src = "/placeholder.png"; }}
+                    onError={(event) => {
+                      event.currentTarget.onerror = null;
+                      event.currentTarget.src = "/placeholder.png";
+                    }}
                   />
                 ) : (
                   <span className="cart-restaurant-avatar cart-restaurant-avatar-lg cart-restaurant-avatar-fallback" aria-hidden="true">

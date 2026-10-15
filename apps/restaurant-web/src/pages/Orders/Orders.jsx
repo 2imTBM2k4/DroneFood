@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import axios from "axios";
 import { notificationService } from "@drone-food/web-ui/utils/toast";
 import "./Orders.css";
@@ -237,14 +238,22 @@ const Orders = ({ url }) => {
 
   const counts = orders.reduce(
     (acc, o) => {
-      acc[o.orderStatus] = (acc[o.orderStatus] || 0) + 1;
+      const statusKey = o.orderStatus === "arrived_at_delivery" ? "delivering" : o.orderStatus;
+      acc[statusKey] = (acc[statusKey] || 0) + 1;
       return acc;
     },
     { all: orders.length }
   );
 
   const visibleOrders =
-    filter === "all" ? orders : orders.filter((o) => o.orderStatus === filter);
+    filter === "all"
+      ? orders
+      : orders.filter((o) => {
+          if (filter === "delivering") {
+            return o.orderStatus === "delivering" || o.orderStatus === "arrived_at_delivery";
+          }
+          return o.orderStatus === filter;
+        });
 
   const formatDate = (dateString) => {
     if (!dateString) return "N/A";
@@ -452,7 +461,7 @@ const Orders = ({ url }) => {
         )}
       </div>
 
-      {cancelTarget && (
+      {cancelTarget && createPortal(
         <div
           className="edit-modal cancel-modal"
           onClick={closeCancelModal}
@@ -512,7 +521,8 @@ const Orders = ({ url }) => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

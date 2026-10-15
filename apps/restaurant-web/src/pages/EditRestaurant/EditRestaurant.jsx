@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useContext, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import "./EditRestaurant.css";
 import { assets } from "../../assets/assets";
 import axios from "axios";
 import { notificationService } from "@drone-food/web-ui/utils/toast";
 import { AuthContext } from "../../context/AuthContext";
+import DroneDelivery from "../DroneDelivery/DroneDelivery.jsx";
 import {
   User,
   MapPin,
   Shield,
+  Plane,
   Loader2,
   Pencil,
   ChevronRight,
@@ -22,13 +25,25 @@ import {
 const TABS = [
   { id: "info", label: "Thông tin cá nhân", icon: User },
   { id: "address", label: "Địa chỉ quán", icon: MapPin },
+  { id: "drone", label: "Giao hàng bằng drone", icon: Plane },
   { id: "security", label: "Bảo mật", icon: Shield },
 ];
 
 const EditRestaurant = ({ url = import.meta.env.VITE_API_URL || "http://localhost:4000" }) => {
   const { user, fetchUserInfo } = useContext(AuthContext);
-  const [activeTab, setActiveTab] = useState("info");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState(
+    ["info", "address", "drone", "security"].includes(tabFromUrl) ? tabFromUrl : "info"
+  );
   const [subView, setSubView] = useState("overview"); // "overview" | "name" | "phone" | "email" | "description" | "address" | "hours"
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam && ["info", "address", "drone", "security"].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
 
   const fileInputRef = useRef(null);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -327,6 +342,7 @@ const EditRestaurant = ({ url = import.meta.env.VITE_API_URL || "http://localhos
                   onClick={() => {
                     setActiveTab(tab.id);
                     setSubView("overview");
+                    setSearchParams({ tab: tab.id });
                   }}
                 >
                   <Icon size={18} className="profile-sidebar-icon" />
@@ -887,7 +903,14 @@ const EditRestaurant = ({ url = import.meta.env.VITE_API_URL || "http://localhos
             </>
           )}
 
-          {/* TAB 3: BẢO MẬT */}
+          {/* TAB 3: GIAO HÀNG BẰNG DRONE */}
+          {activeTab === "drone" && (
+            <div className="profile-overview-view profile-drone-section">
+              <DroneDelivery url={url} embedded={true} />
+            </div>
+          )}
+
+          {/* TAB 4: BẢO MẬT */}
           {activeTab === "security" && (
             <div className="profile-overview-view">
               <h1 className="profile-page-title">Bảo mật</h1>

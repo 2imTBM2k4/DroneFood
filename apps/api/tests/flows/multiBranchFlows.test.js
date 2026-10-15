@@ -86,6 +86,16 @@ describe("Multi-Branch Full Business Flows", () => {
         .set("Authorization", `Bearer ${tokenX}`)
         .send({ isOpen: true });
 
+      const submitted = await request(app).post(`/api/branch/${branchMain._id}/drone-application`)
+        .set("Authorization", `Bearer ${tokenX}`)
+        .send({ address: { text: "123 Lê Duẩn, Q1", lat: 10.776, lng: 106.700 }, contactName: "Nguyễn Văn X", contactPhone: "0911223344", handoverNotes: "Bàn giao ở sân trước" });
+      expect(submitted.status).toBe(201);
+      const reviewed = await request(app).post(`/api/branch/${branchMain._id}/drone-application/decision`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ submissionId: submitted.body.data.droneDeliveryApplication.submissionId, decision: "approved", reason: "Vị trí phù hợp" });
+      expect(reviewed.status).toBe(200);
+      expect(reviewed.body.data.droneDeliveryEnabled).toBe(false);
+
       const toggleDroneRes = await request(app)
         .patch(`/api/branch/${branchMain._id}/drone-delivery`)
         .set("Authorization", `Bearer ${tokenX}`)
@@ -721,7 +731,7 @@ describe("Multi-Branch Full Business Flows", () => {
       customerToken = generateToken(customer._id);
     });
 
-    it("rejects drone delivery order with 400 when branch has drone delivery disabled", async () => {
+    it("rejects drone delivery order with 403 when branch has drone delivery disabled", async () => {
       const food = await Food.create({
         merchantId: merchant._id,
         name: "Món A",
@@ -761,8 +771,8 @@ describe("Multi-Branch Full Business Flows", () => {
           },
         });
 
-      expect(orderRes.status).toBe(400);
-      expect(orderRes.body.message).toContain("Chi nhánh không hỗ trợ giao hàng bằng drone");
+      expect(orderRes.status).toBe(403);
+      expect(orderRes.body.message).toContain("chưa được duyệt hoặc chưa bật");
     });
 
     it("selects drone from nearest hub to branch and avoids busy or low-battery drones", async () => {
@@ -903,7 +913,16 @@ describe("Multi-Branch Full Business Flows", () => {
         managerUserIds: [manager._id],
       });
 
-      // Owner toggles OK
+      const submitRes = await request(app).post(`/api/branch/${branch._id}/drone-application`)
+        .set("Authorization", `Bearer ${generateToken(manager._id)}`)
+        .send({ address: { text: "1 Đồng Khởi", lat: 10.77, lng: 106.7 }, contactName: "Quản lý", contactPhone: "0901234567", handoverNotes: "Bàn giao sân trước" });
+      expect(submitRes.status).toBe(201);
+      const decisionRes = await request(app).post(`/api/branch/${branch._id}/drone-application/decision`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ submissionId: submitRes.body.data.droneDeliveryApplication.submissionId, decision: "approved", reason: "Đủ điều kiện" });
+      expect(decisionRes.status).toBe(200);
+
+      // Owner toggles an approved service.
       const ownerToggle = await request(app)
         .patch(`/api/branch/${branch._id}/drone-delivery`)
         .set("Authorization", `Bearer ${generateToken(owner._id)}`)

@@ -22,6 +22,7 @@ import "./MyOrders.css";
 import { formatVND } from "@drone-food/web-ui/utils/money";
 import OrderReviewPrompt from "../../components/OrderReviewPrompt/OrderReviewPrompt";
 import { assets } from "../../assets/assets";
+import { usePaymentVerification } from "../../hooks/usePaymentVerification";
 
 const STATUS_CONFIG = {
   pending_payment: { label: "Chờ thanh toán", colorClass: "status-pending" },
@@ -108,6 +109,8 @@ const MyOrders = () => {
       if (!background) setIsLoading(false);
     }
   }, [customerApi, token]);
+
+  const { checkPayment, checkingOrderId } = usePaymentVerification(() => fetchOrders({ background: true }));
 
   const handleCancelOrder = async () => {
     if (!cancelReason.trim()) {
@@ -252,7 +255,7 @@ const MyOrders = () => {
   const tabCounts = useMemo(() => {
     const counts = {
       all: orders.length,
-      active: orders.filter((o) => ["pending_payment", "pending", "preparing", "delivering"].includes(o.orderStatus)).length,
+      active: orders.filter((o) => ["pending_payment", "pending", "preparing", "delivering", "arrived_at_delivery"].includes(o.orderStatus)).length,
       delivered: orders.filter((o) => o.orderStatus === "delivered").length,
       cancelled: orders.filter((o) => ["cancelled", "refund_pending"].includes(o.orderStatus)).length,
     };
@@ -263,7 +266,7 @@ const MyOrders = () => {
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
       // Tab filter
-      if (activeTab === "active" && !["pending_payment", "pending", "preparing", "delivering"].includes(order.orderStatus)) return false;
+      if (activeTab === "active" && !["pending_payment", "pending", "preparing", "delivering", "arrived_at_delivery"].includes(order.orderStatus)) return false;
       if (activeTab === "delivered" && order.orderStatus !== "delivered") return false;
       if (activeTab === "cancelled" && !["cancelled", "refund_pending"].includes(order.orderStatus)) return false;
 
@@ -640,15 +643,26 @@ const MyOrders = () => {
                             {order.paymentMethod === "PAYOS" &&
                               !order.isPaid &&
                               order.orderStatus === "pending_payment" && (
-                                <button
-                                  type="button"
-                                  className="btn-retry-payment"
-                                  onClick={() => handleRetryPayosPayment(order._id)}
-                                  disabled={retryingPaymentId === order._id}
-                                  aria-busy={retryingPaymentId === order._id}
-                                >
-                                  <span>{retryingPaymentId === order._id ? "Đang tạo link…" : "Thanh toán lại"}</span>
-                                </button>
+                                <>
+                                  <button
+                                    type="button"
+                                    className="btn-retry-payment"
+                                    onClick={() => checkPayment(order._id)}
+                                    disabled={Boolean(checkingOrderId) || Boolean(retryingPaymentId)}
+                                    aria-busy={checkingOrderId === order._id}
+                                  >
+                                    {checkingOrderId === order._id ? "Đang kiểm tra…" : "Kiểm tra thanh toán"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-retry-payment"
+                                    onClick={() => handleRetryPayosPayment(order._id)}
+                                    disabled={Boolean(retryingPaymentId) || Boolean(checkingOrderId)}
+                                    aria-busy={retryingPaymentId === order._id}
+                                  >
+                                    <span>{retryingPaymentId === order._id ? "Đang tạo liên kết…" : "Thanh toán lại"}</span>
+                                  </button>
+                                </>
                               )}
                             {/* Actions for Shipper timeout / Cancel */}
                             {canShowCancellationAction(order) && (

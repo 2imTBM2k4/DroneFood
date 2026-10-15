@@ -13,6 +13,9 @@ import {
   lockBranchSchema,
   assignBranchManagersSchema,
   setDroneDeliverySchema,
+  droneApplicationSchema,
+  droneApplicationDecisionSchema,
+  adminBranchesQuerySchema,
 } from "../validations/branchValidation.js";
 
 const branchRouter = express.Router();
@@ -28,6 +31,12 @@ branchRouter.get(
   validate(listBranchesQuerySchema, "query"),
   branchController.listByMerchant
 );
+
+branchRouter.get("/managed", protect, branchController.managed);
+branchRouter.get("/admin/list", protect, authorize("admin"), validate(adminBranchesQuerySchema, "query"), branchController.adminList);
+branchRouter.get("/:id/drone-application", protect, requireBranchAccess, branchController.getApplication);
+branchRouter.post("/:id/drone-application", protect, requireBranchAccess, validate(droneApplicationSchema), branchController.submitApplication);
+branchRouter.post("/:id/drone-application/decision", protect, authorize("admin"), requireBranchAccess, validate(droneApplicationDecisionSchema), branchController.decideApplication);
 
 branchRouter.get(
   "/:id",

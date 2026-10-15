@@ -184,7 +184,7 @@ describe("Phase 2 Multi-Branch Endpoints Integration", () => {
       expect(createdOrder.merchantId.toString()).toBe(merchant._id.toString());
     });
 
-    it("rejects placeOrder when branchId does not exist (404)", async () => {
+    it("rejects placeOrder when the supplied branchId differs from the cart (400)", async () => {
       const nonExistentBranchId = new mongoose.Types.ObjectId().toString();
       const res = await request(app)
         .post("/api/order/place")
@@ -207,7 +207,7 @@ describe("Phase 2 Multi-Branch Endpoints Integration", () => {
           },
         });
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(400);
     });
 
     it("rejects placeOrder when branch is locked (403)", async () => {

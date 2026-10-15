@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { describe, expect, it } from "vitest";
 import requireMerchantAccess from "../../middleware/requireMerchantAccess.cjs";
-import { Merchant } from "../../models/index.cjs";
+import { Branch, Merchant } from "../../models/index.cjs";
 
 const createMockReq = (overrides = {}) => ({
   params: {},
@@ -133,6 +133,83 @@ describe("requireMerchantAccess middleware", () => {
     const req = createMockReq({
       user: { _id: otherUserId, role: "merchant_owner" },
       query: { merchantId: merchant._id.toString() },
+    });
+
+    let caughtError = null;
+    const next = (err) => {
+      caughtError = err;
+    };
+
+    await requireMerchantAccess(req, {}, next);
+    expect(caughtError).toBeDefined();
+    expect(caughtError.statusCode).toBe(403);
+    expect(caughtError.message).toContain("Bạn không có quyền quản lý merchant này");
+  });
+
+  it("resolves merchant when req.params.id is a branchId and allows branch merchant owner", async () => {
+    const ownerId = new mongoose.Types.ObjectId();
+    const merchant = await Merchant.create({
+      name: "Cơm Tấm Cali",
+      slug: "com-tam-cali",
+      ownerUserId: ownerId,
+      status: "active",
+      type: "individual",
+    });
+    const branch = await Branch.create({
+      merchantId: merchant._id,
+      name: "Cali Chi Nhánh 1",
+      code: "CALI-01",
+      status: "active",
+      address: { text: "123 Lê Lợi", lat: 10.7, lng: 106.7 },
+    });
+
+    const req = createMockReq({
+      user: { _id: ownerId, role: "merchant_owner" },
+      params: { id: branch._id.toString() },
+    });
+
+    let calledWithoutError = false;
+    const next = (err) => {
+      if (!err) calledWithoutError = true;
+    };
+
+    await requireMerchantAccess(req, {}, next);
+    expect(calledWithoutError).toBe(true);
+    expect(req.branch).toBeDefined();
+    expect(req.branch._id.toString()).toBe(branch._id.toString());
+    expect(req.merchant).toBeDefined();
+    expect(req.merchant._id.toString()).toBe(merchant._id.toString());
+  });
+
+  it("prioritizes req.params.id over body.merchantId and denies attacker accessing victim branch", async () => {
+    const victimOwnerId = new mongoose.Types.ObjectId();
+    const attackerOwnerId = new mongoose.Types.ObjectId();
+    const victimMerchant = await Merchant.create({
+      name: "Bánh Mì Huỳnh Hoa",
+      slug: "banh-mi-huynh-hoa",
+      ownerUserId: victimOwnerId,
+      status: "active",
+      type: "individual",
+    });
+    const attackerMerchant = await Merchant.create({
+      name: "Attacker Shop",
+      slug: "attacker-shop",
+      ownerUserId: attackerOwnerId,
+      status: "active",
+      type: "individual",
+    });
+    const victimBranch = await Branch.create({
+      merchantId: victimMerchant._id,
+      name: "Huỳnh Hoa Q1",
+      code: "HH-01",
+      status: "active",
+      address: { text: "26 Lê Thị Riêng", lat: 10.77, lng: 106.69 },
+    });
+
+    const req = createMockReq({
+      user: { _id: attackerOwnerId, role: "merchant_owner" },
+      params: { id: victimBranch._id.toString() },
+      body: { merchantId: attackerMerchant._id.toString() },
     });
 
     let caughtError = null;

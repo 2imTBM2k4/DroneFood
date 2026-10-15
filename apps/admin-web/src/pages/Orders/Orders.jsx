@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import axios from "axios";
 import { notificationService } from "@drone-food/web-ui/utils/toast";
 import "./Orders.css";
@@ -425,7 +426,7 @@ const Orders = ({ url }) => {
         ))}
       </div>
 
-      {showAssignModal && (
+      {showAssignModal && createPortal(
         <div className="modal-overlay" onClick={() => setShowAssignModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -438,7 +439,7 @@ const Orders = ({ url }) => {
                 ×
               </button>
             </div>
-            
+
             <div className="modal-body">
               <p>Order: #{selectedOrder?.orderCode || selectedOrder?._id}</p>
               <p>Customer: {selectedOrder?.shippingAddress?.fullName}</p>
@@ -447,7 +448,7 @@ const Orders = ({ url }) => {
                   Drone cũ sẽ được chuyển sang chế độ bảo trì để kiểm tra kỹ thuật. Mã QR cũ sẽ bị vô hiệu hóa cho tới khi hoàn tất bàn giao món với drone mới.
                 </p>
               )}
-              
+
               <div className="form-group">
                 <label>
                   {modalMode === "reassign"
@@ -503,7 +504,8 @@ const Orders = ({ url }) => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

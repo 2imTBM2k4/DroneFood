@@ -7,13 +7,19 @@ import {
   ChevronRight,
   ChevronsUpDown,
   CircleAlert,
+  Clock,
   Eye,
+  FileText,
+  Info,
   MapPin,
+  Phone,
   Plane,
   RefreshCw,
   Search,
   Store,
+  User,
   X,
+  XCircle,
 } from "lucide-react";
 import axios from "axios";
 import { createPortal } from "react-dom";
@@ -39,6 +45,8 @@ const DRONE_OPTIONS = [
   { value: "true", label: "Drone delivery enabled" },
   { value: "false", label: "Drone delivery disabled" },
 ];
+
+const APPLICATION_LABELS = { not_registered: "Chưa đăng ký", pending: "Chờ duyệt", approved: "Đã duyệt", rejected: "Bị từ chối" };
 
 const LIMIT_OPTIONS = [5, 10, 20, 50];
 
@@ -134,6 +142,23 @@ const StatusPill = ({ status }) => (
   </span>
 );
 
+const DroneStatusPill = ({ status }) => {
+  const normalized = status || "not_registered";
+  const icon = {
+    approved: <CheckCircle2 size={12} aria-hidden="true" />,
+    pending: <Clock size={12} aria-hidden="true" />,
+    rejected: <XCircle size={12} aria-hidden="true" />,
+    not_registered: <CircleAlert size={12} aria-hidden="true" />,
+  }[normalized];
+
+  return (
+    <span className={`drone-app-pill drone-app-pill--${normalized}`}>
+      {icon}
+      <span>{APPLICATION_LABELS[normalized] || normalized}</span>
+    </span>
+  );
+};
+
 const Branches = ({ url }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -143,6 +168,9 @@ const Branches = ({ url }) => {
   const [loadError, setLoadError] = useState("");
   const [status, setStatus] = useState("");
   const [droneDeliveryEnabled, setDroneDeliveryEnabled] = useState("");
+  const [applicationStatus, setApplicationStatus] = useState("");
+  const [reviewReason, setReviewReason] = useState("");
+  const [reviewError, setReviewError] = useState("");
   const [merchantId, setMerchantId] = useState(routeMerchantId);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -198,12 +226,13 @@ const Branches = ({ url }) => {
     try {
       setLoading(true);
       setLoadError("");
-      const response = await axios.get(`${url}/api/branch/list`, {
+      const response = await axios.get(`${url}/api/branch/admin/list`, {
         headers: authHeaders(),
         params: {
           ...(merchantId && { merchantId }),
           ...(status && { status }),
           ...(droneDeliveryEnabled && { droneDeliveryEnabled }),
+          ...(applicationStatus && { applicationStatus }),
           ...(debouncedSearch && { q: debouncedSearch }),
           ...(sortConfig.key && {
             sortBy: sortConfig.key,
@@ -235,7 +264,7 @@ const Branches = ({ url }) => {
     } finally {
       setLoading(false);
     }
-  }, [authHeaders, debouncedSearch, droneDeliveryEnabled, limit, merchantId, page, sortConfig, status, url]);
+  }, [applicationStatus, authHeaders, debouncedSearch, droneDeliveryEnabled, limit, merchantId, page, sortConfig, status, url]);
 
   useEffect(() => {
     fetchBranches();
@@ -285,7 +314,32 @@ const Branches = ({ url }) => {
 
   const openDetail = (branch, trigger) => {
     lastFocusedRef.current = trigger;
+    setReviewReason("");
+    setReviewError("");
     setSelectedBranch(branch);
+  };
+
+  const reviewApplication = async (decision) => {
+    if (!selectedBranch || !reviewReason.trim()) return;
+    setWorking(true); setReviewError("");
+    try {
+      const response = await axios.post(`${url}/api/branch/${selectedBranch._id}/drone-application/decision`, {
+        submissionId: selectedBranch.droneDeliveryApplication.submissionId,
+        decision, reason: reviewReason.trim(),
+      }, { headers: authHeaders() });
+      setSelectedBranch((current) => ({ ...current, ...response.data.data, merchantId: current.merchantId }));
+      setReviewReason("");
+      await fetchBranches();
+    } catch (error) {
+      setReviewError(error.response?.data?.message || "Không thể lưu kết quả xét duyệt.");
+      if (error.response?.status === 409) {
+        try {
+          const response = await axios.get(`${url}/api/branch/${selectedBranch._id}/drone-application`, { headers: authHeaders() });
+          setSelectedBranch((current) => ({ ...current, ...response.data.data, merchantId: current.merchantId }));
+          await fetchBranches();
+        } catch { /* Keep the current profile visible so the administrator can retry. */ }
+      }
+    } finally { setWorking(false); }
   };
 
   const openLockDialog = (branch, trigger) => {
@@ -387,6 +441,14 @@ const Branches = ({ url }) => {
           </select>
         </label>
 
+        <label className="branch-filter-control">
+          <span>Hồ sơ drone</span>
+          <select value={applicationStatus} onChange={(event) => { setApplicationStatus(event.target.value); setPage(1); }}>
+            <option value="">Tất cả hồ sơ</option>
+            {Object.entries(APPLICATION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+
         <button type="button" className="branch-refresh" onClick={fetchBranches} disabled={loading}>
           <RefreshCw size={16} className={loading ? "is-spinning" : ""} />
           Refresh
@@ -476,11 +538,14 @@ const Branches = ({ url }) => {
                       <span>{branch.address?.text || "No address"}</span>
                     </td>
                     <td data-label="Status"><StatusPill status={branch.status} /></td>
-                    <td data-label="Drone delivery">
-                      <span className={`drone-delivery-badge ${branch.droneDeliveryEnabled ? "drone-delivery-badge--enabled" : "drone-delivery-badge--disabled"}`}>
-                        <Plane size={14} />
-                        {branch.droneDeliveryEnabled ? "Enabled" : "Disabled"}
-                      </span>
+                    <td data-label="Drone delivery" className="branch-drone-cell">
+                      <div className="branch-drone-stack">
+                        <span className={`drone-delivery-badge ${branch.droneDeliveryApplication?.status === "approved" && branch.droneDeliveryEnabled ? "drone-delivery-badge--enabled" : "drone-delivery-badge--disabled"}`}>
+                          <Plane size={13} aria-hidden="true" />
+                          {branch.droneDeliveryApplication?.status === "approved" && branch.droneDeliveryEnabled ? "Enabled" : "Disabled"}
+                        </span>
+                        <DroneStatusPill status={branch.droneDeliveryApplication?.status} />
+                      </div>
                     </td>
                     <td data-label="Created" className="branch-date">{formatDate(branch.createdAt)}</td>
                     <td data-label="Actions" className="branch-actions">
@@ -526,6 +591,7 @@ const Branches = ({ url }) => {
 
       {selectedBranch && (
         <ModalShell
+          busy={working}
           titleId="branch-detail-title"
           descriptionId="branch-detail-description"
           onClose={closeDialog}
@@ -554,6 +620,140 @@ const Branches = ({ url }) => {
               <div><span>Latitude</span><strong>{selectedBranch.address?.lat ?? "N/A"}</strong></div>
               <div><span>Longitude</span><strong>{selectedBranch.address?.lng ?? "N/A"}</strong></div>
               <div className="branch-detail-wide"><span>Address</span><strong>{selectedBranch.address?.text || "N/A"}</strong></div>
+            </section>
+
+            <section className="branch-detail-section admin-drone-section">
+              <div className="admin-drone-header">
+                <div className="admin-drone-title">
+                  <span className="admin-drone-icon"><Plane size={20} /></span>
+                  <div>
+                    <h3>Hồ sơ xét duyệt giao hàng Drone</h3>
+                    <p>Xét duyệt vị trí bàn giao và thông tin kỹ thuật của địa điểm quán</p>
+                  </div>
+                </div>
+                <DroneStatusPill status={selectedBranch.droneDeliveryApplication?.status} />
+              </div>
+
+              {!selectedBranch.droneDeliveryApplication?.submittedAt ? (
+                <div className="admin-drone-empty-card">
+                  <Plane size={24} className="text-muted" />
+                  <p>Địa điểm quán chưa gửi hồ sơ đăng ký giao hàng bằng drone.</p>
+                </div>
+              ) : (
+                <div className="admin-drone-content">
+                  <div className="admin-drone-info-cards">
+                    <div className="admin-drone-card">
+                      <div className="admin-drone-card-label">Địa chỉ đăng ký</div>
+                      <div className="admin-drone-card-value">
+                        <MapPin size={15} />
+                        <span>{selectedBranch.droneDeliveryApplication.address?.text || "Chưa có địa chỉ"}</span>
+                      </div>
+                      <div className="admin-drone-coords">
+                        <span>Vĩ độ (Lat): <strong>{selectedBranch.droneDeliveryApplication.address?.lat ?? "N/A"}</strong></span>
+                        <span>Kinh độ (Lng): <strong>{selectedBranch.droneDeliveryApplication.address?.lng ?? "N/A"}</strong></span>
+                      </div>
+                    </div>
+
+                    <div className="admin-drone-card">
+                      <div className="admin-drone-card-label">Người & Số điện thoại liên hệ</div>
+                      <div className="admin-drone-card-value">
+                        <User size={15} />
+                        <strong>{selectedBranch.droneDeliveryApplication.contactName || "N/A"}</strong>
+                      </div>
+                      <div className="admin-drone-card-value">
+                        <Phone size={15} />
+                        <span>{selectedBranch.droneDeliveryApplication.contactPhone || "N/A"}</span>
+                      </div>
+                    </div>
+
+                    <div className="admin-drone-card admin-drone-card--wide">
+                      <div className="admin-drone-card-label">Mô tả vị trí bàn giao cho drone</div>
+                      <div className="admin-drone-handover-notes">
+                        <FileText size={15} />
+                        <p>{selectedBranch.droneDeliveryApplication.handoverNotes || "Không có mô tả"}</p>
+                      </div>
+                    </div>
+
+                    <div className="admin-drone-meta-bar">
+                      <span>Thời gian gửi: <strong>{formatDate(selectedBranch.droneDeliveryApplication.submittedAt)}</strong></span>
+                      {selectedBranch.droneDeliveryApplication.reviewedAt && (
+                        <span>Thời gian duyệt: <strong>{formatDate(selectedBranch.droneDeliveryApplication.reviewedAt)}</strong></span>
+                      )}
+                    </div>
+                  </div>
+
+                  {selectedBranch.droneDeliveryApplication.reviewReason && (
+                    <div className={`admin-drone-past-reason admin-drone-past-reason--${selectedBranch.droneDeliveryApplication.status}`}>
+                      <div className="admin-drone-past-reason-title">
+                        <Info size={16} />
+                        <strong>Lý do xét duyệt:</strong>
+                      </div>
+                      <p>{selectedBranch.droneDeliveryApplication.reviewReason}</p>
+                    </div>
+                  )}
+
+                  {selectedBranch.droneDeliveryApplication?.status === "pending" && (
+                    <div className="admin-drone-review-panel">
+                      <div className="admin-drone-review-hint">
+                        <Info size={16} />
+                        <span>Phê duyệt hồ sơ chỉ xác thực kỹ thuật địa điểm. Quán sẽ chủ động bật/tắt dịch vụ sau khi được duyệt.</span>
+                      </div>
+
+                      <label className="admin-drone-reason-field">
+                        <div className="admin-drone-reason-header">
+                          <span>Lý do xét duyệt <em>(bắt buộc để gửi thông báo tới quán)</em></span>
+                          <small>{reviewReason.length} / 255</small>
+                        </div>
+                        <textarea
+                          value={reviewReason}
+                          onChange={(event) => setReviewReason(event.target.value)}
+                          placeholder="Nhập lý do phê duyệt hoặc lý do từ chối (ví dụ: Tọa độ chính xác, vị trí thoáng đãng... hoặc Yêu cầu bổ sung số điện thoại phụ trách sân bay drone)..."
+                          maxLength={255}
+                          rows={3}
+                          disabled={working}
+                        />
+                      </label>
+
+                      {reviewError && (
+                        <div className="admin-drone-review-error" role="alert">
+                          <CircleAlert size={16} />
+                          <span>{reviewError}</span>
+                        </div>
+                      )}
+
+                      <div className="admin-drone-review-actions">
+                        <button
+                          type="button"
+                          className="admin-drone-reject-btn"
+                          disabled={working || !reviewReason.trim()}
+                          onClick={() => reviewApplication("rejected")}
+                        >
+                          <XCircle size={16} />
+                          <span>Từ chối hồ sơ</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-drone-approve-btn"
+                          disabled={working || !reviewReason.trim()}
+                          onClick={() => reviewApplication("approved")}
+                        >
+                          {working ? (
+                            <>
+                              <RefreshCw size={16} className="is-spinning" />
+                              <span>Đang lưu…</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 size={16} />
+                              <span>Phê duyệt hồ sơ</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </section>
 
             <section className="branch-detail-section">

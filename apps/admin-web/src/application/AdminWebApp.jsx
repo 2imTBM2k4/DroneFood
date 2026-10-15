@@ -41,7 +41,10 @@ const PageTransition = ({ children }) => {
       className="page-transition"
       style={{
         opacity: isVisible ? 1 : 0,
-        transform: isVisible ? "translateY(0)" : "translateY(12px)",
+        // MUST be `none` at rest, not translateY(0): any transform other than
+        // none makes this element the containing block for position:fixed
+        // descendants, which breaks every modal rendered inside a page.
+        transform: isVisible ? "none" : "translateY(12px)",
         transition: "opacity 0.2s ease-out, transform 0.2s ease-out",
       }}
     >

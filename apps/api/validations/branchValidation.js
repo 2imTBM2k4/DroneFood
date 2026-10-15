@@ -63,6 +63,8 @@ export const listBranchesQuerySchema = Joi.object({
 });
 
 export const createBranchSchema = Joi.object({
+  droneDeliveryEnabled: Joi.forbidden(),
+  droneDeliveryApplication: Joi.forbidden(),
   merchantId: objectIdSchema.required().messages({
     "any.required": "merchantId là bắt buộc",
   }),
@@ -99,6 +101,8 @@ export const createBranchSchema = Joi.object({
 });
 
 export const updateBranchSchema = Joi.object({
+  droneDeliveryEnabled: Joi.forbidden(),
+  droneDeliveryApplication: Joi.forbidden(),
   name: Joi.string().trim().min(2).max(100),
   phone: Joi.string()
     .trim()
@@ -136,6 +140,33 @@ export const lockBranchSchema = Joi.object({
     "any.required": "isLocked là bắt buộc (true/false)",
   }),
   reason: Joi.string().trim().max(500).optional().allow("", null),
+});
+
+export const droneApplicationSchema = Joi.object({
+  status: Joi.forbidden(),
+  droneDeliveryEnabled: Joi.forbidden(),
+  submissionId: Joi.forbidden(),
+  reviewedBy: Joi.forbidden(),
+  reviewedAt: Joi.forbidden(),
+  reviewReason: Joi.forbidden(),
+  address: Joi.object({
+    text: Joi.string().trim().min(3).max(255).required(),
+    lat: Joi.number().min(-90).max(90).required(),
+    lng: Joi.number().min(-180).max(180).required(),
+  }).required(),
+  contactName: Joi.string().trim().min(2).max(100).required(),
+  contactPhone: Joi.string().trim().pattern(/^[0-9+\-\s()]{8,15}$/).required(),
+  handoverNotes: Joi.string().trim().min(3).max(1000).required(),
+});
+
+export const droneApplicationDecisionSchema = Joi.object({
+  submissionId: objectIdSchema.required(),
+  decision: Joi.string().valid("approved", "rejected").required(),
+  reason: Joi.string().trim().min(1).max(255).required(),
+});
+
+export const adminBranchesQuerySchema = listBranchesQuerySchema.keys({
+  applicationStatus: Joi.string().valid("not_registered", "pending", "approved", "rejected"),
 });
 
 export const setDroneDeliverySchema = Joi.object({

@@ -1029,6 +1029,7 @@
 
 .retry-payment-callout {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
@@ -1037,6 +1038,11 @@
   border: 1px solid rgba(255, 149, 0, 0.3);
   border-radius: 12px;
   background: rgba(255, 149, 0, 0.07);
+}
+
+.retry-payment-callout > div {
+  flex: 1 0 100%;
+  min-width: 0;
 }
 
 .retry-payment-callout strong {

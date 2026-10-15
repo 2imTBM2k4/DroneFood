@@ -3,7 +3,7 @@
  * Preview: node seeds/migrate-to-multi-branch.cjs [--dry-run]
  * Apply:   node seeds/migrate-to-multi-branch.cjs --apply --phase2-ready
  */
-const crypto = require("crypto");
+const { deriveBranchId, mapLegacyStatus, normalizeOperatingHours, buildAddress, buildLocation, buildMerchantDocument, buildBranchDocument } = require("../utils/legacyBranchMapping.cjs");
 const fs = require("fs");
 const path = require("path");
 const dotenv = require("dotenv");
@@ -41,50 +41,6 @@ const slugify = (value = "") => {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return slug || "merchant";
-};
-
-const deriveBranchId = (restaurantId) => {
-  const hex = crypto
-    .createHash("sha256")
-    .update(`${MIGRATION_ID}:${idString(restaurantId)}:${MAIN_BRANCH_CODE}`)
-    .digest("hex")
-    .slice(0, 24);
-  return new mongoose.Types.ObjectId(hex);
-};
-
-const mapLegacyStatus = (restaurant) => ({
-  merchantStatus: "active",
-  branchStatus: restaurant?.isLocked === true ? "locked" : "active",
-});
-
-const normalizeOperatingHours = (restaurant) => {
-  if (Array.isArray(restaurant?.operatingHours)) {
-    return restaurant.operatingHours.map(({ day, open, close }) => ({ day, open, close }));
-  }
-  const open = restaurant?.openingHours?.openTime;
-  const close = restaurant?.openingHours?.closeTime;
-  if (!open || !close) return [];
-  return Array.from({ length: 7 }, (_, day) => ({ day, open, close }));
-};
-
-const finiteCoordinate = (value, max) => Number.isFinite(value) && Math.abs(value) <= max;
-const buildAddress = (restaurant) => {
-  const lat = restaurant?.address?.lat ?? restaurant?.lat;
-  const lng = restaurant?.address?.lng ?? restaurant?.lng;
-  return {
-    text: typeof restaurant?.address === "string"
-      ? restaurant.address
-      : restaurant?.address?.text || restaurant?.address?.address || "",
-    lat: finiteCoordinate(lat, 90) ? lat : null,
-    lng: finiteCoordinate(lng, 180) ? lng : null,
-    geocodedAt: restaurant?.address?.geocodedAt || null,
-  };
-};
-const buildLocation = (restaurant) => {
-  const lat = restaurant?.address?.lat ?? restaurant?.lat;
-  const lng = restaurant?.address?.lng ?? restaurant?.lng;
-  if (!finiteCoordinate(lat, 90) || !finiteCoordinate(lng, 180)) return undefined;
-  return { type: "Point", coordinates: [lng, lat] };
 };
 
 const reserveUniqueSlug = (restaurant, merchantId, slugOwners) => {
@@ -135,46 +91,6 @@ const isExactIndex = (index, definition) => {
   if (expectedPartial && !sameJson(index.partialFilterExpression, expectedPartial)) return false;
   if (!expectedPartial && index.partialFilterExpression) return false;
   return true;
-};
-
-const buildMerchantDocument = (restaurant, slug) => ({
-  _id: restaurant._id,
-  type: "individual",
-  name: restaurant.name,
-  slug,
-  logoUrl: restaurant.logoUrl || restaurant.image || "",
-  coverUrl: restaurant.coverUrl || "",
-  description: restaurant.description || "",
-  ownerUserId: restaurant.owner,
-  status: "active",
-  approvedBy: restaurant.approvedBy || null,
-  approvedAt: restaurant.approvedAt || restaurant.createdAt || new Date(),
-  rejectReason: "",
-  revenueShare: { merchant: 0.8, platform: 0.2 },
-  branchCount: 1,
-  legacyRestaurantId: restaurant._id,
-  createdAt: restaurant.createdAt || new Date(),
-  updatedAt: restaurant.updatedAt || new Date(),
-});
-const buildBranchDocument = (restaurant, merchantId, branchId) => {
-  const location = buildLocation(restaurant);
-  return {
-    _id: branchId,
-    merchantId,
-    name: "Chi nhánh chính",
-    code: MAIN_BRANCH_CODE,
-    address: buildAddress(restaurant),
-    ...(location ? { location } : {}),
-    phone: restaurant.phone || "",
-    operatingHours: normalizeOperatingHours(restaurant),
-    isOpen: restaurant.isOpen === true,
-    status: mapLegacyStatus(restaurant).branchStatus,
-    images: Array.isArray(restaurant.images) ? restaurant.images : [restaurant.image].filter(Boolean),
-    managerUserIds: [],
-    deliveryRadiusKm: restaurant.deliveryRadiusKm ?? null,
-    createdAt: restaurant.createdAt || new Date(),
-    updatedAt: restaurant.updatedAt || new Date(),
-  };
 };
 
 const getIndexes = async (db, name) =>
