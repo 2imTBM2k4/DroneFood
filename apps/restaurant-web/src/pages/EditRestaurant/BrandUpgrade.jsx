@@ -10,7 +10,6 @@ import {
   Loader2,
   ArrowRight,
   ShieldCheck,
-  FileText,
   Store,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";

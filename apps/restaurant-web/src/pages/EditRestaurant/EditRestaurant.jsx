@@ -27,7 +27,6 @@ import {
   ShieldCheck,
   ToggleLeft,
   ToggleRight,
-  Clock,
 } from "lucide-react";
 
 const EditRestaurant = ({ url = import.meta.env.VITE_API_URL || "http://localhost:4000" }) => {

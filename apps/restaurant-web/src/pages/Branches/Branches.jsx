@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 import {
   Building2,
@@ -10,9 +10,6 @@ import {
   UserPlus,
   UserX,
   Search,
-  CheckCircle2,
-  XCircle,
-  Clock,
   AlertCircle,
   Loader2,
   X,
@@ -20,11 +17,9 @@ import {
 } from "lucide-react";
 import { notificationService } from "@drone-food/web-ui/utils/toast";
 import { useBranch } from "../../context/BranchContext";
-import { AuthContext } from "../../context/AuthContext";
 import "./Branches.css";
 
 const Branches = ({ url = import.meta.env.VITE_API_URL || "http://localhost:4000" }) => {
-  const { user } = useContext(AuthContext);
   const { branches, merchant, refreshBranches, loadingBranches } = useBranch();
 
   // Modals state

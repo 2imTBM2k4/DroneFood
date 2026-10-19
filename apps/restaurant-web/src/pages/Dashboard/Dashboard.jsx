@@ -10,11 +10,7 @@ import {
   Building2,
   Users,
   Store,
-  CheckCircle2,
-  AlertCircle,
   TrendingUp,
-  ExternalLink,
-  ChevronRight,
   ShieldCheck,
 } from "lucide-react";
 import { notificationService } from "@drone-food/web-ui/utils/toast";

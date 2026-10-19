@@ -101,6 +101,7 @@ describe("Email Change with Password & OTP verification", () => {
         email: initialEmail,
         phone: "0901234567",
         address: "123 Nguyễn Huệ",
+        isLocked: false,
       });
 
       const user = await createUser({
