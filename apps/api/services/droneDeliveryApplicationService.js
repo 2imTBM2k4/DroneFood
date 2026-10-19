@@ -54,7 +54,10 @@ export const listManagedBranches = async (user) => {
   for (const restaurant of restaurants) await ensureLegacyBranch(restaurant);
   const merchants = await Merchant.find({ ownerUserId: user._id }).select("_id");
   return Branch.find({ $or: [{ merchantId: { $in: merchants.map((m) => m._id) } }, { managerUserIds: user._id }] })
-    .select(privateSelect).populate("merchantId", "name type").sort({ createdAt: 1 });
+    .select(privateSelect)
+    .populate("merchantId", "name type slug logoUrl coverUrl status")
+    .populate("managerUserIds", "name email phone")
+    .sort({ createdAt: 1 });
 };
 
 /** Read the private application after branch access has been authorized. */

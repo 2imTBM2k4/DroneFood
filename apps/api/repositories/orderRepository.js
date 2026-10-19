@@ -32,6 +32,8 @@ export const findByUser = async (userId) => {
   return await Order.find({ user: userId })
     .populate("orderItems.product")
     .populate("restaurantId")
+    .populate("branchId", "name code address phone location droneDeliveryEnabled")
+    .populate("merchantId", "name logoUrl coverUrl")
     .populate("shipperId", "name")
     .sort({ createdAt: -1 }); // Recent first
 };
@@ -44,6 +46,8 @@ export const findCustomerDetail = async (userId, orderId) => {
   return await Order.findOne({ _id: orderId, user: userId })
     .populate("orderItems.product")
     .populate("restaurantId", "name address lat lng")
+    .populate("branchId", "name code address phone location droneDeliveryEnabled")
+    .populate("merchantId", "name logoUrl coverUrl")
     .populate("shipperId", "name phone");
 };
 
@@ -52,6 +56,7 @@ export const findAll = async (filter = {}, { page, limit } = {}) => {
     .populate("user", "name email")
     .populate("orderItems.product")
     .populate("restaurantId")
+    .populate("branchId", "name code address phone")
     .sort({ createdAt: -1 });
 
   if (page && limit) {

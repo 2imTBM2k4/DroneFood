@@ -54,6 +54,14 @@ const foodSchema = new mongoose.Schema({
     // Owners can temporarily hide an out-of-stock dish without deleting its
     // menu record or breaking historical order snapshots.
     isAvailable: { type: Boolean, default: true, index: true },
+    // List of branch IDs where this dish is locally out of stock / unavailable.
+    // When empty, the dish follows the global `isAvailable` flag across all branches.
+    unavailableBranchIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Branch",
+      },
+    ],
     isBestSeller: { type: Boolean, default: false, index: true },
     salesCount: { type: Number, default: 0, min: 0, index: true },
     // Dishes created before options existed simply have an empty array.

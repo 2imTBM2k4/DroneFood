@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import app from "../../app.js";
 import { createUser, generateToken } from "../helpers.js";
-import { User } from "../../models/index.cjs";
+import { User, Restaurant } from "../../models/index.cjs";
 
 describe("Email Change with Password & OTP verification", () => {
   it("should reject request-email-change with wrong password", async () => {
@@ -89,5 +89,101 @@ describe("Email Change with Password & OTP verification", () => {
     expect(finalUser.email).toBe("after@test.com");
     expect(finalUser.pendingEmail).toBeNull();
     expect(finalUser.emailVerificationOtp).toBeNull();
+  });
+
+  describe("Cập nhật email hồ sơ qua PUT /api/user/profile và đăng nhập lại bằng email mới", () => {
+    it("cho phép đổi email tài khoản nhà hàng, đồng bộ restaurant và đăng nhập lại thành công bằng email mới", async () => {
+      const initialEmail = `owner-before-${Date.now()}@test.com`;
+      const newEmail = `owner-after-${Date.now()}@test.com`;
+
+      const restaurant = await Restaurant.create({
+        name: "Nhà Hàng Cơm Tấm",
+        email: initialEmail,
+        phone: "0901234567",
+        address: "123 Nguyễn Huệ",
+      });
+
+      const user = await createUser({
+        name: "Chủ Quán",
+        email: initialEmail,
+        password: "password123",
+        role: "restaurant_owner",
+        restaurantId: restaurant._id,
+      });
+
+      const token = generateToken(user._id);
+
+      // 1. Cập nhật email qua PUT /api/user/profile
+      const updateRes = await request(app)
+        .put("/api/user/profile")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ email: newEmail });
+
+      expect(updateRes.status).toBe(200);
+      expect(updateRes.body.success).toBe(true);
+      expect(updateRes.body.data.email).toBe(newEmail);
+
+      // 2. Kiểm tra trong DB: User.email đã được cập nhật
+      const userInDb = await User.findById(user._id);
+      expect(userInDb.email).toBe(newEmail);
+
+      // 3. Kiểm tra Restaurant.email cũng được tự động đồng bộ
+      const restInDb = await Restaurant.findById(restaurant._id);
+      expect(restInDb.email).toBe(newEmail);
+
+      // 4. Đăng nhập lại với email mới và mật khẩu cũ -> Thành công
+      const loginNewRes = await request(app)
+        .post("/api/user/login")
+        .send({
+          email: newEmail,
+          password: "password123",
+          portal: "restaurant",
+        });
+
+      expect(loginNewRes.status).toBe(200);
+      expect(loginNewRes.body.success).toBe(true);
+      expect(loginNewRes.body.token).toBeDefined();
+
+      // 5. Đăng nhập lại bằng email cũ -> Thất bại 401
+      const loginOldRes = await request(app)
+        .post("/api/user/login")
+        .send({
+          email: initialEmail,
+          password: "password123",
+          portal: "restaurant",
+        });
+
+      expect(loginOldRes.status).toBe(401);
+      expect(loginOldRes.body.success).toBe(false);
+    });
+
+    it("từ chối đổi email nếu email mới đã được tài khoản khác sử dụng", async () => {
+      const emailA = `user-a-${Date.now()}@test.com`;
+      const emailB = `user-b-${Date.now()}@test.com`;
+
+      const userA = await createUser({
+        name: "User A",
+        email: emailA,
+        password: "password123",
+      });
+
+      const userB = await createUser({
+        name: "User B",
+        email: emailB,
+        password: "password123",
+      });
+
+      const tokenB = generateToken(userB._id);
+
+      // User B cố tình đổi sang email của User A
+      const updateRes = await request(app)
+        .put("/api/user/profile")
+        .set("Authorization", `Bearer ${tokenB}`)
+        .send({ email: emailA });
+
+      expect(updateRes.status).toBe(409);
+      expect(updateRes.body.success).toBe(false);
+      expect(updateRes.body.message).toContain("đã được sử dụng");
+    });
   });
 });

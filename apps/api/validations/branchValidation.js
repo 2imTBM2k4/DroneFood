@@ -130,9 +130,33 @@ export const setBranchOpenStateSchema = Joi.object({
 });
 
 export const assignBranchManagersSchema = Joi.object({
-  userIds: Joi.array().items(objectIdSchema).required().messages({
+  userIds: Joi.array().items(objectIdSchema).max(1).required().messages({
     "any.required": "userIds là bắt buộc",
+    "array.max": "Mỗi chi nhánh chỉ được có tối đa 1 quản lý",
   }),
+});
+
+export const createBranchManagerSchema = Joi.object({
+  name: Joi.string().trim().min(2).max(60).required().messages({
+    "any.required": "Họ và tên là bắt buộc",
+    "string.min": "Họ và tên tối thiểu 2 ký tự",
+  }),
+  email: Joi.string().trim().email().lowercase().required().messages({
+    "any.required": "Email là bắt buộc",
+    "string.email": "Email không đúng định dạng",
+  }),
+  password: Joi.string().min(6).max(100).required().messages({
+    "any.required": "Mật khẩu là bắt buộc",
+    "string.min": "Mật khẩu tối thiểu 6 ký tự",
+  }),
+  phone: Joi.string()
+    .trim()
+    .pattern(/^[0-9+\-\s()]{8,15}$/)
+    .allow("", null)
+    .optional()
+    .messages({
+      "string.pattern.base": "Số điện thoại không hợp lệ",
+    }),
 });
 
 export const lockBranchSchema = Joi.object({

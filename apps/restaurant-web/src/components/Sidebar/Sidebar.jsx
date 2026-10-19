@@ -13,29 +13,55 @@ import {
   UtensilsCrossed,
   WalletCards,
   X,
+  Building2,
+  ToggleLeft,
+  ToggleRight,
+  Loader2,
 } from "lucide-react";
+import axios from "axios";
+import { notificationService } from "@drone-food/web-ui/utils/toast";
 import { io } from "socket.io-client";
 import NotificationBell from "@drone-food/web-ui/components/NotificationBell";
 import ConfirmModal from "@drone-food/web-ui/components/ConfirmModal";
 import { formatVND } from "@drone-food/web-ui/utils/money";
 import { assets } from "../../assets/assets";
 import { AuthContext } from "../../context/AuthContext";
+import { useBranch } from "../../context/BranchContext";
 
-const menuSections = [
-  {
-    label: "Overview",
-    items: [{ path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" }],
-  },
-  {
-    label: "Management",
-    items: [
-      { path: "/orders", icon: ClipboardList, label: "Orders" },
-      { path: "/list", icon: UtensilsCrossed, label: "Menu Items" },
-      { path: "/wallet", icon: WalletCards, label: "Wallet" },
-      { path: "/edit-restaurant", icon: Store, label: "Restaurant Profile" },
-    ],
-  },
-];
+const getMenuSections = (role) => {
+  const isBranchManager = role === "branch_manager";
+
+  let managementItems = [];
+
+  if (isBranchManager) {
+    // Quản lý chi nhánh: Thực đơn chi nhánh, Đơn hàng chi nhánh, Hồ sơ chi nhánh
+    managementItems = [
+      { path: "/list", icon: UtensilsCrossed, label: "Thực đơn chi nhánh" },
+      { path: "/orders", icon: ClipboardList, label: "Đơn hàng" },
+      { path: "/edit-restaurant", icon: Store, label: "Hồ sơ chi nhánh" },
+    ];
+  } else {
+    // Quản lý thương hiệu: Thực đơn gốc, Quản lý chi nhánh, Ví tiền, Hồ sơ thương hiệu
+    // (Bỏ phần quản lý đơn hàng - đơn hàng do từng chi nhánh phụ trách)
+    managementItems = [
+      { path: "/list", icon: UtensilsCrossed, label: "Thực đơn gốc" },
+      { path: "/branches", icon: Building2, label: "Chi nhánh" },
+      { path: "/wallet", icon: WalletCards, label: "Ví tiền" },
+      { path: "/edit-restaurant", icon: Store, label: "Hồ sơ thương hiệu" },
+    ];
+  }
+
+  return [
+    {
+      label: "Tổng quan",
+      items: [{ path: "/dashboard", icon: LayoutDashboard, label: "Bảng điều khiển" }],
+    },
+    {
+      label: "Quản trị",
+      items: managementItems,
+    },
+  ];
+};
 
 const Sidebar = ({
   collapsed = false,
@@ -45,7 +71,44 @@ const Sidebar = ({
   onMobileClose,
 }) => {
   const { user, logout } = useContext(AuthContext);
+  const { branches, currentBranch, refreshBranches } = useBranch();
   const navigate = useNavigate();
+
+  const isBranchManager = user?.role === "branch_manager";
+  const targetBranch = isBranchManager ? currentBranch || branches[0] : null;
+  const isBranchOpen = targetBranch ? targetBranch.isOpen !== false : true;
+  const [togglingOpen, setTogglingOpen] = useState(false);
+
+  const handleToggleBranchOpen = async (e) => {
+    e?.stopPropagation?.();
+    if (!targetBranch?._id || togglingOpen) return;
+    try {
+      setTogglingOpen(true);
+      const nextOpen = !isBranchOpen;
+      const res = await axios.patch(
+        `${apiUrl}/api/branch/${targetBranch._id}/open-state`,
+        { isOpen: nextOpen },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.data?.success) {
+        notificationService.success(
+          nextOpen ? "Chi nhánh đã mở cửa nhận đơn" : "Chi nhánh đã tạm đóng cửa",
+          targetBranch.name,
+          { audience: "restaurant" }
+        );
+        refreshBranches();
+      }
+    } catch (err) {
+      notificationService.error(
+        "Không thể đổi trạng thái mở cửa",
+        err.response?.data?.message || err.message,
+        { audience: "restaurant", priority: "high" }
+      );
+    } finally {
+      setTogglingOpen(false);
+    }
+  };
+
   const [isDark, setIsDark] = useState(
     () => localStorage.getItem("mode") === "dark"
   );
@@ -123,7 +186,7 @@ const Sidebar = ({
       </header>
 
       <nav id="restaurant-sidebar-navigation" className="sidebar-navigation">
-        {menuSections.map((section) => (
+        {getMenuSections(user?.role).map((section) => (
           <section className="sidebar-section" key={section.label}>
             <p className="sidebar-section-label">{section.label}</p>
             <div className="sidebar-options">
@@ -176,29 +239,72 @@ const Sidebar = ({
           </div>
         </div>
 
-        {user && (
+        {/* Trạng thái mở cửa cho Quản lý chi nhánh / Số dư ví cho Chủ thương hiệu */}
+        {isBranchManager ? (
           <div
-            className="sidebar-balance"
-            title={collapsed ? `Balance: ${formatVND(user.walletBalance)}` : undefined}
-            onClick={() => {
-              navigate("/wallet");
-              onMobileClose?.();
-            }}
+            className={`sidebar-branch-toggle ${isBranchOpen ? "open" : "closed"}`}
+            onClick={handleToggleBranchOpen}
             role="button"
             tabIndex={0}
+            title={
+              collapsed
+                ? `Chi nhánh: ${isBranchOpen ? "Đang mở cửa (Bấm để đóng)" : "Đang đóng cửa (Bấm để mở)"}`
+                : undefined
+            }
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
-                navigate("/wallet");
-                onMobileClose?.();
+                handleToggleBranchOpen(e);
               }
             }}
           >
-            <WalletCards size={19} aria-hidden="true" />
-            <span>
-              <small>Balance</small>
-              <strong>{formatVND(user.walletBalance)}</strong>
-            </span>
+            <div className="sidebar-branch-toggle-left">
+              <Store size={19} className="sidebar-branch-icon" />
+              <span className={`sidebar-branch-dot ${isBranchOpen ? "dot-open" : "dot-closed"}`} />
+            </div>
+            <div className="sidebar-branch-toggle-copy">
+              <small>{targetBranch?.code ? `Chi nhánh ${targetBranch.code}` : "Chi nhánh"}</small>
+              <strong>{isBranchOpen ? "Đang mở cửa" : "Tạm đóng cửa"}</strong>
+            </div>
+            <button
+              type="button"
+              className="sidebar-branch-switch-btn"
+              disabled={togglingOpen}
+              aria-label={isBranchOpen ? "Đóng cửa chi nhánh" : "Mở cửa chi nhánh"}
+            >
+              {togglingOpen ? (
+                <Loader2 size={18} className="spin" />
+              ) : isBranchOpen ? (
+                <ToggleRight size={26} className="toggle-icon-on" />
+              ) : (
+                <ToggleLeft size={26} className="toggle-icon-off" />
+              )}
+            </button>
           </div>
+        ) : (
+          user && (
+            <div
+              className="sidebar-balance"
+              title={collapsed ? `Balance: ${formatVND(user.walletBalance)}` : undefined}
+              onClick={() => {
+                navigate("/wallet");
+                onMobileClose?.();
+              }}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  navigate("/wallet");
+                  onMobileClose?.();
+                }
+              }}
+            >
+              <WalletCards size={19} aria-hidden="true" />
+              <span>
+                <small>Balance</small>
+                <strong>{formatVND(user.walletBalance)}</strong>
+              </span>
+            </div>
+          )
         )}
 
         <div className="sidebar-account">

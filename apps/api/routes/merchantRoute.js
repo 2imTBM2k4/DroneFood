@@ -9,6 +9,8 @@ import {
   updateMerchantSchema,
   suspendMerchantSchema,
   listMerchantsQuerySchema,
+  submitBrandApplicationSchema,
+  decideBrandApplicationSchema,
 } from "../validations/merchantValidation.js";
 
 const merchantRouter = express.Router();
@@ -32,6 +34,28 @@ merchantRouter.post(
   merchantController.register
 );
 
+merchantRouter.post(
+  "/brand-application",
+  protect,
+  authorize("restaurant_owner", "merchant_owner"),
+  validate(submitBrandApplicationSchema),
+  merchantController.submitBrandApplication
+);
+
+merchantRouter.get(
+  "/brand-application",
+  protect,
+  authorize("restaurant_owner", "merchant_owner", "admin"),
+  merchantController.getBrandApplication
+);
+
+merchantRouter.get(
+  "/brand-applications",
+  protect,
+  authorize("admin"),
+  merchantController.listBrandApplications
+);
+
 merchantRouter.get(
   "/:slug/public",
   merchantController.getPublic
@@ -40,7 +64,7 @@ merchantRouter.get(
 merchantRouter.get(
   "/me",
   protect,
-  authorize("merchant_owner", "admin"),
+  authorize("merchant_owner", "restaurant_owner", "branch_manager", "admin"),
   merchantController.getMe
 );
 
@@ -74,6 +98,14 @@ merchantRouter.post(
   authorize("admin"),
   validate(suspendMerchantSchema),
   merchantController.suspend
+);
+
+merchantRouter.post(
+  "/:id/decide-brand-application",
+  protect,
+  authorize("admin"),
+  validate(decideBrandApplicationSchema),
+  merchantController.decideBrandApplication
 );
 
 export default merchantRouter;

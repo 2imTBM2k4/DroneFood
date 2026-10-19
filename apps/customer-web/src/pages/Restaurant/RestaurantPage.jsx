@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback, useContext } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Star, Store, UtensilsCrossed } from "lucide-react";
+import { Star, Store, UtensilsCrossed, MapPin, ChevronDown, Check, Plane } from "lucide-react";
 import "./RestaurantPage.css";
 import { StoreContext } from "../../context/StoreContext";
 import FoodDisplay from "../../components/FoodDisplay/FoodDisplay";
@@ -24,6 +24,10 @@ const RestaurantPage = () => {
   const { restaurant_list, url, user, liveLocation, fees } = useContext(StoreContext);
 
   const [restaurant, setRestaurant] = useState(null);
+  const [branches, setBranches] = useState([]);
+  const [selectedBranch, setSelectedBranch] = useState(null);
+  const [branchModalOpen, setBranchModalOpen] = useState(false);
+  const [loadingBranches, setLoadingBranches] = useState(false);
   const [restaurantFoods, setRestaurantFoods] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -36,12 +40,84 @@ const RestaurantPage = () => {
     setRestaurant(found || null);
   }, [id, restaurant_list]);
 
+  // Tải danh sách chi nhánh nếu quán là thương hiệu chuỗi
+  useEffect(() => {
+    if (!id) return;
+    let active = true;
+    const fetchBranches = async () => {
+      setLoadingBranches(true);
+      try {
+        const res = await fetch(`${url}/api/branch/list?merchantId=${id}&status=active`);
+        const data = await res.json();
+        if (!active) return;
+        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+          const rawBranches = data.data;
+          const customerCoords = liveLocation || user?.address;
+
+          const annotated = rawBranches.map((b) => {
+            const bLat = b.address?.lat ?? b.location?.coordinates?.[1];
+            const bLng = b.address?.lng ?? b.location?.coordinates?.[0];
+            let dist = null;
+            if (
+              customerCoords &&
+              typeof customerCoords.lat === "number" &&
+              typeof customerCoords.lng === "number" &&
+              typeof bLat === "number" &&
+              typeof bLng === "number"
+            ) {
+              dist = haversineKm(
+                { lat: customerCoords.lat, lng: customerCoords.lng },
+                { lat: bLat, lng: bLng }
+              );
+            }
+            return {
+              ...b,
+              distanceKm: dist,
+              etaMin: dist != null ? estimateEtaMinutes(dist) : null,
+            };
+          });
+
+          if (customerCoords) {
+            annotated.sort((a, b) => {
+              if (a.distanceKm == null) return 1;
+              if (b.distanceKm == null) return -1;
+              return a.distanceKm - b.distanceKm;
+            });
+          }
+
+          setBranches(annotated);
+          setSelectedBranch(annotated[0]);
+        } else {
+          setBranches([]);
+          setSelectedBranch(null);
+        }
+      } catch (err) {
+        console.error("Fetch branches error:", err);
+        setBranches([]);
+        setSelectedBranch(null);
+      } finally {
+        if (active) setLoadingBranches(false);
+      }
+    };
+
+    fetchBranches();
+    return () => {
+      active = false;
+    };
+  }, [id, url, liveLocation, user]);
+
   const fetchFoods = useCallback(async (signal) => {
     if (!id) return;
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ restaurantId: id, limit: "100" });
+      const queryObj = { limit: "100" };
+      if (selectedBranch) {
+        queryObj.branchId = selectedBranch._id;
+      } else {
+        queryObj.restaurantId = id;
+      }
+      const params = new URLSearchParams(queryObj);
       const response = await fetch(`${url}/api/food/list?${params}`, { signal });
       if (!response.ok) {
         throw new Error(`Request failed (${response.status})`);
@@ -59,7 +135,7 @@ const RestaurantPage = () => {
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
-  }, [id, url]);
+  }, [id, url, selectedBranch]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -183,23 +259,39 @@ const RestaurantPage = () => {
 
   // Real distance + delivery estimate when we know both ends' coordinates.
   const { distanceKm, etaMin } = useMemo(() => {
+    if (selectedBranch && selectedBranch.distanceKm != null) {
+      return {
+        distanceKm: selectedBranch.distanceKm,
+        etaMin: selectedBranch.etaMin,
+      };
+    }
     const a = liveLocation || user?.address;
+    const target = selectedBranch
+      ? {
+          lat:
+            selectedBranch.address?.lat ??
+            selectedBranch.location?.coordinates?.[1],
+          lng:
+            selectedBranch.address?.lng ??
+            selectedBranch.location?.coordinates?.[0],
+        }
+      : restaurant;
     if (
-      restaurant &&
-      typeof restaurant.lat === "number" &&
-      typeof restaurant.lng === "number" &&
+      target &&
+      typeof target.lat === "number" &&
+      typeof target.lng === "number" &&
       a &&
       typeof a.lat === "number" &&
       typeof a.lng === "number"
     ) {
       const d = haversineKm(
         { lat: a.lat, lng: a.lng },
-        { lat: restaurant.lat, lng: restaurant.lng }
+        { lat: target.lat, lng: target.lng }
       );
       return { distanceKm: d, etaMin: estimateEtaMinutes(d) };
     }
     return { distanceKm: null, etaMin: null };
-  }, [restaurant, liveLocation, user]);
+  }, [selectedBranch, restaurant, liveLocation, user]);
 
 
   const deliveryFee = fees?.deliveryFee;
@@ -267,11 +359,13 @@ const RestaurantPage = () => {
 
             <div className="restaurant-hero-meta">
               <span className="restaurant-hero-meta-item">
-                {restaurant.address}
+                {selectedBranch
+                  ? selectedBranch.address?.text || selectedBranch.address || "Chi nhánh"
+                  : restaurant.address}
               </span>
-              {restaurant.phone && (
+              {(selectedBranch?.phone || restaurant.phone) && (
                 <span className="restaurant-hero-meta-item">
-                  {restaurant.phone}
+                  {selectedBranch?.phone || restaurant.phone}
                 </span>
               )}
               {typeof distanceKm === "number" && (
@@ -292,9 +386,43 @@ const RestaurantPage = () => {
               </span>
             </div>
 
-            {(restaurant.isOpen === false || restaurant.isOpenNow === false) && (
+            {selectedBranch && (
+              <div className="restaurant-branch-bar">
+                <div className="branch-bar-left">
+                  <div className="branch-title-row">
+                    <span className="branch-label">Chi nhánh phục vụ:</span>
+                    <strong className="branch-name">{selectedBranch.name}</strong>
+                    {selectedBranch.droneDeliveryEnabled && (
+                      <span className="branch-drone-tag">
+                        <Plane size={13} /> Giao Drone
+                      </span>
+                    )}
+                  </div>
+                  <p className="branch-address-text">
+                    <MapPin size={13} />{" "}
+                    {selectedBranch.address?.text ||
+                      selectedBranch.address ||
+                      "Địa chỉ chi nhánh"}
+                  </p>
+                </div>
+                {branches.length > 1 && (
+                  <button
+                    type="button"
+                    className="branch-switch-btn"
+                    onClick={() => setBranchModalOpen(true)}
+                  >
+                    Đổi chi nhánh ({branches.length}) <ChevronDown size={14} />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {((selectedBranch ? selectedBranch.isOpen === false : restaurant.isOpen === false) ||
+              restaurant.isOpenNow === false) && (
               <p className="restaurant-hero-closed">
-                Nhà hàng hiện đang đóng cửa (Giờ hoạt động: {restaurant.openingHours?.openTime || "07:00"} - {restaurant.openingHours?.closeTime || "22:00"}). Quý khách vui lòng quay lại trong giờ mở cửa.
+                {selectedBranch && selectedBranch.isOpen === false
+                  ? `Chi nhánh ${selectedBranch.name} hiện đang tạm đóng cửa và không nhận đơn lúc này.`
+                  : `Nhà hàng hiện đang đóng cửa (Giờ hoạt động: ${restaurant.openingHours?.openTime || "07:00"} - ${restaurant.openingHours?.closeTime || "22:00"}). Quý khách vui lòng quay lại trong giờ mở cửa.`}
               </p>
             )}
 
@@ -341,7 +469,12 @@ const RestaurantPage = () => {
                   className="menu-section"
                 >
                   <h2 className="menu-section-title">{category}</h2>
-                  <FoodDisplay foods={foods} category="All" restaurantId={id} />
+                  <FoodDisplay
+                    foods={foods}
+                    category="All"
+                    restaurantId={id}
+                    branchId={selectedBranch?._id}
+                  />
                 </section>
               ))}
 
@@ -375,6 +508,77 @@ const RestaurantPage = () => {
             </nav>
           )}
         </div>
+
+      {branchModalOpen && (
+        <div
+          className="branch-modal-overlay"
+          onClick={() => setBranchModalOpen(false)}
+        >
+          <div
+            className="branch-modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="branch-modal-header">
+              <h3>Chọn chi nhánh phục vụ</h3>
+              <button
+                type="button"
+                className="close"
+                onClick={() => setBranchModalOpen(false)}
+              >
+                &times;
+              </button>
+            </div>
+            <p className="branch-modal-desc">
+              Các chi nhánh thuộc hệ thống <strong>{restaurant.name}</strong>. Hãy chọn chi nhánh thuận tiện nhất để tối ưu phí và thời gian giao hàng:
+            </p>
+            <div className="branch-list">
+              {branches.map((b) => {
+                const isSelected = selectedBranch?._id === b._id;
+                return (
+                  <div
+                    key={b._id}
+                    className={`branch-item-card ${isSelected ? "selected" : ""}`}
+                    onClick={() => {
+                      setSelectedBranch(b);
+                      setBranchModalOpen(false);
+                    }}
+                  >
+                    <div className="branch-item-details">
+                      <div className="branch-item-head">
+                        <span className="branch-item-name">{b.name}</span>
+                        {b.isOpen === false && (
+                          <span className="branch-closed-badge">Tạm đóng</span>
+                        )}
+                        {b.droneDeliveryEnabled && (
+                          <span className="branch-drone-chip">
+                            <Plane size={11} /> Drone
+                          </span>
+                        )}
+                      </div>
+                      <p className="branch-item-addr">
+                        {b.address?.text || b.address || "Chưa có địa chỉ"}
+                      </p>
+                      <div className="branch-item-meta">
+                        {b.distanceKm != null && (
+                          <span>Cách bạn {formatDistance(b.distanceKm)}</span>
+                        )}
+                        {b.etaMin != null && (
+                          <span>· Khoảng {b.etaMin} phút</span>
+                        )}
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <Check size={18} className="branch-check-icon" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

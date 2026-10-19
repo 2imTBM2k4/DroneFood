@@ -288,15 +288,57 @@ export const getPublicMerchantBySlug = async (slug) => {
 };
 
 /**
- * Lấy thông tin merchant của user đang đăng nhập.
+ * Lấy thông tin hồ sơ merchant và danh sách chi nhánh phù hợp với role của user đang đăng nhập.
+ * - merchant_owner / restaurant_owner: lấy thông tin merchant họ sở hữu và toàn bộ chi nhánh.
+ * - branch_manager: lấy thông tin merchant thương hiệu và danh sách các chi nhánh được phân công quản lý.
+ * - admin: lấy thông tin merchant nếu sở hữu.
  */
-export const getMerchantByOwner = async (userId) => {
+export const getMyMerchantProfile = async (userOrId) => {
+  let user = userOrId;
+  if (!user || typeof user !== "object" || !user.role) {
+    user = await User.findById(userOrId).lean();
+  }
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
+
+  const userId = user._id;
+
+  if (user.role === "branch_manager") {
+    const branches = await Branch.find({ managerUserIds: userId });
+    if (!branches || branches.length === 0) {
+      throw new AppError("Bạn chưa được phân công quản lý chi nhánh nào", 404);
+    }
+    const merchant = await Merchant.findById(branches[0].merchantId);
+    if (!merchant) {
+      throw new AppError("Không tìm thấy thông tin merchant", 404);
+    }
+    return { merchant, branches };
+  }
+
+  if (user.role === "restaurant_owner" || user.role === "merchant_owner") {
+    const { Restaurant } = await import("../models/index.cjs");
+    const restaurant = await Restaurant.findOne({ owner: userId });
+    if (restaurant) {
+      const { ensureLegacyBranch } = await import("./droneDeliveryApplicationService.js");
+      await ensureLegacyBranch(restaurant);
+    }
+  }
+
   const merchant = await merchantRepo.findByOwnerUserId(userId);
   if (!merchant) {
     throw new AppError("Bạn chưa có thông tin merchant", 404);
   }
+
   const branches = await branchRepo.findByMerchantId(merchant._id);
   return { merchant, branches };
+};
+
+/**
+ * Lấy thông tin merchant của user đang đăng nhập (tương thích ngược).
+ */
+export const getMerchantByOwner = async (userId) => {
+  return getMyMerchantProfile(userId);
 };
 
 /**
@@ -347,4 +389,250 @@ export const listMerchants = async ({
     sortBy,
     order,
   });
+};
+
+/**
+ * Nộp hồ sơ đăng ký nâng cấp quán cá nhân lên chuỗi thương hiệu nhiều chi nhánh.
+ */
+export const submitBrandApplication = async ({
+  userId,
+  merchantId,
+  applicationData,
+}) => {
+  let merchant = null;
+  if (merchantId) {
+    merchant = await merchantRepo.findById(merchantId);
+  } else {
+    merchant = await merchantRepo.findByOwnerUserId(userId);
+  }
+
+  if (!merchant) {
+    const { Restaurant } = await import("../models/index.cjs");
+    const restaurant = await Restaurant.findOne({ owner: userId });
+    if (restaurant) {
+      const { ensureLegacyBranch } = await import(
+        "./droneDeliveryApplicationService.js"
+      );
+      await ensureLegacyBranch(restaurant);
+      merchant = await merchantRepo.findByOwnerUserId(userId);
+    }
+  }
+
+  if (!merchant) {
+    throw new AppError("Không tìm thấy thông tin cửa hàng / thương hiệu", 404);
+  }
+
+  if (merchant.ownerUserId.toString() !== userId.toString()) {
+    throw new AppError("Bạn không có quyền nộp hồ sơ cho thương hiệu này", 403);
+  }
+
+  if (merchant.type === "brand") {
+    throw new AppError("Cửa hàng của bạn đã là chuỗi thương hiệu", 400);
+  }
+
+  if (merchant.brandApplication?.status === "pending") {
+    throw new AppError(
+      "Hồ sơ nâng cấp thương hiệu đang chờ Admin xét duyệt",
+      409
+    );
+  }
+
+  const licenseImages = Array.isArray(applicationData.licenseImages)
+    ? applicationData.licenseImages.filter(Boolean)
+    : [];
+
+  merchant.brandApplication = {
+    status: "pending",
+    brandName: applicationData.brandName.trim(),
+    taxCode: applicationData.taxCode ? applicationData.taxCode.trim() : "",
+    representativeName: applicationData.representativeName.trim(),
+    phone: applicationData.phone.trim(),
+    licenseImages,
+    notes: applicationData.notes ? applicationData.notes.trim() : "",
+    submittedBy: userId,
+    submittedAt: new Date(),
+    reviewedBy: null,
+    reviewedAt: null,
+    rejectReason: "",
+  };
+
+  await merchant.save();
+
+  await recordAudit({
+    actor: { _id: userId, role: "restaurant_owner" },
+    action: "merchant.brand_application_submitted",
+    targetType: "merchant",
+    targetId: merchant._id,
+    merchantId: merchant._id,
+    reason: "Nộp hồ sơ nâng cấp chuỗi thương hiệu",
+    metadata: {
+      brandName: merchant.brandApplication.brandName,
+      taxCode: merchant.brandApplication.taxCode,
+    },
+  });
+
+  return merchant.brandApplication;
+};
+
+/**
+ * Lấy hồ sơ nâng cấp chuỗi thương hiệu của merchant hiện tại.
+ */
+export const getBrandApplication = async ({ userId, merchantId }) => {
+  let merchant = null;
+  if (merchantId) {
+    merchant = await merchantRepo.findById(merchantId);
+  } else {
+    merchant = await merchantRepo.findByOwnerUserId(userId);
+  }
+
+  if (!merchant) {
+    const { Restaurant } = await import("../models/index.cjs");
+    const restaurant = await Restaurant.findOne({ owner: userId });
+    if (restaurant) {
+      const { ensureLegacyBranch } = await import(
+        "./droneDeliveryApplicationService.js"
+      );
+      await ensureLegacyBranch(restaurant);
+      merchant = await merchantRepo.findByOwnerUserId(userId);
+    }
+  }
+
+  if (!merchant) {
+    throw new AppError("Không tìm thấy thông tin cửa hàng / thương hiệu", 404);
+  }
+
+  return {
+    merchantId: merchant._id,
+    type: merchant.type,
+    name: merchant.name,
+    brandApplication: merchant.brandApplication || {
+      status: "not_registered",
+    },
+  };
+};
+
+/**
+ * Lấy danh sách hồ sơ nâng cấp thương hiệu (Admin).
+ */
+export const listBrandApplications = async ({
+  status = "pending",
+  page = 1,
+  limit = 20,
+  q,
+}) => {
+  const filter = {};
+  if (status && status !== "all") {
+    filter["brandApplication.status"] = status;
+  } else {
+    filter["brandApplication.status"] = {
+      $in: ["pending", "approved", "rejected"],
+    };
+  }
+
+  if (q && q.trim()) {
+    const escaped = escapeRegex(q.trim());
+    filter.$or = [
+      { name: { $regex: escaped, $options: "i" } },
+      { "brandApplication.brandName": { $regex: escaped, $options: "i" } },
+      { "brandApplication.taxCode": { $regex: escaped, $options: "i" } },
+      {
+        "brandApplication.representativeName": {
+          $regex: escaped,
+          $options: "i",
+        },
+      },
+    ];
+  }
+
+  const parsedPage = Math.max(1, parseInt(page, 10) || 1);
+  const parsedLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+  const skip = (parsedPage - 1) * parsedLimit;
+
+  const [merchants, total] = await Promise.all([
+    Merchant.find(filter)
+      .populate("ownerUserId", "name email phone")
+      .populate("brandApplication.submittedBy", "name email")
+      .populate("brandApplication.reviewedBy", "name email")
+      .sort({ "brandApplication.submittedAt": -1, updatedAt: -1 })
+      .skip(skip)
+      .limit(parsedLimit)
+      .lean(),
+    Merchant.countDocuments(filter),
+  ]);
+
+  return {
+    data: merchants,
+    pagination: {
+      page: parsedPage,
+      limit: parsedLimit,
+      total,
+      totalPages: Math.ceil(total / parsedLimit) || 1,
+    },
+  };
+};
+
+/**
+ * Phê duyệt hoặc từ chối hồ sơ nâng cấp chuỗi thương hiệu (Admin).
+ */
+export const decideBrandApplication = async (
+  merchantId,
+  { decision, reason },
+  adminUser
+) => {
+  const merchant = await merchantRepo.findById(merchantId);
+  if (!merchant) {
+    throw new AppError("Merchant không tồn tại", 404);
+  }
+
+  if (merchant.brandApplication?.status !== "pending") {
+    throw new AppError("Chỉ có thể xử lý hồ sơ đang ở trạng thái pending", 400);
+  }
+
+  if (decision === "approved") {
+    merchant.brandApplication.status = "approved";
+    merchant.brandApplication.reviewedBy = adminUser._id;
+    merchant.brandApplication.reviewedAt = new Date();
+    merchant.brandApplication.rejectReason = "";
+    merchant.type = "brand";
+
+    if (merchant.brandApplication.brandName) {
+      merchant.name = merchant.brandApplication.brandName;
+    }
+
+    await merchant.save();
+
+    // Nâng cấp role người sở hữu thành merchant_owner
+    await User.findByIdAndUpdate(merchant.ownerUserId, {
+      role: "merchant_owner",
+    });
+
+    await recordAudit({
+      actor: { _id: adminUser._id, role: "admin" },
+      action: "merchant.brand_application_approved",
+      targetType: "merchant",
+      targetId: merchant._id,
+      merchantId: merchant._id,
+      reason: "Admin phê duyệt nâng cấp chuỗi thương hiệu",
+      metadata: { brandName: merchant.name },
+    });
+  } else if (decision === "rejected") {
+    merchant.brandApplication.status = "rejected";
+    merchant.brandApplication.rejectReason = (reason || "").trim();
+    merchant.brandApplication.reviewedBy = adminUser._id;
+    merchant.brandApplication.reviewedAt = new Date();
+
+    await merchant.save();
+
+    await recordAudit({
+      actor: { _id: adminUser._id, role: "admin" },
+      action: "merchant.brand_application_rejected",
+      targetType: "merchant",
+      targetId: merchant._id,
+      merchantId: merchant._id,
+      reason: reason || "Admin từ chối hồ sơ nâng cấp chuỗi thương hiệu",
+      metadata: { reason },
+    });
+  }
+
+  return merchant;
 };

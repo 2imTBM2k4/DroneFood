@@ -63,3 +63,17 @@ export const setFoodAvailability = async (req, res) => {
     res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
 };
+
+export const setBranchFoodAvailability = async (req, res) => {
+  try {
+    const result = await foodService.setBranchFoodAvailability(
+      req.user,
+      req.params.id,
+      req.body.branchId,
+      req.body.isAvailable
+    );
+    res.json(result);
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};

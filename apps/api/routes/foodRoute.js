@@ -6,6 +6,7 @@ import {
   updateFood,
   getFoodById,
   setFoodAvailability,
+  setBranchFoodAvailability,
 } from "../controllers/foodController.js";
 import { uploadMiddleware } from "../config/multer.js";
 import { protect, optionalAuth, authorize } from "../middleware/auth.js";
@@ -16,6 +17,7 @@ import {
   removeFoodSchema,
   listFoodQuerySchema,
   foodAvailabilitySchema,
+  branchFoodAvailabilitySchema,
 } from "../validations/foodValidation.js";
 
 const foodRouter = express.Router();
@@ -51,6 +53,14 @@ foodRouter.patch(
   authorize("restaurant_owner", "merchant_owner", "admin"),
   validate(foodAvailabilitySchema),
   setFoodAvailability
+);
+
+foodRouter.patch(
+  "/:id/branch-availability",
+  protect,
+  authorize("branch_manager", "merchant_owner", "admin"),
+  validate(branchFoodAvailabilitySchema),
+  setBranchFoodAvailability
 );
 
 export default foodRouter;

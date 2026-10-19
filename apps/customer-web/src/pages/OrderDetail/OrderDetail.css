@@ -838,6 +838,23 @@
   line-height: 1.4;
 }
 
+.endpoint-phone {
+  font-size: 12px;
+  color: var(--apple-body-muted, #86868b);
+  margin: 2px 0 0;
+  line-height: 1.4;
+}
+
+.endpoint-phone a {
+  color: var(--apple-primary, #0066cc);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.endpoint-phone a:hover {
+  text-decoration: underline;
+}
+
 .route-connector-line {
   width: 2px;
   height: 20px;

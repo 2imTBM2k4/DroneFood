@@ -13,6 +13,10 @@ import {
   Search,
   Store,
   X,
+  FileCheck,
+  Clock,
+  ExternalLink,
+  ShieldAlert,
 } from "lucide-react";
 import axios from "axios";
 import { createPortal } from "react-dom";
@@ -31,6 +35,13 @@ const STATUS_OPTIONS = [
   { value: "pending", label: "Pending" },
   { value: "active", label: "Active" },
   { value: "suspended", label: "Suspended" },
+];
+
+const APP_STATUS_OPTIONS = [
+  { value: "pending", label: "Đang chờ duyệt (Pending)" },
+  { value: "all", label: "Tất cả hồ sơ" },
+  { value: "approved", label: "Đã duyệt (Approved)" },
+  { value: "rejected", label: "Đã từ chối (Rejected)" },
 ];
 
 const TYPE_OPTIONS = [
@@ -178,6 +189,17 @@ const Merchants = ({ url }) => {
   const closeRef = useRef(null);
   const lastFocusedRef = useRef(null);
 
+  // ── Brand Applications State ─────────────────────────────
+  const [viewTab, setViewTab] = useState("merchants"); // "merchants" | "brand_applications"
+  const [brandApps, setBrandApps] = useState([]);
+  const [brandAppsLoading, setBrandAppsLoading] = useState(false);
+  const [brandAppsError, setBrandAppsError] = useState("");
+  const [brandAppFilter, setBrandAppFilter] = useState("pending");
+  const [pendingAppsCount, setPendingAppsCount] = useState(0);
+  const [brandAppAction, setBrandAppAction] = useState(null); // { kind: "approved" | "rejected", item: merchant }
+  const [brandRejectReason, setBrandRejectReason] = useState("");
+  const [selectedBrandApp, setSelectedBrandApp] = useState(null);
+
   const authHeaders = useCallback(() => ({
     Authorization: `Bearer ${localStorage.getItem("token")}`,
   }), []);
@@ -255,17 +277,128 @@ const Merchants = ({ url }) => {
     fetchMerchants();
   }, [fetchMerchants]);
 
+  const fetchBrandApps = useCallback(async () => {
+    try {
+      setBrandAppsLoading(true);
+      setBrandAppsError("");
+      const params = {};
+      if (brandAppFilter && brandAppFilter !== "all") {
+        params.status = brandAppFilter;
+      }
+      const response = await axios.get(`${url}/api/merchant/brand-applications`, {
+        headers: authHeaders(),
+        params,
+      });
+      if (response.data.success) {
+        setBrandApps(response.data.data || []);
+      } else {
+        throw new Error(response.data.message || "Could not load brand applications");
+      }
+    } catch (err) {
+      setBrandAppsError(err.response?.data?.message || err.message || "Lỗi khi tải danh sách hồ sơ");
+      setBrandApps([]);
+    } finally {
+      setBrandAppsLoading(false);
+    }
+  }, [authHeaders, brandAppFilter, url]);
+
+  const fetchPendingAppsCount = useCallback(async () => {
+    try {
+      const response = await axios.get(`${url}/api/merchant/brand-applications`, {
+        headers: authHeaders(),
+        params: { status: "pending" },
+      });
+      if (response.data.success) {
+        setPendingAppsCount(response.data.data?.length || 0);
+      }
+    } catch {
+      // Non-critical count error
+    }
+  }, [authHeaders, url]);
+
+  useEffect(() => {
+    fetchPendingAppsCount();
+  }, [fetchPendingAppsCount]);
+
+  useEffect(() => {
+    if (viewTab === "brand_applications") {
+      fetchBrandApps();
+    }
+  }, [viewTab, fetchBrandApps]);
+
   const closeDialog = useCallback(() => {
     if (working) return;
     setSelectedMerchant(null);
     setBranches([]);
     setAction(null);
     setSuspendReason("");
+    setBrandAppAction(null);
+    setSelectedBrandApp(null);
+    setBrandRejectReason("");
     requestAnimationFrame(() => lastFocusedRef.current?.focus());
   }, [working]);
 
+  const startBrandAppAction = (kind, item, trigger) => {
+    lastFocusedRef.current = trigger;
+    setBrandRejectReason("");
+    setBrandAppAction({ kind, item });
+  };
+
+  const handleDecideBrandApp = async () => {
+    if (!brandAppAction?.item) return;
+    const { kind, item } = brandAppAction;
+    if (kind === "rejected" && brandRejectReason.trim().length < 3) {
+      notificationService.warning(
+        "Thiếu lý do từ chối",
+        "Vui lòng nhập lý do từ chối cụ thể (tối thiểu 3 ký tự).",
+        { audience: "admin" }
+      );
+      return;
+    }
+
+    try {
+      setWorking(true);
+      const payload = {
+        decision: kind,
+        ...(kind === "rejected" ? { reason: brandRejectReason.trim() } : {}),
+      };
+
+      const response = await axios.post(
+        `${url}/api/merchant/${item._id}/decide-brand-application`,
+        payload,
+        { headers: authHeaders() }
+      );
+
+      if (response.data.success) {
+        notificationService.success(
+          kind === "approved"
+            ? "Đã phê duyệt lên Chuỗi thương hiệu thành công!"
+            : "Đã từ chối hồ sơ nâng cấp chuỗi thương hiệu.",
+          undefined,
+          { audience: "admin" }
+        );
+        setBrandAppAction(null);
+        setSelectedBrandApp(null);
+        setBrandRejectReason("");
+        await fetchBrandApps();
+        await fetchPendingAppsCount();
+        await fetchMerchants();
+      } else {
+        throw new Error(response.data.message || "Xử lý hồ sơ thất bại");
+      }
+    } catch (err) {
+      notificationService.error(
+        "Không thể xử lý hồ sơ",
+        err.response?.data?.message || err.message || "Lỗi kết nối máy chủ.",
+        { audience: "admin", priority: "high" }
+      );
+    } finally {
+      setWorking(false);
+    }
+  };
+
   useEffect(() => {
-    if (!selectedMerchant && !action) return undefined;
+    if (!selectedMerchant && !action && !brandAppAction && !selectedBrandApp) return undefined;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     requestAnimationFrame(() => closeRef.current?.focus());
@@ -296,7 +429,7 @@ const Merchants = ({ url }) => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [action, closeDialog, selectedMerchant, working]);
+  }, [action, brandAppAction, closeDialog, selectedBrandApp, selectedMerchant, working]);
 
   const openDetail = async (merchant, trigger) => {
     lastFocusedRef.current = trigger;
@@ -404,16 +537,201 @@ const Merchants = ({ url }) => {
           <p className="merchants-kicker">Merchant approvals</p>
           <h1 id="merchants-title">Restaurants & brands</h1>
           <p>
-            Review ownership, branch coverage and approval status from one queue.
+            Quản trị đối tác ẩm thực, kiểm duyệt hồ sơ nâng cấp chuỗi thương hiệu và vận hành chi nhánh.
           </p>
         </div>
         <div className="merchants-total" aria-live="polite">
           <Building2 size={18} />
-          <span>{pagination.total} merchants</span>
+          <span>
+            {viewTab === "merchants"
+              ? `${pagination.total} đối tác`
+              : `${brandApps.length} hồ sơ nâng cấp`}
+          </span>
         </div>
       </header>
 
-      <div className="merchants-toolbar" aria-label="Merchant filters">
+      {/* ── View Navigation Tabs ───────────────────────────── */}
+      <div className="merchants-view-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={viewTab === "merchants"}
+          className={`merchants-view-tab ${viewTab === "merchants" ? "active" : ""}`}
+          onClick={() => setViewTab("merchants")}
+        >
+          <Store size={16} />
+          <span>Danh sách đối tác</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={viewTab === "brand_applications"}
+          className={`merchants-view-tab ${viewTab === "brand_applications" ? "active" : ""}`}
+          onClick={() => setViewTab("brand_applications")}
+        >
+          <Building2 size={16} />
+          <span>Duyệt hồ sơ lên chuỗi</span>
+          {pendingAppsCount > 0 && (
+            <span className="merchants-tab-badge">{pendingAppsCount}</span>
+          )}
+        </button>
+      </div>
+
+      {viewTab === "brand_applications" ? (
+        /* ── BRAND UPGRADE APPLICATIONS QUEUE ─────────────── */
+        <>
+          <div className="merchants-toolbar" aria-label="Brand application filters">
+            <label className="merchant-filter-control" style={{ gridColumn: "span 2" }}>
+              <span>Trạng thái hồ sơ</span>
+              <select
+                value={brandAppFilter}
+                onChange={(e) => setBrandAppFilter(e.target.value)}
+              >
+                {APP_STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button
+              type="button"
+              className="merchant-refresh"
+              onClick={fetchBrandApps}
+              disabled={brandAppsLoading}
+              style={{ justifySelf: "end" }}
+            >
+              <RefreshCw size={16} className={brandAppsLoading ? "is-spinning" : ""} />
+              Làm mới danh sách
+            </button>
+          </div>
+
+          <div className="merchants-table-card">
+            {brandAppsError ? (
+              <div className="merchants-state merchants-state--error">
+                <CircleAlert size={28} />
+                <strong>Không thể tải danh sách hồ sơ</strong>
+                <span>{brandAppsError}</span>
+                <button type="button" onClick={fetchBrandApps}>Thử lại</button>
+              </div>
+            ) : brandAppsLoading ? (
+              <div className="merchants-state" role="status">
+                Đang tải danh sách hồ sơ nâng cấp chuỗi...
+              </div>
+            ) : brandApps.length === 0 ? (
+              <div className="merchants-state">
+                <FileCheck size={28} />
+                <strong>Không có hồ sơ nào</strong>
+                <span>Hiện chưa có hồ sơ đăng ký thương hiệu chuỗi nào thuộc trạng thái này.</span>
+              </div>
+            ) : (
+              <div className="merchants-table-scroll">
+                <table className="merchants-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Cửa hàng hiện tại</th>
+                      <th scope="col">Tên chuỗi đề xuất</th>
+                      <th scope="col">Mã số thuế</th>
+                      <th scope="col">Người đại diện</th>
+                      <th scope="col">SĐT liên hệ</th>
+                      <th scope="col">Ngày nộp</th>
+                      <th scope="col">Trạng thái hồ sơ</th>
+                      <th scope="col" className="merchant-actions-heading">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {brandApps.map((merchant) => {
+                      const app = merchant.brandApplication || {};
+                      const appStatus = app.status || "pending";
+                      return (
+                        <tr key={merchant._id}>
+                          <td data-label="Cửa hàng">
+                            <div className="merchant-identity">
+                              <MerchantMark merchant={merchant} />
+                              <span>
+                                <strong>{merchant.name}</strong>
+                                <small>/{merchant.slug}</small>
+                              </span>
+                            </div>
+                          </td>
+                          <td data-label="Chuỗi đề xuất">
+                            <strong style={{ color: "var(--accent-color, #2563eb)" }}>
+                              {app.brandName || "—"}
+                            </strong>
+                          </td>
+                          <td data-label="Mã số thuế">
+                            <code>{app.taxCode || "—"}</code>
+                          </td>
+                          <td data-label="Đại diện">
+                            <strong>{app.representativeName || "—"}</strong>
+                          </td>
+                          <td data-label="SĐT">
+                            <span>{app.phone || "—"}</span>
+                          </td>
+                          <td data-label="Ngày nộp" className="merchant-date">
+                            {formatDate(app.submittedAt)}
+                          </td>
+                          <td data-label="Trạng thái">
+                            <span className={`brand-app-status-badge ${appStatus}`}>
+                              {appStatus === "pending" && <Clock size={12} />}
+                              {appStatus === "approved" && <CheckCircle2 size={12} />}
+                              {appStatus === "rejected" && <CircleAlert size={12} />}
+                              {appStatus === "pending" && "Chờ duyệt"}
+                              {appStatus === "approved" && "Đã duyệt lên chuỗi"}
+                              {appStatus === "rejected" && "Từ chối"}
+                            </span>
+                          </td>
+                          <td data-label="Thao tác" className="merchant-actions">
+                            <button
+                              type="button"
+                              className="merchant-action merchant-action--view"
+                              onClick={(e) => {
+                                lastFocusedRef.current = e.currentTarget;
+                                setSelectedBrandApp(merchant);
+                              }}
+                              title="Xem chi tiết hồ sơ"
+                            >
+                              <Eye size={15} /> Xem hồ sơ
+                            </button>
+                            {appStatus === "pending" && (
+                              <>
+                                <button
+                                  type="button"
+                                  className="merchant-action merchant-action--brand-approve"
+                                  onClick={(e) =>
+                                    startBrandAppAction("approved", merchant, e.currentTarget)
+                                  }
+                                  title="Duyệt cửa hàng thành chuỗi thương hiệu"
+                                >
+                                  Duyệt lên chuỗi
+                                </button>
+                                <button
+                                  type="button"
+                                  className="merchant-action merchant-action--brand-reject"
+                                  onClick={(e) =>
+                                    startBrandAppAction("rejected", merchant, e.currentTarget)
+                                  }
+                                  title="Từ chối hồ sơ nâng cấp"
+                                >
+                                  Từ chối
+                                </button>
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        /* ── ALL MERCHANTS VIEW ────────────────────────────── */
+        <>
+          <div className="merchants-toolbar" aria-label="Merchant filters">
         <label className="merchants-search">
           <Search size={18} aria-hidden="true" />
           <span className="sr-only">Search merchants</span>
@@ -674,6 +992,248 @@ const Merchants = ({ url }) => {
           </div>
         </footer>
       </div>
+    </>
+  )}
+
+      {/* ── Modal Chi tiết hồ sơ nâng cấp chuỗi ────────── */}
+      {selectedBrandApp && (
+        <ModalShell
+          titleId="brand-app-detail-title"
+          descriptionId="brand-app-detail-description"
+          onClose={closeDialog}
+          closeRef={closeRef}
+          dialogRef={dialogRef}
+        >
+          <header className="merchant-modal-header">
+            <div className="merchant-modal-title">
+              <MerchantMark merchant={selectedBrandApp} size="large" />
+              <div>
+                <span
+                  className={`brand-app-status-badge ${
+                    selectedBrandApp.brandApplication?.status || "pending"
+                  }`}
+                >
+                  {selectedBrandApp.brandApplication?.status === "approved"
+                    ? "Đã duyệt lên chuỗi"
+                    : selectedBrandApp.brandApplication?.status === "rejected"
+                    ? "Đã từ chối"
+                    : "Đang chờ duyệt"}
+                </span>
+                <h2 id="brand-app-detail-title">
+                  {selectedBrandApp.brandApplication?.brandName || selectedBrandApp.name}
+                </h2>
+                <p id="brand-app-detail-description">
+                  Hồ sơ nâng cấp từ quán: <strong>{selectedBrandApp.name}</strong> (/{selectedBrandApp.slug})
+                </p>
+              </div>
+            </div>
+          </header>
+
+          <div className="merchant-modal-body">
+            <section className="merchant-detail-grid">
+              <div>
+                <span>Tên chuỗi đề xuất</span>
+                <strong>{selectedBrandApp.brandApplication?.brandName || "—"}</strong>
+              </div>
+              <div>
+                <span>Mã số thuế</span>
+                <strong>{selectedBrandApp.brandApplication?.taxCode || "—"}</strong>
+              </div>
+              <div>
+                <span>Người đại diện</span>
+                <strong>{selectedBrandApp.brandApplication?.representativeName || "—"}</strong>
+              </div>
+              <div>
+                <span>SĐT liên hệ</span>
+                <strong>{selectedBrandApp.brandApplication?.phone || "—"}</strong>
+              </div>
+              <div>
+                <span>Ngày nộp hồ sơ</span>
+                <strong>{formatDate(selectedBrandApp.brandApplication?.submittedAt)}</strong>
+              </div>
+              <div>
+                <span>Chủ tài khoản quán</span>
+                <strong>{selectedBrandApp.ownerUserId?.name || selectedBrandApp.ownerUserId?.email || "—"}</strong>
+              </div>
+            </section>
+
+            {selectedBrandApp.brandApplication?.notes && (
+              <section className="merchant-description">
+                <h3>Ghi chú & Kế hoạch mở rộng</h3>
+                <p>{selectedBrandApp.brandApplication.notes}</p>
+              </section>
+            )}
+
+            {selectedBrandApp.brandApplication?.rejectReason && (
+              <section className="merchant-description" style={{ color: "#b91c1c" }}>
+                <h3 style={{ color: "#b91c1c" }}>Lý do từ chối trước đó</h3>
+                <p>{selectedBrandApp.brandApplication.rejectReason}</p>
+              </section>
+            )}
+
+            {Array.isArray(selectedBrandApp.brandApplication?.licenseImages) &&
+              selectedBrandApp.brandApplication.licenseImages.length > 0 && (
+                <section className="merchant-branches-section">
+                  <div className="merchant-section-heading">
+                    <div>
+                      <h3>Hình ảnh chứng thực / Giấy phép kinh doanh</h3>
+                      <p>Giấy tờ pháp lý do đối tác tải lên</p>
+                    </div>
+                    <span>{selectedBrandApp.brandApplication.licenseImages.length}</span>
+                  </div>
+                  <div className="brand-app-images-list">
+                    {selectedBrandApp.brandApplication.licenseImages.map((imgUrl, idx) => (
+                      <a
+                        key={idx}
+                        href={imgUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="Bấm để mở ảnh kích thước lớn trong tab mới"
+                      >
+                        <img
+                          src={imgUrl}
+                          alt={`Giấy phép ${idx + 1}`}
+                          className="brand-app-image-thumb"
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = "/placeholder.jpg";
+                          }}
+                        />
+                      </a>
+                    ))}
+                  </div>
+                </section>
+              )}
+          </div>
+
+          <footer className="merchant-modal-footer">
+            {selectedBrandApp.brandApplication?.status === "pending" && (
+              <>
+                <button
+                  type="button"
+                  className="merchant-action--brand-approve"
+                  style={{ minHeight: 36, padding: "0 14px", borderRadius: "var(--radius-sm)", fontWeight: 700 }}
+                  onClick={(e) => {
+                    closeDialog();
+                    startBrandAppAction("approved", selectedBrandApp, e.currentTarget);
+                  }}
+                >
+                  Duyệt lên chuỗi
+                </button>
+                <button
+                  type="button"
+                  className="merchant-action--brand-reject"
+                  style={{ minHeight: 36, padding: "0 14px", borderRadius: "var(--radius-sm)", fontWeight: 700 }}
+                  onClick={(e) => {
+                    closeDialog();
+                    startBrandAppAction("rejected", selectedBrandApp, e.currentTarget);
+                  }}
+                >
+                  Từ chối hồ sơ
+                </button>
+              </>
+            )}
+            <button type="button" className="merchant-secondary-action" onClick={closeDialog}>
+              Đóng
+            </button>
+          </footer>
+        </ModalShell>
+      )}
+
+      {/* ── Modal Xác nhận Duyệt / Từ chối hồ sơ lên chuỗi ── */}
+      {brandAppAction && (
+        <ModalShell
+          compact
+          busy={working}
+          titleId="brand-app-action-title"
+          descriptionId="brand-app-action-description"
+          onClose={closeDialog}
+          closeRef={closeRef}
+          dialogRef={dialogRef}
+        >
+          <header className="merchant-action-dialog-header">
+            <span
+              className={`merchant-action-icon ${
+                brandAppAction.kind === "approved"
+                  ? "merchant-action-icon--approve"
+                  : "merchant-action-icon--suspend"
+              }`}
+            >
+              {brandAppAction.kind === "approved" ? (
+                <CheckCircle2 size={22} />
+              ) : (
+                <ShieldAlert size={22} />
+              )}
+            </span>
+            <div>
+              <h2 id="brand-app-action-title">
+                {brandAppAction.kind === "approved"
+                  ? "Phê duyệt lên Chuỗi thương hiệu"
+                  : "Từ chối hồ sơ nâng cấp"}
+              </h2>
+              <p id="brand-app-action-description">
+                {brandAppAction.kind === "approved"
+                  ? `Phê duyệt đối tác "${brandAppAction.item.brandApplication?.brandName || brandAppAction.item.name}" chuyển đổi thành Chuỗi thương hiệu đa chi nhánh?`
+                  : `Từ chối hồ sơ nâng cấp của quán "${brandAppAction.item.name}"?`}
+              </p>
+            </div>
+          </header>
+
+          {brandAppAction.kind === "approved" ? (
+            <div style={{ marginTop: 16, padding: 12, background: "#ecfdf5", borderRadius: 8, border: "1px solid #a7f3d0", fontSize: 13, color: "#065f46", lineHeight: 1.55 }}>
+              <strong>Tự động chuyển đổi sau khi duyệt:</strong>
+              <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>
+                <li>Mô hình kinh doanh chuyển từ <code>individual</code> sang <code>brand</code>.</li>
+                <li>Tài khoản chủ quán được nâng cấp quyền thành <strong>Chủ thương hiệu (merchant_owner)</strong>.</li>
+                <li>Quán ăn hiện tại trở thành <strong>chi nhánh con MAIN</strong> của chuỗi.</li>
+                <li>Chủ thương hiệu có thể thêm nhiều chi nhánh và phân quyền quản lý chi nhánh.</li>
+              </ul>
+            </div>
+          ) : (
+            <label className="merchant-reason-field">
+              <span>Lý do từ chối hồ sơ <strong style={{ color: "red" }}>*</strong></span>
+              <textarea
+                value={brandRejectReason}
+                onChange={(event) => setBrandRejectReason(event.target.value)}
+                placeholder="Vui lòng nêu rõ lý do từ chối (giấy tờ không hợp lệ, thông tin sai lệch...) để đối tác nắm được và gửi lại..."
+                maxLength={500}
+                autoFocus
+              />
+              <small>{brandRejectReason.trim().length}/500 · Tối thiểu 3 ký tự</small>
+            </label>
+          )}
+
+          <footer className="merchant-action-dialog-footer">
+            <button
+              type="button"
+              className="merchant-secondary-action"
+              onClick={closeDialog}
+              disabled={working}
+            >
+              Hủy bỏ
+            </button>
+            <button
+              type="button"
+              className={
+                brandAppAction.kind === "approved"
+                  ? "merchant-primary-action"
+                  : "merchant-danger-action"
+              }
+              onClick={handleDecideBrandApp}
+              disabled={
+                working ||
+                (brandAppAction.kind === "rejected" && brandRejectReason.trim().length < 3)
+              }
+            >
+              {working
+                ? "Đang xử lý..."
+                : brandAppAction.kind === "approved"
+                ? "Xác nhận phê duyệt"
+                : "Xác nhận từ chối"}
+            </button>
+          </footer>
+        </ModalShell>
+      )}
 
       {selectedMerchant && (
         <ModalShell

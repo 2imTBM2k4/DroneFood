@@ -274,7 +274,10 @@ const MyOrders = () => {
       if (searchQuery.trim()) {
         const query = searchQuery.trim().toLowerCase();
         const matchesId = (order.orderCode || order._id)?.toLowerCase().includes(query);
-        const matchesRestaurant = order.restaurantId?.name?.toLowerCase().includes(query);
+        const matchesRestaurant =
+          order.restaurantId?.name?.toLowerCase().includes(query) ||
+          order.branchId?.name?.toLowerCase().includes(query) ||
+          order.merchantId?.name?.toLowerCase().includes(query);
         const matchesItem = order.orderItems?.some((item) => item.name?.toLowerCase().includes(query));
         return matchesId || matchesRestaurant || matchesItem;
       }
@@ -445,8 +448,16 @@ const MyOrders = () => {
                   const isDrone = order.deliveryMethod === "drone";
                   const orderCode = order.orderCode || order._id.slice(-8).toUpperCase();
                   const orderDate = formatDate(order.createdAt || order.orderDate);
-                  const restaurantName = order.restaurantId?.name || "Nhà hàng đối tác";
-                  const restaurantImage = getRestaurantImage(order.restaurantId);
+                  const merchantName = order.merchantId?.name;
+                  const branchName = order.branchId?.name;
+                  const restaurantName =
+                    merchantName && branchName
+                      ? `${merchantName} - ${branchName}`
+                      : branchName || order.restaurantId?.name || "Nhà hàng đối tác";
+                  const branchAddress =
+                    order.branchId?.address?.text || order.restaurantId?.address || "";
+                  const restaurantImage =
+                    order.merchantId?.logoUrl || getRestaurantImage(order.restaurantId);
 
                   return (
                     <article key={order._id} className="order-card">
@@ -465,6 +476,9 @@ const MyOrders = () => {
                           </div>
                           <div className="restaurant-meta">
                             <h3 className="restaurant-name">{restaurantName}</h3>
+                            {branchAddress && (
+                              <p className="order-branch-addr">{branchAddress}</p>
+                            )}
                             <div className="order-meta-chips">
                               <span className="order-code">#{orderCode}</span>
                               <span className="order-dot">·</span>

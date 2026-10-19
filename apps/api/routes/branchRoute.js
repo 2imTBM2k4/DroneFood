@@ -12,6 +12,7 @@ import {
   setBranchOpenStateSchema,
   lockBranchSchema,
   assignBranchManagersSchema,
+  createBranchManagerSchema,
   setDroneDeliverySchema,
   droneApplicationSchema,
   droneApplicationDecisionSchema,
@@ -33,6 +34,7 @@ branchRouter.get(
 );
 
 branchRouter.get("/managed", protect, branchController.managed);
+branchRouter.get("/my-branches", protect, branchController.myBranches);
 branchRouter.get("/admin/list", protect, authorize("admin"), validate(adminBranchesQuerySchema, "query"), branchController.adminList);
 branchRouter.get("/:id/drone-application", protect, requireBranchAccess, branchController.getApplication);
 branchRouter.post("/:id/drone-application", protect, requireBranchAccess, validate(droneApplicationSchema), branchController.submitApplication);
@@ -98,6 +100,15 @@ branchRouter.post(
   requireMerchantAccess,
   validate(assignBranchManagersSchema),
   branchController.assignManagers
+);
+
+branchRouter.post(
+  "/:id/managers/create",
+  protect,
+  authorize("merchant_owner", "admin"),
+  requireMerchantAccess,
+  validate(createBranchManagerSchema),
+  branchController.createManager
 );
 
 export default branchRouter;

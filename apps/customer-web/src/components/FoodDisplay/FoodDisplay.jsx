@@ -11,6 +11,7 @@ import { EmptyState } from "@drone-food/web-ui/components/StateBlock";
 const FoodDisplay = ({
   category = "All",
   restaurantId,
+  branchId,
   foods = [],
   searchQuery = "",
 }) => {
@@ -72,6 +73,8 @@ const FoodDisplay = ({
               optionGroups={item.optionGroups || []}
               isBestSeller={item.isBestSeller}
               salesCount={item.salesCount}
+              restaurantId={restaurantId || item.restaurantId}
+              branchId={branchId}
             />
           </Reveal>
         ))}

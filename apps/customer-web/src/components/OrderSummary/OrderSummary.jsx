@@ -57,6 +57,23 @@ const OrderSummary = ({
       <div className="order-summary-panel">
         <h3 className="order-summary-title">Order summary</h3>
 
+        {(cart?.branchName || cart?.restaurant?.name) && (
+          <div className="order-summary-origin">
+            <span className="order-summary-origin-label">Cửa hàng phục vụ:</span>
+            <strong className="order-summary-origin-name">
+              {cart?.restaurant?.name ||
+                (cart?.merchantName
+                  ? `${cart.merchantName} - ${cart.branchName}`
+                  : cart?.branchName)}
+            </strong>
+            {(cart?.branchAddress || cart?.restaurant?.address) && (
+              <span className="order-summary-origin-addr">
+                {cart?.branchAddress || cart?.restaurant?.address}
+              </span>
+            )}
+          </div>
+        )}
+
         <ul className="order-summary-lines">
           {cartLines.map((line) => {
             const imageSrc = line.image?.startsWith("http") ? line.image : line.image ? `${url}/images/${line.image}` : null;

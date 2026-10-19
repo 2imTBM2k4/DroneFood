@@ -294,6 +294,138 @@
   white-space: nowrap;
 }
 
+/* ── Sidebar Branch Open / Close Toggle (Branch Manager) ──────────────── */
+.sidebar-branch-toggle {
+  min-width: 0;
+  min-height: 52px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 11px;
+  cursor: pointer;
+  transition: all 160ms ease;
+  user-select: none;
+}
+
+.sidebar-branch-toggle:hover {
+  background: var(--accent-light);
+  border-color: color-mix(in srgb, var(--accent-color) 35%, transparent);
+}
+
+.sidebar-branch-toggle.open {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.sidebar-branch-toggle.open:hover {
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+.sidebar-branch-toggle.closed {
+  border-color: #f1f5f9;
+  background: #f8fafc;
+}
+
+.sidebar-branch-toggle.closed:hover {
+  background: #f1f5f9;
+}
+
+.sidebar-branch-toggle-left {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.sidebar-branch-icon {
+  color: var(--text-color);
+}
+
+.sidebar-branch-dot {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid #fff;
+}
+
+.sidebar-branch-dot.dot-open {
+  background: #16a34a;
+}
+
+.sidebar-branch-dot.dot-closed {
+  background: #dc2626;
+}
+
+.sidebar-branch-toggle-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-branch-toggle-copy small {
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-branch-toggle-copy strong {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-branch-toggle.open .sidebar-branch-toggle-copy strong {
+  color: #15803d;
+}
+
+.sidebar-branch-toggle.closed .sidebar-branch-toggle-copy strong {
+  color: #b91c1c;
+}
+
+.sidebar-branch-switch-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: inherit;
+}
+
+.toggle-icon-on {
+  color: #16a34a;
+}
+
+.toggle-icon-off {
+  color: #94a3b8;
+}
+
+.restaurant-sidebar.is-collapsed .sidebar-branch-toggle-copy,
+.restaurant-sidebar.is-collapsed .sidebar-branch-switch-btn {
+  display: none;
+}
+
+.restaurant-sidebar.is-collapsed .sidebar-branch-toggle {
+  justify-content: center;
+  padding: 10px;
+}
+
 .sidebar-account {
   min-width: 0;
   min-height: 56px;

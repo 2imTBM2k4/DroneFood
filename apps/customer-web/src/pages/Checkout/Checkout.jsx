@@ -69,6 +69,23 @@ const Checkout = () => {
   const [pendingRemoval, setPendingRemoval] = useState(null);
   const [editingLine, setEditingLine] = useState(null);
 
+  const isDroneSupported = Boolean(
+    cart?.droneDeliveryEnabled ?? cart?.restaurant?.droneDeliveryEnabled
+  );
+
+  useEffect(() => {
+    if (deliveryMethod === "drone" && !isDroneSupported) {
+      setDeliveryMethod("shipper");
+    }
+  }, [deliveryMethod, isDroneSupported]);
+
+  const branchDisplayName =
+    cart?.restaurant?.name ||
+    (cart?.merchantName
+      ? `${cart.merchantName} - ${cart.branchName}`
+      : cart?.branchName);
+  const branchAddress = cart?.branchAddress || cart?.restaurant?.address;
+
   useEffect(() => {
     if (!isHydrated) return;
     if (!token) {
@@ -429,6 +446,25 @@ const Checkout = () => {
         <div className="checkout-main">
           {step === 0 && (
             <section className="checkout-panel">
+              {branchDisplayName && (
+                <div className="checkout-branch-banner">
+                  <div className="checkout-branch-banner-info">
+                    <span className="checkout-branch-banner-title">
+                      {branchDisplayName}
+                    </span>
+                    {branchAddress && (
+                      <span className="checkout-branch-banner-addr">
+                        {branchAddress}
+                      </span>
+                    )}
+                  </div>
+                  {isDroneSupported ? (
+                    <span className="checkout-branch-drone-badge">
+                      ✓ Hỗ trợ Drone
+                    </span>
+                  ) : null}
+                </div>
+              )}
               <h2>Delivery information</h2>
               <p className="checkout-lead">
                 Select a saved address, or use a different address for this order only.
@@ -515,6 +551,25 @@ const Checkout = () => {
 
           {step === 1 && (
             <section className="checkout-panel">
+              {branchDisplayName && (
+                <div className="checkout-branch-banner">
+                  <div className="checkout-branch-banner-info">
+                    <span className="checkout-branch-banner-title">
+                      {branchDisplayName}
+                    </span>
+                    {branchAddress && (
+                      <span className="checkout-branch-banner-addr">
+                        {branchAddress}
+                      </span>
+                    )}
+                  </div>
+                  {isDroneSupported ? (
+                    <span className="checkout-branch-drone-badge">
+                      ✓ Hỗ trợ Drone
+                    </span>
+                  ) : null}
+                </div>
+              )}
               <h2>Delivery method</h2>
               <div className="checkout-methods">
                 <label
@@ -536,20 +591,33 @@ const Checkout = () => {
                 <label
                   className={`checkout-method ${
                     deliveryMethod === "drone" ? "picked" : ""
-                  }`}
+                  } ${!isDroneSupported ? "disabled" : ""}`}
                 >
                   <input
                     type="radio"
                     value="drone"
                     checked={deliveryMethod === "drone"}
+                    disabled={!isDroneSupported}
                     onChange={(event) => {
+                      if (!isDroneSupported) return;
                       setDeliveryMethod(event.target.value);
                       if (paymentMethod === "COD") setPaymentMethod("PAYOS");
                     }}
                   />
                   <span>
-                    <strong>Drone</strong>
-                    <small>Calculated by flight route.</small>
+                    <strong>
+                      Drone{" "}
+                      {!isDroneSupported && (
+                        <span className="method-unavailable-tag">
+                          (Chưa khả dụng)
+                        </span>
+                      )}
+                    </strong>
+                    <small>
+                      {isDroneSupported
+                        ? "Calculated by flight route."
+                        : "Chi nhánh này chưa bật hoặc chưa được cấp phép giao bằng Drone."}
+                    </small>
                   </span>
                 </label>
               </div>
@@ -631,6 +699,25 @@ const Checkout = () => {
           {step === 2 && (
             <section className="checkout-panel">
               <h2>Review and confirm</h2>
+              {branchDisplayName && (
+                <section className="checkout-review-block">
+                  <div className="checkout-review-head">
+                    <span className="ds-label">
+                      Preparing at / Chi nhánh thực hiện
+                    </span>
+                  </div>
+                  <p>
+                    <strong style={{ color: "var(--text-color)" }}>
+                      {branchDisplayName}
+                    </strong>
+                  </p>
+                  {branchAddress && <p>{branchAddress}</p>}
+                  {cart?.restaurant?.phone && (
+                    <p>Hotline: {cart.restaurant.phone}</p>
+                  )}
+                </section>
+              )}
+
               <section className="checkout-review-block">
                 <div className="checkout-review-head">
                   <span className="ds-label">Delivering to</span>

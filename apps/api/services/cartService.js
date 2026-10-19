@@ -19,6 +19,9 @@ const serialiseRestaurant = (restaurant) => ({
   name: restaurant?.name || "Nhà hàng không còn hoạt động",
   image: restaurant?.image || "",
   isOpen: isRestaurantOpenNow(restaurant),
+  address: restaurant?.address || "",
+  phone: restaurant?.phone || "",
+  droneDeliveryEnabled: Boolean(restaurant?.droneDeliveryEnabled),
 });
 
 const serialiseCart = (cart, fallback = {}) => {
@@ -47,17 +50,47 @@ const serialiseCart = (cart, fallback = {}) => {
   const restaurant = cart?.restaurantId || fallback.restaurant || null;
   const branch = cart?.branchId || null;
   const branchId = branch?._id?.toString?.() || branch?.toString?.() || null;
+  const merchant = cart?.merchantId || null;
   const merchantId =
-    cart?.merchantId?._id?.toString?.() || cart?.merchantId?.toString?.() || null;
+    merchant?._id?.toString?.() || merchant?.toString?.() || null;
+
+  let restaurantPayload;
+  if (branch) {
+    const brandName = merchant?.name || branch.name || "Thương hiệu";
+    restaurantPayload = {
+      id: branchId,
+      name:
+        branch.name && branch.name !== brandName
+          ? `${brandName} - ${branch.name}`
+          : brandName,
+      image: merchant?.logoUrl || merchant?.coverUrl || "",
+      isOpen: branch.isOpen !== false,
+      branchId,
+      branchName: branch.name,
+      merchantId,
+      merchantName: merchant?.name || null,
+      address: branch.address?.text || "",
+      phone: branch.phone || "",
+      droneDeliveryEnabled: Boolean(branch.droneDeliveryEnabled),
+    };
+  } else {
+    restaurantPayload = serialiseRestaurant(restaurant);
+  }
+
   return {
     success: true,
     cartId: cart?._id?.toString?.() || fallback.cartId || null,
     cartVersion: cart?.__v ?? fallback.cartVersion ?? null,
-    restaurant: serialiseRestaurant(restaurant),
+    restaurant: restaurantPayload,
     restaurantId: restaurantIdOf(restaurant),
     branchId,
     merchantId,
     ...(branch?.name && { branchName: branch.name }),
+    ...(merchant?.name && { merchantName: merchant.name }),
+    branchAddress: branch?.address?.text || restaurant?.address || null,
+    droneDeliveryEnabled: branch
+      ? Boolean(branch.droneDeliveryEnabled)
+      : Boolean(restaurant?.droneDeliveryEnabled),
     items,
     subtotal: items.reduce(
       (sum, item) => sum + item.unitPrice * item.quantity,
@@ -68,27 +101,59 @@ const serialiseCart = (cart, fallback = {}) => {
 
 const summaryFor = (cart, destination) => {
   const restaurant = cart.restaurantId;
+  const branch = cart.branchId;
+  const merchant = cart.merchantId;
+  let origin = null;
+  let restaurantInfo = null;
+
+  if (branch) {
+    const lat = branch.address?.lat ?? branch.location?.coordinates?.[1];
+    const lng = branch.address?.lng ?? branch.location?.coordinates?.[0];
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      origin = { lat, lng };
+    }
+    const brandName = merchant?.name || branch.name || "Thương hiệu";
+    restaurantInfo = {
+      id: branch._id?.toString() || branch.toString(),
+      name:
+        branch.name && branch.name !== brandName
+          ? `${brandName} - ${branch.name}`
+          : brandName,
+      image: merchant?.logoUrl || merchant?.coverUrl || "",
+      isOpen: branch.isOpen !== false,
+      branchId: branch._id?.toString() || branch.toString(),
+      branchName: branch.name,
+      merchantId: merchant?._id?.toString() || merchant?.toString() || null,
+      merchantName: merchant?.name || null,
+      address: branch.address?.text || "",
+      phone: branch.phone || "",
+      droneDeliveryEnabled: Boolean(branch.droneDeliveryEnabled),
+    };
+  } else {
+    if (Number.isFinite(restaurant?.lat) && Number.isFinite(restaurant?.lng)) {
+      origin = { lat: restaurant.lat, lng: restaurant.lng };
+    }
+    restaurantInfo = serialiseRestaurant(restaurant);
+  }
+
   let distanceKm = null;
   let etaMin = null;
-  if (
-    destination &&
-    Number.isFinite(restaurant?.lat) &&
-    Number.isFinite(restaurant?.lng)
-  ) {
+  if (destination && origin) {
     try {
-      distanceKm = haversineKm(
-        { lat: restaurant.lat, lng: restaurant.lng },
-        destination
-      );
+      distanceKm = haversineKm(origin, destination);
       etaMin = estimateEtaMinutes(distanceKm);
     } catch {
       distanceKm = null;
       etaMin = null;
     }
   }
+
   return {
     cartId: cart._id.toString(),
-    restaurant: serialiseRestaurant(restaurant),
+    restaurant: restaurantInfo,
+    branchId: branch?._id?.toString() || branch?.toString() || null,
+    branchName: branch?.name || null,
+    merchantId: merchant?._id?.toString() || merchant?.toString() || null,
     itemCount: (cart.items || []).reduce(
       (sum, item) => sum + (item.foodId ? item.quantity : 0),
       0
@@ -113,7 +178,9 @@ export const listCarts = async (userId, addressEntryId) => {
   }
   const carts = await cartRepo.findAllByUser(userId);
   const valid = carts.filter(
-    (cart) => cart.restaurantId && cart.items.some((item) => item.foodId)
+    (cart) =>
+      (cart.restaurantId || cart.branchId) &&
+      cart.items.some((item) => item.foodId)
   );
   return {
     success: true,
@@ -175,6 +242,15 @@ export const addToCart = async (
     const { branch, merchant } = await assertBranchOperational(branchId);
     if (food.merchantId && food.merchantId.toString() !== merchant._id.toString()) {
       throw new AppError("Món ăn không thuộc thương hiệu của chi nhánh này", 400);
+    }
+
+    if (
+      Array.isArray(food.unavailableBranchIds) &&
+      food.unavailableBranchIds.some(
+        (id) => id.toString() === branchId.toString()
+      )
+    ) {
+      throw new AppError("Món ăn này hiện đang tạm hết tại chi nhánh này", 409);
     }
 
     const existingCarts = await cartRepo.findAllByUser(userId);

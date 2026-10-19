@@ -192,7 +192,9 @@ const StoreContextProvider = (props) => {
     itemId,
     quantity = 1,
     selectedOptions = [],
-    note = ""
+    note = "",
+    branchId = null,
+    restaurantId = null
   ) => {
     if (!token) {
       notificationService.warning(
@@ -205,13 +207,31 @@ const StoreContextProvider = (props) => {
     }
 
     try {
-      const res = await customerApi.post("/api/cart/add", { itemId, quantity, selectedOptions, note });
+      const payload = { itemId, quantity, selectedOptions, note };
+      if (branchId) payload.branchId = branchId;
+      if (restaurantId) payload.restaurantId = restaurantId;
+
+      const res = await customerApi.post("/api/cart/add", payload);
       if (!res.data.success) throw new Error(res.data.message || "Add failed");
       applyCartResponse(res.data);
       await loadCartData();
       return res.data;
     } catch (err) {
-      const msg = err?.response?.data?.message || err.message || "Không thể thêm món vào giỏ hàng.";
+      const status = err?.response?.status;
+      const msg =
+        err?.response?.data?.message ||
+        err.message ||
+        "Không thể thêm món vào giỏ hàng.";
+
+      if (
+        status === 409 &&
+        msg.includes("Giỏ hàng chỉ chứa món từ 1 chi nhánh")
+      ) {
+        const conflictErr = new Error(msg);
+        conflictErr.code = "BRANCH_CONFLICT";
+        throw conflictErr;
+      }
+
       notificationService.error(
         "Không thể thêm món vào giỏ hàng",
         msg,
@@ -221,7 +241,20 @@ const StoreContextProvider = (props) => {
           persistent: true,
           duration: 0,
           key: `cart-add-${itemId}`,
-          actions: [{ label: "Thử lại", onClick: () => addToCart(itemId, quantity, selectedOptions, note) }],
+          actions: [
+            {
+              label: "Thử lại",
+              onClick: () =>
+                addToCart(
+                  itemId,
+                  quantity,
+                  selectedOptions,
+                  note,
+                  branchId,
+                  restaurantId
+                ),
+            },
+          ],
         }
       );
       return false;

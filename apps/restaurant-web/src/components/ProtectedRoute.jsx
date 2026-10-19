@@ -2,7 +2,7 @@ import React, { useContext } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AuthContext, RESTAURANT_ROLES } from '../context/AuthContext';
 
-const ProtectedRoute = ({ children }) => {
+const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, isLoading } = useContext(AuthContext);
 
   if (isLoading) {
@@ -14,7 +14,13 @@ const ProtectedRoute = ({ children }) => {
   }
 
   const isAllowed = user && RESTAURANT_ROLES.includes(user.role);
-  return isAllowed ? children : <Navigate to="/login" replace />;
+  if (!isAllowed) return <Navigate to="/login" replace />;
+
+  if (allowedRoles && Array.isArray(allowedRoles) && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return children;
 };
 
 export default ProtectedRoute;

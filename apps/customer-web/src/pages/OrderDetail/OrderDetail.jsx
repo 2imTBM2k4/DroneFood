@@ -384,7 +384,18 @@ const OrderDetail = () => {
     order.orderStatus === "delivering" &&
     Boolean(order.droneId);
 
-  const pickup = [order.restaurantId?.lat, order.restaurantId?.lng];
+  const branchLat =
+    order.branchId?.address?.lat ??
+    order.branchId?.location?.coordinates?.[1] ??
+    order.restaurantId?.lat;
+  const branchLng =
+    order.branchId?.address?.lng ??
+    order.branchId?.location?.coordinates?.[0] ??
+    order.restaurantId?.lng;
+  const pickup =
+    Number.isFinite(branchLat) && Number.isFinite(branchLng)
+      ? [branchLat, branchLng]
+      : null;
   const dropoff = [order.shippingAddress?.lat, order.shippingAddress?.lng];
   const shipper = Number.isFinite(order.tracking?.location?.lat) && Number.isFinite(order.tracking?.location?.lng)
     ? [order.tracking.location.lat, order.tracking.location.lng]
@@ -397,6 +408,17 @@ const OrderDetail = () => {
   const orderCode = order.orderCode || order._id.slice(-8).toUpperCase();
   const isDrone = order.deliveryMethod === "drone";
   const statusClass = STATUS_CLASSES[order.orderStatus] || "status-default";
+
+  const merchantName = order.merchantId?.name;
+  const branchName = order.branchId?.name;
+  const storeDisplayName =
+    merchantName && branchName
+      ? `${merchantName} - ${branchName}`
+      : branchName || order.restaurantId?.name || "Nhà hàng đối tác";
+  const storeAddress =
+    order.branchId?.address?.text || order.restaurantId?.address || "";
+  const storePhone =
+    order.branchId?.phone || order.restaurantId?.phone || null;
 
   // Build steps for progress stepper
   const isDelivered = order.orderStatus === "delivered";
@@ -568,9 +590,12 @@ const OrderDetail = () => {
                       {liveRoutePositions.length >= 2 && (
                         <Polyline positions={liveRoutePositions} pathOptions={{ color: "#2563EB", weight: 5, opacity: 0.84 }} />
                       )}
-                      {pickup[0] && (
+                      {pickup && (
                         <Marker position={pickup} icon={storeMarkerIcon}>
-                          <Popup>{order.restaurantId?.name || "Nhà hàng"}</Popup>
+                          <Popup>
+                            <strong>{storeDisplayName}</strong>
+                            {storeAddress && <div>{storeAddress}</div>}
+                          </Popup>
                         </Marker>
                       )}
                       {dropoff[0] && (
@@ -664,7 +689,7 @@ const OrderDetail = () => {
                       )}
                     </div>
                     <p className="step-desc">
-                      {order.restaurantId?.name || "Nhà hàng"} đang chuẩn bị các món ăn nóng hổi.
+                      {storeDisplayName} đang chuẩn bị các món ăn nóng hổi.
                     </p>
                   </div>
                 </div>
@@ -820,9 +845,18 @@ const OrderDetail = () => {
                     <Store size={16} />
                   </div>
                   <div className="endpoint-details">
-                    <span className="endpoint-label">Nhà hàng chuẩn bị</span>
-                    <strong className="endpoint-name">{order.restaurantId?.name || "Nhà hàng đối tác"}</strong>
-                    <p className="endpoint-addr">{order.restaurantId?.address || "Địa chỉ nhà hàng"}</p>
+                    <span className="endpoint-label">
+                      {order.branchId ? "Chi nhánh chuẩn bị" : "Nhà hàng chuẩn bị"}
+                    </span>
+                    <strong className="endpoint-name">{storeDisplayName}</strong>
+                    <p className="endpoint-addr">
+                      {storeAddress || "Địa chỉ nhà hàng"}
+                    </p>
+                    {storePhone && (
+                      <p className="endpoint-phone">
+                        Hotline: <a href={`tel:${storePhone}`}>{storePhone}</a>
+                      </p>
+                    )}
                   </div>
                 </div>
 

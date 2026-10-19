@@ -755,6 +755,122 @@
   border: 0;
 }
 
+/* ── Brand Upgrade Application Tabs & Queue ─────────── */
+.merchants-view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 12px;
+}
+
+.merchants-view-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.merchants-view-tab:hover {
+  background: var(--card-bg);
+  color: var(--text-color);
+}
+
+.merchants-view-tab.active {
+  background: var(--card-bg);
+  color: var(--accent-color, #2563eb);
+  border-color: var(--border-color);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.merchants-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #f59e0b;
+  color: #ffffff;
+}
+
+.merchant-action--brand-approve {
+  border: 1px solid transparent;
+  background: #10b981;
+  color: #ffffff;
+}
+
+.merchant-action--brand-approve:hover {
+  background: #059669;
+}
+
+.merchant-action--brand-reject {
+  border: 1px solid transparent;
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.merchant-action--brand-reject:hover {
+  background: #dc2626;
+}
+
+.brand-app-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.brand-app-status-badge.pending {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.brand-app-status-badge.approved {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.brand-app-status-badge.rejected {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.brand-app-images-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.brand-app-image-thumb {
+  width: 90px;
+  height: 90px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  object-fit: cover;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.brand-app-image-thumb:hover {
+  transform: scale(1.05);
+}
+
+/* ── Responsive breakpoints ─────────────────────────── */
 @media (max-width: 1000px) {
   .merchants-toolbar {
     grid-template-columns: minmax(240px, 1fr) repeat(2, minmax(145px, 180px));
@@ -767,6 +883,10 @@
 }
 
 @media (max-width: 760px) {
+  .merchants-toolbar {
+    grid-template-columns: 1fr;
+  }
+
   .merchants-page {
     padding-top: 4px;
   }
@@ -779,10 +899,6 @@
 
   .merchants-total {
     align-self: flex-start;
-  }
-
-  .merchants-toolbar {
-    grid-template-columns: 1fr;
   }
 
   .merchant-refresh {
@@ -880,6 +996,7 @@
   .merchant-modal-footer button {
     flex: 1 1 150px;
   }
+}
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -2,7 +2,11 @@ import mongoose from "mongoose";
 import { Cart, Food } from "../models/index.cjs";
 
 const populateCart = (query) =>
-  query.populate("items.foodId").populate("restaurantId").populate("branchId");
+  query
+    .populate("items.foodId")
+    .populate("restaurantId")
+    .populate("branchId")
+    .populate("merchantId");
 
 export const findAllByUser = async (userId) =>
   populateCart(Cart.find({ userId }).sort({ updatedAt: -1 }));

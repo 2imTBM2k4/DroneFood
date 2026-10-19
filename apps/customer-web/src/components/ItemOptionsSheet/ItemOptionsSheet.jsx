@@ -24,12 +24,14 @@ import { formatVND } from "@drone-food/web-ui/utils/money";
  */
 const ItemOptionsSheet = ({
   item,
+  branchId,
+  restaurantId,
   onClose,
   initial,
   onSubmit,
   submitLabel = "Add to cart",
 }) => {
-  const { addToCart, url } = useContext(StoreContext);
+  const { addToCart, url, clearCarts, cartSummaries } = useContext(StoreContext);
   const dialogRef = useRef(null);
   const previouslyFocused = useRef(null);
 
@@ -39,6 +41,8 @@ const ItemOptionsSheet = ({
   const [note, setNote] = useState(initial?.note || "");
   const [submitting, setSubmitting] = useState(false);
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+  const [conflictModalOpen, setConflictModalOpen] = useState(false);
+  const [isResettingCart, setIsResettingCart] = useState(false);
 
   // selections: { [groupName]: string[] } — one entry for single-choice
   // groups, any number for multi-choice ones.
@@ -168,16 +172,32 @@ const ItemOptionsSheet = ({
     try {
       const succeeded = onSubmit
         ? await onSubmit({ quantity, selectedOptions, note: note.trim() })
-        : await addToCart(item._id, quantity, selectedOptions, note.trim());
+        : await addToCart(
+            item._id,
+            quantity,
+            selectedOptions,
+            note.trim(),
+            branchId,
+            restaurantId
+          );
 
       if (succeeded) {
-        if (!onSubmit) notificationService.success("Đã thêm vào giỏ hàng!", undefined, { audience: "user" });
+        if (!onSubmit)
+          notificationService.success("Đã thêm vào giỏ hàng!", undefined, {
+            audience: "user",
+          });
         onClose();
       }
     } catch (err) {
+      if (err?.code === "BRANCH_CONFLICT") {
+        setConflictModalOpen(true);
+        return;
+      }
       notificationService.error(
         "Không thể thêm món vào giỏ hàng",
-        err?.response?.data?.message || err?.message || "Lỗi hệ thống. Vui lòng thử lại sau.",
+        err?.response?.data?.message ||
+          err?.message ||
+          "Lỗi hệ thống. Vui lòng thử lại sau.",
         {
           audience: "user",
           priority: "high",
@@ -189,6 +209,39 @@ const ItemOptionsSheet = ({
       );
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleConfirmResetCart = async () => {
+    setIsResettingCart(true);
+    try {
+      const allCartIds = cartSummaries.map((c) => c.cartId);
+      await clearCarts(allCartIds);
+      const succeeded = await addToCart(
+        item._id,
+        quantity,
+        selectedOptions,
+        note.trim(),
+        branchId,
+        restaurantId
+      );
+      if (succeeded) {
+        notificationService.success(
+          "Đã làm mới giỏ hàng và thêm món thành công!",
+          undefined,
+          { audience: "user" }
+        );
+        setConflictModalOpen(false);
+        onClose();
+      }
+    } catch (error) {
+      notificationService.error(
+        "Không thể làm mới giỏ hàng",
+        error.message || "Vui lòng thử lại sau.",
+        { audience: "user" }
+      );
+    } finally {
+      setIsResettingCart(false);
     }
   };
 
@@ -356,6 +409,46 @@ const ItemOptionsSheet = ({
           </button>
         </div>
       </div>
+
+      {conflictModalOpen && (
+        <div
+          className="confirm-dialog-overlay"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!isResettingCart) setConflictModalOpen(false);
+          }}
+        >
+          <div
+            className="confirm-dialog"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="remove-carts-title">Đổi chi nhánh đặt hàng?</h3>
+            <p id="remove-carts-description">
+              Giỏ hàng của bạn đang chứa món từ một chi nhánh khác. Mỗi đơn hàng chỉ áp dụng cho một chi nhánh duy nhất. Bạn có muốn làm mới giỏ hàng để chọn món từ chi nhánh này không?
+            </p>
+            <div className="confirm-dialog-buttons">
+              <button
+                type="button"
+                className="confirm-btn"
+                onClick={handleConfirmResetCart}
+                disabled={isResettingCart}
+              >
+                {isResettingCart ? "Đang xử lý…" : "Làm mới giỏ & Thêm món"}
+              </button>
+              <button
+                type="button"
+                className="cancel-btn"
+                onClick={() => setConflictModalOpen(false)}
+                disabled={isResettingCart}
+              >
+                Giữ giỏ hàng cũ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>,
     document.body
   );

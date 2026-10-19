@@ -273,12 +273,33 @@ export const getMe = async (userId) => {
     userObj.restaurantId = (
       userObj.restaurantId._id || userObj.restaurantId
     ).toString();
-  } else if (userObj.role === "merchant_owner" || userObj.role === "restaurant_owner") {
-    const { Merchant } = await import("../models/index.cjs");
-    const merchant = await Merchant.findOne({ ownerUserId: userId });
+  }
+
+  if (userObj.role === "merchant_owner" || userObj.role === "restaurant_owner") {
+    const { Merchant, Branch, Restaurant } = await import("../models/index.cjs");
+    let merchant = await Merchant.findOne({ ownerUserId: userId });
+    if (!merchant && userObj.role === "restaurant_owner") {
+      const restaurant = await Restaurant.findOne({ owner: userId });
+      if (restaurant) {
+        const { ensureLegacyBranch } = await import("./droneDeliveryApplicationService.js");
+        await ensureLegacyBranch(restaurant);
+        merchant = await Merchant.findOne({ ownerUserId: userId });
+      }
+    }
     if (merchant) {
       userObj.restaurantId = (merchant.legacyRestaurantId || merchant._id).toString();
       userObj.merchantId = merchant._id.toString();
+      const branches = await Branch.find({ merchantId: merchant._id }).select("_id");
+      userObj.managedBranchIds = branches.map((b) => b._id.toString());
+    }
+  } else if (userObj.role === "branch_manager") {
+    const { Branch } = await import("../models/index.cjs");
+    const managedBranches = await Branch.find({ managerUserIds: userId }).select("_id merchantId");
+    userObj.managedBranchIds = managedBranches.map((b) => b._id.toString());
+    if (managedBranches.length > 0) {
+      userObj.merchantId = managedBranches[0].merchantId.toString();
+      userObj.restaurantId = managedBranches[0]._id.toString();
+      userObj.branchId = managedBranches[0]._id.toString();
     }
   }
   return { success: true, data: userObj };
@@ -323,16 +344,33 @@ export const updateProfile = async (userId, currentEmail, updates) => {
   if (name !== undefined) updateData.name = name;
   if (phone !== undefined) updateData.phone = phone;
 
-  if (email && email !== currentEmail) {
-    const existing = await userRepo.findByEmail(email);
-    if (existing) {
-      throw new AppError("Email already exists", 409);
+  const cleanEmail = email ? email.trim().toLowerCase() : undefined;
+  const cleanCurrent = currentEmail ? currentEmail.trim().toLowerCase() : undefined;
+
+  if (cleanEmail && cleanEmail !== cleanCurrent) {
+    if (!validator.isEmail(cleanEmail)) {
+      throw new AppError("Email không hợp lệ", 400);
     }
-    updateData.email = email;
+    const existing = await userRepo.findByEmail(cleanEmail);
+    if (existing && String(existing._id) !== String(userId)) {
+      throw new AppError("Email này đã được sử dụng bởi một tài khoản khác trong hệ thống", 409);
+    }
+    updateData.email = cleanEmail;
   }
 
   const user = await userRepo.updateById(userId, updateData);
-  if (updateData.email && updateData.email !== currentEmail) {
+
+  // Đồng bộ email sang thông tin nhà hàng nếu tài khoản liên kết với nhà hàng
+  if (updateData.email && user.restaurantId) {
+    try {
+      const restId = user.restaurantId._id || user.restaurantId;
+      await restaurantRepo.updateById(restId, { email: updateData.email });
+    } catch {
+      // Bỏ qua lỗi phụ để không cản trở cập nhật tài khoản chính
+    }
+  }
+
+  if (updateData.email && updateData.email !== cleanCurrent) {
     await recordAudit({
       actor: user,
       action: "email.updated",
@@ -584,6 +622,24 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
   await userRepo.updateById(userId, { password: hash });
   await recordAudit({ actor: user, action: "password.changed", targetType: "user", targetId: userId, category: "password" });
   return { success: true, message: "Đổi mật khẩu thành công" };
+};
+
+export const lookupUserByEmail = async (email) => {
+  if (!email || typeof email !== "string") {
+    throw new AppError("Email là bắt buộc", 400);
+  }
+  const cleanEmail = email.trim().toLowerCase();
+  const user = await userRepo.findByEmail(cleanEmail);
+  if (!user) {
+    throw new AppError("Không tìm thấy người dùng với email này", 404);
+  }
+  return {
+    _id: user._id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    phone: user.phone || "",
+  };
 };
 
 export const updateAvatar = async (userId, file) => {

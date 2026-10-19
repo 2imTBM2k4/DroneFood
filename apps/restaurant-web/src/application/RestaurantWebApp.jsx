@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Sidebar from '../components/Sidebar/Sidebar';
+import BranchSelector from '../components/BranchSelector/BranchSelector';
 import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { Menu } from 'lucide-react';
 import Dashboard from '../pages/Dashboard/Dashboard';
 import List from '../pages/List/List';
 import Orders from '../pages/Orders/Orders';
 import EditRestaurant from '../pages/EditRestaurant/EditRestaurant';
+import Branches from '../pages/Branches/Branches';
 import Login from '../pages/Login/Login';
 import Register from '../pages/Register/Register';
 import Withdrawals from '../pages/Withdrawals/Withdrawals';
@@ -110,16 +112,21 @@ const DashboardLayout = () => {
         />
       )}
       <div className="main-content-area">
-        <button
-          type="button"
-          ref={mobileTriggerRef}
-          className="sidebar-mobile-trigger"
-          aria-label="Open navigation menu"
-          aria-expanded={mobileSidebarOpen}
-          onClick={() => setMobileSidebarOpen(true)}
-        >
-          <Menu size={20} aria-hidden="true" />
-        </button>
+        <header className="restaurant-topbar">
+          <button
+            type="button"
+            ref={mobileTriggerRef}
+            className="sidebar-mobile-trigger"
+            aria-label="Open navigation menu"
+            aria-expanded={mobileSidebarOpen}
+            onClick={() => setMobileSidebarOpen(true)}
+          >
+            <Menu size={20} aria-hidden="true" />
+          </button>
+          <div className="topbar-branch-selector">
+            <BranchSelector />
+          </div>
+        </header>
         <div className="page-content">
           <PageTransition>
             <Outlet />
@@ -144,11 +151,33 @@ const RestaurantWebApp = () => {
           <Route path="/dashboard" element={<Dashboard url={url} />} />
           <Route path="/add" element={<Navigate to="/list?add=1" replace />} />
           <Route path="/list" element={<List url={url} />} />
-          <Route path="/orders" element={<Orders url={url} />} />
+          <Route
+            path="/orders"
+            element={
+              <ProtectedRoute allowedRoles={["branch_manager", "admin"]}>
+                <Orders url={url} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/branches"
+            element={
+              <ProtectedRoute allowedRoles={["merchant_owner", "restaurant_owner", "admin"]}>
+                <Branches url={url} />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/edit-restaurant" element={<EditRestaurant url={url} />} />
           <Route path="/drone-delivery" element={<Navigate to="/edit-restaurant?tab=drone" replace />} />
           <Route path="/withdrawals" element={<Navigate to="/wallet" replace />} />
-          <Route path="/wallet" element={<Withdrawals url={url} />} />
+          <Route
+            path="/wallet"
+            element={
+              <ProtectedRoute allowedRoles={["merchant_owner", "restaurant_owner", "admin"]}>
+                <Withdrawals url={url} />
+              </ProtectedRoute>
+            }
+          />
         </Route>
       </Routes>
     </div>

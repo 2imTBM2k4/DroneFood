@@ -115,6 +115,16 @@ export const foodAvailabilitySchema = Joi.object({
   isAvailable: Joi.boolean().required(),
 });
 
+export const branchFoodAvailabilitySchema = Joi.object({
+  branchId: Joi.string().trim().hex().length(24).required().messages({
+    "any.required": "ID chi nhánh là bắt buộc",
+    "string.length": "ID chi nhánh không hợp lệ",
+  }),
+  isAvailable: Joi.boolean().required().messages({
+    "any.required": "Trạng thái khả dụng (isAvailable) là bắt buộc",
+  }),
+});
+
 export const listFoodQuerySchema = Joi.object({
   restaurantId: Joi.string().trim().hex().length(24).allow("", null),
   merchantId: Joi.string().trim().hex().length(24).allow("", null),

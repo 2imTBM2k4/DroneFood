@@ -323,3 +323,12 @@ export const resendVerification = async (req, res) => {
   }
 };
 
+export const lookupUser = async (req, res, next) => {
+  try {
+    const user = await userService.lookupUserByEmail(req.query.email);
+    res.json({ success: true, data: user });
+  } catch (error) {
+    next(error);
+  }
+};
+

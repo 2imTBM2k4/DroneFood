@@ -8,6 +8,8 @@ export const managed = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+export const myBranches = managed;
+
 export const adminList = async (req, res, next) => {
   try {
     const { applicationStatus, merchantId, status, droneDeliveryEnabled, q, ...options } = req.query;
@@ -219,6 +221,25 @@ export const assignManagers = async (req, res) => {
       success: true,
       message: "Gán quản lý chi nhánh thành công",
       data: branch,
+    });
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ success: false, message: error.message });
+  }
+};
+
+export const createManager = async (req, res) => {
+  try {
+    const result = await branchService.createAndAssignBranchManager(
+      req.params.id,
+      req.body,
+      req.user
+    );
+    res.status(201).json({
+      success: true,
+      message: "Tạo tài khoản và bổ nhiệm quản lý chi nhánh thành công",
+      data: result,
     });
   } catch (error) {
     res

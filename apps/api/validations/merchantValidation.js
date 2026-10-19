@@ -63,3 +63,42 @@ export const listMerchantsQuerySchema = Joi.object({
     .optional(),
   order: Joi.string().valid("asc", "desc").optional(),
 });
+
+export const submitBrandApplicationSchema = Joi.object({
+  brandName: Joi.string().trim().min(2).max(100).required().messages({
+    "any.required": "Tên thương hiệu là bắt buộc",
+    "string.empty": "Tên thương hiệu không được để trống",
+    "string.min": "Tên thương hiệu phải có ít nhất 2 ký tự",
+  }),
+  taxCode: Joi.string().trim().max(50).allow("", null),
+  representativeName: Joi.string().trim().min(2).max(100).required().messages({
+    "any.required": "Tên người đại diện là bắt buộc",
+    "string.empty": "Tên người đại diện không được để trống",
+  }),
+  phone: Joi.string()
+    .trim()
+    .pattern(/^[0-9+\-\s()]{8,15}$/)
+    .required()
+    .messages({
+      "any.required": "Số điện thoại liên hệ là bắt buộc",
+      "string.pattern.base": "Số điện thoại không hợp lệ",
+    }),
+  licenseImages: Joi.array().items(Joi.string().trim().allow("", null)).optional(),
+  notes: Joi.string().trim().max(1000).allow("", null),
+});
+
+export const decideBrandApplicationSchema = Joi.object({
+  decision: Joi.string().valid("approved", "rejected").required().messages({
+    "any.required": "Quyết định phê duyệt là bắt buộc",
+    "any.only": "Quyết định phải là approved hoặc rejected",
+  }),
+  reason: Joi.when("decision", {
+    is: "rejected",
+    then: Joi.string().trim().min(3).max(500).required().messages({
+      "any.required": "Lý do từ chối là bắt buộc khi từ chối hồ sơ",
+      "string.empty": "Lý do từ chối không được để trống",
+      "string.min": "Lý do từ chối phải có ít nhất 3 ký tự",
+    }),
+    otherwise: Joi.string().trim().max(500).allow("", null),
+  }),
+});

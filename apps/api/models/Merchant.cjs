@@ -1,5 +1,35 @@
 const mongoose = require("mongoose");
 
+const brandApplicationSchema = new mongoose.Schema(
+  {
+    status: {
+      type: String,
+      enum: ["not_registered", "pending", "approved", "rejected"],
+      default: "not_registered",
+    },
+    brandName: { type: String, trim: true, default: "" },
+    taxCode: { type: String, trim: true, default: "" },
+    representativeName: { type: String, trim: true, default: "" },
+    phone: { type: String, trim: true, default: "" },
+    licenseImages: { type: [String], default: [] },
+    notes: { type: String, trim: true, maxlength: 1000, default: "" },
+    submittedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    submittedAt: { type: Date, default: null },
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    reviewedAt: { type: Date, default: null },
+    rejectReason: { type: String, trim: true, default: "" },
+  },
+  { _id: false }
+);
+
 const merchantSchema = new mongoose.Schema(
   {
     type: {
@@ -36,6 +66,10 @@ const merchantSchema = new mongoose.Schema(
       platform: { type: Number, default: 0.2 },
     },
     branchCount: { type: Number, default: 0, min: 0 },
+    brandApplication: {
+      type: brandApplicationSchema,
+      default: () => ({ status: "not_registered" }),
+    },
     // Deprecated compatibility field for backfill from legacy restaurant collection
     legacyRestaurantId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -50,6 +84,7 @@ merchantSchema.index({ slug: 1 }, { unique: true });
 merchantSchema.index({ ownerUserId: 1 }, { unique: true });
 merchantSchema.index({ status: 1, type: 1 });
 merchantSchema.index({ legacyRestaurantId: 1 });
+merchantSchema.index({ "brandApplication.status": 1 });
 
 module.exports =
   mongoose.models.Merchant || mongoose.model("Merchant", merchantSchema);

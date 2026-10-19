@@ -1,8 +1,10 @@
 import mongoose from "mongoose";
+import bcrypt from "bcrypt";
 import AppError from "../utils/AppError.js";
 import { recordAudit } from "../utils/auditLog.js";
 import * as branchRepo from "../repositories/branchRepository.js";
 import * as merchantRepo from "../repositories/merchantRepository.js";
+import { User, Branch } from "../models/index.cjs";
 import {
   DEFAULT_SEARCH_RADIUS_KM,
   MAX_SEARCH_RADIUS_KM,
@@ -26,7 +28,13 @@ export const listBranches = async ({
   order,
 } = {}) => {
   const filter = {};
-  if (merchantId) filter.merchantId = merchantId;
+  if (merchantId) {
+    const { Merchant } = await import("../models/index.cjs");
+    const m = await Merchant.findOne({
+      $or: [{ _id: merchantId }, { legacyRestaurantId: merchantId }],
+    });
+    filter.merchantId = m ? m._id : merchantId;
+  }
   if (status) filter.status = status;
   if (droneDeliveryEnabled !== undefined) {
     filter.droneDeliveryEnabled = droneDeliveryEnabled;
@@ -355,15 +363,70 @@ export const lockBranch = async (branchId, isLocked, actorUser, bodyReason = "")
 };
 
 /**
- * Gán danh sách branch_manager cho chi nhánh.
+ * Gán quản lý cho chi nhánh (mỗi chi nhánh tối đa 1 quản lý, mỗi quản lý chỉ phụ trách 1 chi nhánh).
  */
 export const assignBranchManagers = async (branchId, managerUserIds, actorUser) => {
-  const branch = await branchRepo.updateById(branchId, {
-    managerUserIds,
-  });
+  if (Array.isArray(managerUserIds) && managerUserIds.length > 1) {
+    throw new AppError("Mỗi chi nhánh chỉ được có tối đa 1 quản lý", 400);
+  }
+
+  const branch = await branchRepo.findById(branchId);
   if (!branch) {
     throw new AppError("Chi nhánh không tồn tại", 404);
   }
+
+  const newManagerId =
+    managerUserIds && managerUserIds.length > 0
+      ? managerUserIds[0].toString()
+      : null;
+  const oldManagerIds = (branch.managerUserIds || []).map((id) =>
+    id.toString()
+  );
+
+  if (newManagerId) {
+    const user = await User.findById(newManagerId);
+    if (!user) {
+      throw new AppError("Người dùng không tồn tại", 404);
+    }
+    if (user.role === "admin") {
+      throw new AppError("Không thể gán quản trị viên làm quản lý chi nhánh", 400);
+    }
+
+    const conflictBranch = await Branch.findOne({
+      _id: { $ne: branchId },
+      managerUserIds: newManagerId,
+    });
+    if (conflictBranch) {
+      throw new AppError(
+        `Người dùng này đã là quản lý của chi nhánh "${conflictBranch.name}". Một quản lý chỉ được quản lý 1 chi nhánh`,
+        409
+      );
+    }
+
+    if (user.role === "user") {
+      await User.findByIdAndUpdate(newManagerId, { role: "branch_manager" });
+    }
+  }
+
+  // Khi gỡ bỏ hoặc thay thế quản lý cũ, hạ vai trò về user nếu họ không còn quản lý chi nhánh nào khác
+  for (const oldId of oldManagerIds) {
+    if (oldId !== newManagerId) {
+      const otherManagedCount = await Branch.countDocuments({
+        _id: { $ne: branchId },
+        managerUserIds: oldId,
+      });
+      if (otherManagedCount === 0) {
+        const oldUser = await User.findById(oldId);
+        if (oldUser && oldUser.role === "branch_manager") {
+          await User.findByIdAndUpdate(oldId, { role: "user" });
+        }
+      }
+    }
+  }
+
+  const updatedBranch = await branchRepo.updateById(branchId, {
+    managerUserIds: newManagerId ? [newManagerId] : [],
+  });
 
   await recordAudit({
     actor: actorUser,
@@ -372,11 +435,80 @@ export const assignBranchManagers = async (branchId, managerUserIds, actorUser) 
     targetId: branchId,
     merchantId: branch.merchantId,
     branchId,
-    reason: "Gán quản lý chi nhánh",
-    metadata: { managerUserIds },
+    reason: newManagerId ? "Gán quản lý chi nhánh" : "Gỡ bỏ quản lý chi nhánh",
+    metadata: { managerUserIds: newManagerId ? [newManagerId] : [] },
   });
 
-  return branch;
+  return updatedBranch;
+};
+
+/**
+ * Tạo mới tài khoản và bổ nhiệm làm quản lý chi nhánh.
+ * Ràng buộc: Mỗi chi nhánh chỉ được có tối đa 1 quản lý.
+ */
+export const createAndAssignBranchManager = async (branchId, managerData, actorUser) => {
+  const { name, email, password, phone } = managerData;
+
+  const branch = await branchRepo.findById(branchId);
+  if (!branch) {
+    throw new AppError("Chi nhánh không tồn tại", 404);
+  }
+
+  // Ràng buộc: Mỗi chi nhánh chỉ có tối đa 1 quản lý
+  if (Array.isArray(branch.managerUserIds) && branch.managerUserIds.length > 0) {
+    throw new AppError("Chi nhánh này đã có quản lý. Vui lòng gỡ bỏ quản lý hiện tại trước khi tạo mới", 400);
+  }
+
+  // Kiểm tra email đã tồn tại chưa
+  const existingUser = await User.findOne({ email });
+  if (existingUser) {
+    throw new AppError("Email này đã được sử dụng bởi một tài khoản khác trong hệ thống", 409);
+  }
+
+  // Băm mật khẩu
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(password, salt);
+
+  // Tạo người dùng mới với vai trò branch_manager
+  const newUser = await User.create({
+    name,
+    email,
+    password: hashedPassword,
+    phone: phone || undefined,
+    role: "branch_manager",
+    isEmailVerified: true, // Kích hoạt ngay vì được chủ thương hiệu tạo
+  });
+
+  // Gán vào chi nhánh
+  const updatedBranch = await branchRepo.updateById(branchId, {
+    managerUserIds: [newUser._id],
+  });
+
+  await recordAudit({
+    actor: actorUser,
+    action: "branch.create_manager",
+    targetType: "branch",
+    targetId: branchId,
+    merchantId: branch.merchantId,
+    branchId,
+    reason: "Tạo mới tài khoản và gán làm quản lý chi nhánh",
+    metadata: {
+      managerUserId: newUser._id,
+      email: newUser.email,
+      name: newUser.name,
+    },
+  });
+
+  return {
+    branch: updatedBranch,
+    manager: {
+      _id: newUser._id,
+      name: newUser.name,
+      email: newUser.email,
+      role: newUser.role,
+      phone: newUser.phone,
+    },
+  };
 };
 
 /**

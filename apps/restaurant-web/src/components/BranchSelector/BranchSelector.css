@@ -1,0 +1,292 @@
+.branch-selector-container {
+  position: relative;
+  display: inline-block;
+  user-select: none;
+}
+
+.branch-selector-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #6c757d);
+  padding: 6px 12px;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Manager Badge */
+.branch-manager-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 10px;
+  padding: 6px 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.branch-badge-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: rgba(255, 107, 0, 0.1);
+  color: #ff6b00;
+  border-radius: 6px;
+}
+
+.branch-badge-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.branch-badge-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-color, #212529);
+}
+
+/* Owner Trigger Dropdown */
+.branch-selector-trigger {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 10px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text-color, #212529);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.branch-selector-trigger:hover,
+.branch-selector-trigger.is-open {
+  border-color: #ff6b00;
+  background: var(--card-bg, #ffffff);
+  box-shadow: 0 2px 6px rgba(255, 107, 0, 0.15);
+}
+
+.branch-trigger-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 107, 0, 0.1);
+  color: #ff6b00;
+  border-radius: 8px;
+}
+
+.branch-trigger-text {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.branch-trigger-sub {
+  font-size: 0.72rem;
+  color: var(--text-secondary, #6c757d);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+.branch-trigger-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.branch-chevron {
+  color: var(--text-secondary, #6c757d);
+  transition: transform 0.2s ease;
+  margin-left: 4px;
+}
+
+.branch-chevron.rotate {
+  transform: rotate(180deg);
+}
+
+.branch-code-tag {
+  display: inline-block;
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text-secondary, #555);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+/* Status dot */
+.branch-status-dot {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.branch-status-dot::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 5px;
+}
+
+.branch-status-dot.open {
+  color: #28a745;
+}
+
+.branch-status-dot.open::before {
+  background: #28a745;
+}
+
+.branch-status-dot.closed {
+  color: #dc3545;
+}
+
+.branch-status-dot.closed::before {
+  background: #dc3545;
+}
+
+/* Dropdown Menu */
+.branch-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 300px;
+  max-width: 380px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+  z-index: 1000;
+  padding: 6px;
+  animation: branchDropdownIn 0.15s ease-out;
+}
+
+@keyframes branchDropdownIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.branch-dropdown-header {
+  padding: 8px 12px 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary, #6c757d);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.branch-dropdown-divider {
+  height: 1px;
+  background: var(--border-color, #eee);
+  margin: 4px 6px;
+}
+
+.branch-option-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  color: var(--text-color, #212529);
+}
+
+.branch-option-item:hover {
+  background: rgba(255, 107, 0, 0.08);
+}
+
+.branch-option-item.selected {
+  background: rgba(255, 107, 0, 0.12);
+}
+
+.branch-option-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text-secondary, #555);
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.branch-option-item.selected .branch-option-icon {
+  background: rgba(255, 107, 0, 0.2);
+  color: #ff6b00;
+}
+
+.branch-option-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.branch-option-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.branch-option-content strong {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.branch-option-content small {
+  font-size: 0.76rem;
+  color: var(--text-secondary, #6c757d);
+}
+
+.branch-option-address {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.branch-check-icon {
+  color: #ff6b00;
+  flex-shrink: 0;
+}

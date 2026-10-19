@@ -242,6 +242,20 @@
   color: var(--text-muted);
 }
 
+.dash-branch-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  background: #f1f5f9;
+  color: #334155;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid #cbd5e1;
+  margin-right: 6px;
+}
+
 .dash-pill {
   flex-shrink: 0;
   padding: 4px 11px;
@@ -370,3 +384,408 @@
   font-size: 13.5px;
   line-height: 1.5;
 }
+
+/* ── Brand Dashboard Custom Styles ─────────────────────────────────── */
+
+.brand-dash-head {
+  border-bottom: 1px solid var(--border-light);
+  padding-bottom: 20px;
+  margin-bottom: 24px;
+}
+
+.brand-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.brand-eyebrow-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: #eff6ff;
+  color: #2563eb;
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid #bfdbfe;
+}
+
+.brand-branches-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--body-color, #f8fafc);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-light);
+}
+
+.brand-main-title {
+  font-size: clamp(26px, 3.2vw, 36px);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.brand-subtext {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13.5px;
+  max-width: 650px;
+  line-height: 1.5;
+}
+
+.brand-quick-link {
+  font-weight: 600;
+  gap: 8px;
+}
+
+.brand-kpi-grid {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.stat-card-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #cbd5e1;
+}
+
+.dash-stat-sublabel {
+  margin: 5px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.panel-sub-desc {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+/* ── Branch Comparison Table ───────────────────────────────────────── */
+
+.brand-table-wrapper {
+  overflow-x: auto;
+  margin-top: 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+}
+
+.brand-branch-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  text-align: left;
+}
+
+.brand-branch-table thead th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.brand-branch-table tbody td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-light);
+  vertical-align: middle;
+}
+
+.brand-branch-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.brand-branch-table tbody tr:hover td {
+  background: rgba(241, 245, 249, 0.5);
+}
+
+.table-branch-name-col {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.table-branch-name-col strong {
+  font-size: 14px;
+  color: var(--text-color);
+}
+
+.branch-code-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  background: #f1f5f9;
+  color: #334155;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  border: 1px solid #cbd5e1;
+}
+
+.table-branch-address {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  max-width: 260px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.table-manager-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.table-manager-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-color);
+}
+
+.table-manager-email {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.table-manager-missing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tag-unassigned {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 7px;
+  background: #fffbeb;
+  color: #b45309;
+  border-radius: 4px;
+  border: 1px solid #fde68a;
+}
+
+.btn-assign-quick {
+  font-size: 11px;
+  font-weight: 600;
+  color: #2563eb;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.btn-assign-quick:hover {
+  color: #1d4ed8;
+}
+
+.branch-pill-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.branch-pill-status.open {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.branch-pill-status.closed {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+
+.branch-pill-status .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.branch-pill-status.open .status-dot {
+  background: #10b981;
+}
+
+.branch-pill-status.closed .status-dot {
+  background: #94a3b8;
+}
+
+.drone-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.drone-badge.enabled {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.drone-badge.disabled {
+  background: #f8fafc;
+  color: #94a3b8;
+  border: 1px solid #e2e8f0;
+}
+
+.share-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.share-bar-track {
+  flex: 1;
+  height: 7px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.share-bar-fill {
+  height: 100%;
+  background: #2563eb;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.share-bar-text {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #475569;
+  min-width: 34px;
+  text-align: right;
+}
+
+.btn-switch-branch-view {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-switch-branch-view:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+/* ── Top Branch Ranking Badges ────────────────────────────────────────── */
+.rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.rank-badge.rank-1 {
+  background: #fefce8;
+  color: #b45309;
+  border-color: #fde047;
+  box-shadow: 0 1px 2px rgba(234, 179, 8, 0.15);
+}
+
+.rank-badge.rank-2 {
+  background: #f8fafc;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+
+.rank-badge.rank-3 {
+  background: #fff7ed;
+  color: #c2410c;
+  border-color: #fdba74;
+}
+
+/* ── Branch View Navigation & Meta ─────────────────────────────────── */
+
+.dash-top-nav-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.btn-back-to-brand {
+  background: none;
+  border: 1px dashed var(--accent-border);
+  color: var(--accent-color);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-back-to-brand:hover {
+  background: var(--accent-bg);
+}
+
+.dash-branch-address-text {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.dash-recent-topline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dash-branch-badge-highlight {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+

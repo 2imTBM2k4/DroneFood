@@ -3,7 +3,8 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 import { BrowserRouter } from 'react-router-dom'
-import { AuthProvider } from './context/AuthContext'  // Thêm import
+import { AuthProvider } from './context/AuthContext'
+import { BranchProvider } from './context/BranchContext'
 import axios from 'axios';
 
 axios.interceptors.request.use(config => {
@@ -16,8 +17,10 @@ axios.interceptors.request.use(config => {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <BrowserRouter>
-    <AuthProvider>  {/* Wrap với AuthProvider */}
-      <App />
+    <AuthProvider>
+      <BranchProvider>
+        <App />
+      </BranchProvider>
     </AuthProvider>
   </BrowserRouter>
 )

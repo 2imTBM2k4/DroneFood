@@ -7,7 +7,18 @@ import { StoreContext } from "../../context/StoreContext";
 import ItemOptionsSheet from "../ItemOptionsSheet/ItemOptionsSheet";
 import { formatVND } from "@drone-food/web-ui/utils/money";
 
-function FoodItem({ id, name, price, description, image, optionGroups = [], isBestSeller, salesCount }) {
+function FoodItem({
+  id,
+  name,
+  price,
+  description,
+  image,
+  optionGroups = [],
+  isBestSeller,
+  salesCount,
+  branchId,
+  restaurantId,
+}) {
   const { url, food_list, fetchSingleFood } = useContext(StoreContext);
   const navigate = useNavigate();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -130,7 +141,12 @@ function FoodItem({ id, name, price, description, image, optionGroups = [], isBe
       </div>
 
       {sheetOpen && (
-        <ItemOptionsSheet item={item} onClose={() => setSheetOpen(false)} />
+        <ItemOptionsSheet
+          item={item}
+          branchId={branchId}
+          restaurantId={restaurantId}
+          onClose={() => setSheetOpen(false)}
+        />
       )}
     </>
   );

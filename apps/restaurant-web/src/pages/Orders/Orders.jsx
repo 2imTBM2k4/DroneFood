@@ -6,10 +6,12 @@ import "./Orders.css";
 import { assets } from "../../assets/assets";
 import io from "socket.io-client";
 import { EmptyState, ErrorState } from "@drone-food/web-ui/components/StateBlock";
-import { ClipboardList } from "lucide-react";
+import { ClipboardList, Building2 } from "lucide-react";
 import { formatVND } from "@drone-food/web-ui/utils/money";
+import { useBranch } from "../../context/BranchContext";
 
 const Orders = ({ url }) => {
+  const { selectedBranchId, currentBranch, isAllBranches } = useBranch();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
@@ -26,7 +28,8 @@ const Orders = ({ url }) => {
       setLoadError(null);
       const token = localStorage.getItem("token");
       const headers = token ? { token } : {};
-      const response = await axios.get(url + "/api/order/list", { headers });
+      const params = selectedBranchId ? { branchId: selectedBranchId } : {};
+      const response = await axios.get(url + "/api/order/list", { headers, params });
       if (response.data.success) {
         // Normalize và sắp xếp order mới nhất lên đầu
         const normalizedOrders = (response.data.data || [])
@@ -144,7 +147,9 @@ const Orders = ({ url }) => {
 
   useEffect(() => {
     fetchAllOrders();
+  }, [url, selectedBranchId]);
 
+  useEffect(() => {
     const token = localStorage.getItem("token");
     const socket = io(url, { auth: { token } });
     const restaurantId = localStorage.getItem("restaurantId");
@@ -313,8 +318,13 @@ const Orders = ({ url }) => {
       <h1 className="page-title">Orders</h1>
       <div className="order-header-info">
         <p>
-          <strong>{orders.length}</strong> orders in total · newest first · this
-          page updates live
+          <strong>{orders.length}</strong> orders in total ·{" "}
+          {isAllBranches
+            ? "Tất cả chi nhánh"
+            : currentBranch
+            ? `Chi nhánh: ${currentBranch.name}`
+            : "Chi nhánh hiện tại"}{" "}
+          · newest first · this page updates live
         </p>
       </div>
 
@@ -354,6 +364,14 @@ const Orders = ({ url }) => {
                   <span className="order-id">
                     Order #{order.orderCode || order._id?.slice(-8)?.toUpperCase()}
                   </span>
+                  {order.branchId && (
+                    <span className="order-branch-badge" title="Chi nhánh tiếp nhận">
+                      <Building2 size={12} />
+                      {typeof order.branchId === "object"
+                        ? `${order.branchId.name || ""}${order.branchId.code ? ` (${order.branchId.code})` : ""}`
+                        : "Chi nhánh"}
+                    </span>
+                  )}
                   <span className="order-date">
                     {formatDate(order.createdAt || order.orderDate)}
                   </span>

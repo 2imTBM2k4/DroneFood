@@ -25,6 +25,7 @@ import {
   getUserTransactions,
   verifyEmail,
   resendVerification,
+  lookupUser,
 } from "../controllers/userController.js";
 
 import { protect, authorize } from "../middleware/auth.js";
@@ -78,6 +79,7 @@ userRouter.post("/refresh-token", refreshLimiter, refreshToken);
 
 // ============ PROTECTED ROUTES ============
 userRouter.get("/me", protect, getMe);
+userRouter.get("/lookup", protect, authorize("merchant_owner", "restaurant_owner", "admin"), lookupUser);
 userRouter.get("/transactions", protect, getUserTransactions);
 userRouter.get("/reverse-geocode", protect, validate(reverseGeocodeQuerySchema, "query"), reverseGeocode);
 userRouter.get("/geocode", protect, validate(geocodeAddressQuerySchema, "query"), geocodeUserAddress);

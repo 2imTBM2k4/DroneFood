@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useContext } from "react";
 import { createPortal } from "react-dom";
 import { AuthContext } from "../../context/AuthContext";
+import { useBranch } from "../../context/BranchContext";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import "./List.css";
 import axios from "axios";
 import { notificationService } from "@drone-food/web-ui/utils/toast";
 import EditProduct from "../Products/EditProduct";
-import { Pencil, Trash2, Search, X, Plus, Power } from "lucide-react";
+import { Pencil, Trash2, Search, X, Plus, Power, Info } from "lucide-react";
 import Add from "../Add/Add";
 import { formatVND } from "@drone-food/web-ui/utils/money";
 
@@ -22,7 +23,15 @@ const List = ({ url }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [addOpen, setAddOpen] = useState(() => searchParams.get("add") === "1");
   const { user } = useContext(AuthContext);
+  const { currentBranch, selectedBranchId, branches } = useBranch();
   const navigate = useNavigate();
+
+  const isBranchManager = user?.role === "branch_manager";
+  const targetBranchId = isBranchManager
+    ? currentBranch?._id || branches[0]?._id
+    : selectedBranchId && selectedBranchId !== "all"
+    ? selectedBranchId
+    : null;
 
   useEffect(() => {
     if (!user) {
@@ -35,7 +44,7 @@ const List = ({ url }) => {
       return;
     }
     fetchList();
-  }, [user]);
+  }, [user, targetBranchId]);
 
   const fetchList = async () => {
     const token = localStorage.getItem("token");
@@ -50,7 +59,10 @@ const List = ({ url }) => {
     }
 
     try {
-      const response = await axios.get(`${url}/api/food/list`, {
+      const requestUrl = targetBranchId
+        ? `${url}/api/food/list?branchId=${targetBranchId}`
+        : `${url}/api/food/list`;
+      const response = await axios.get(requestUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -160,23 +172,79 @@ const List = ({ url }) => {
     const token = localStorage.getItem("token");
     if (!token || changingAvailability) return;
     setChangingAvailability(item._id);
-    try {
-      const response = await axios.patch(`${url}/api/food/${item._id}/availability`, { isAvailable: item.isAvailable === false }, { headers: { Authorization: `Bearer ${token}` } });
-      if (!response.data.success) throw new Error(response.data.message);
-      setList((current) => current.map((food) => food._id === item._id ? { ...food, isAvailable: response.data.food.isAvailable } : food));
-      notificationService.success(item.isAvailable === false ? "Món ăn đã bật bán" : "Món ăn đã chuyển sang hết hàng", undefined, { audience: "restaurant", key: `food-avail-success-${item._id}` });
-    } catch (error) {
-      notificationService.error(
-        "Không thể cập nhật trạng thái món",
-        error.response?.data?.message || error.message || "Không thể cập nhật trạng thái bán.",
-        {
-          audience: "restaurant",
-          priority: "high",
-          key: `food-avail-${item._id}`,
-        }
-      );
+
+    if (isBranchManager) {
+      if (!targetBranchId) {
+        notificationService.warning(
+          "Chưa xác định chi nhánh",
+          "Không tìm thấy thông tin chi nhánh quản lý.",
+          { audience: "restaurant" }
+        );
+        setChangingAvailability("");
+        return;
+      }
+      const isCurrentlyAvail = item.isBranchAvailable !== false && !item.isSoldOutAtBranch;
+      const nextState = !isCurrentlyAvail;
+      try {
+        const response = await axios.patch(
+          `${url}/api/food/${item._id}/branch-availability`,
+          { branchId: targetBranchId, isAvailable: nextState },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!response.data.success) throw new Error(response.data.message);
+        setList((current) =>
+          current.map((food) =>
+            food._id === item._id
+              ? { ...food, isBranchAvailable: nextState, isSoldOutAtBranch: !nextState }
+              : food
+          )
+        );
+        notificationService.success(
+          nextState ? "Đã bật món tại chi nhánh" : "Đã chuyển sang tạm hết tại chi nhánh",
+          undefined,
+          { audience: "restaurant", key: `food-avail-success-${item._id}` }
+        );
+      } catch (error) {
+        notificationService.error(
+          "Không thể cập nhật trạng thái món",
+          error.response?.data?.message || error.message || "Lỗi khi cập nhật.",
+          { audience: "restaurant", priority: "high", key: `food-avail-${item._id}` }
+        );
+      } finally {
+        setChangingAvailability("");
+      }
+    } else {
+      try {
+        const response = await axios.patch(
+          `${url}/api/food/${item._id}/availability`,
+          { isAvailable: item.isAvailable === false },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!response.data.success) throw new Error(response.data.message);
+        setList((current) =>
+          current.map((food) =>
+            food._id === item._id ? { ...food, isAvailable: response.data.food.isAvailable } : food
+          )
+        );
+        notificationService.success(
+          item.isAvailable === false ? "Món ăn đã bật bán toàn chuỗi" : "Món ăn đã chuyển sang hết hàng toàn chuỗi",
+          undefined,
+          { audience: "restaurant", key: `food-avail-success-${item._id}` }
+        );
+      } catch (error) {
+        notificationService.error(
+          "Không thể cập nhật trạng thái món",
+          error.response?.data?.message || error.message || "Không thể cập nhật trạng thái bán.",
+          {
+            audience: "restaurant",
+            priority: "high",
+            key: `food-avail-${item._id}`,
+          }
+        );
+      } finally {
+        setChangingAvailability("");
+      }
     }
-    finally { setChangingAvailability(""); }
   };
 
   const closeEditModal = () => {
@@ -224,7 +292,6 @@ const List = ({ url }) => {
     return matchesCategory && matchesQuery;
   });
 
-
   return (
     <div className="list-page">
       <div className="list-header">
@@ -232,10 +299,21 @@ const List = ({ url }) => {
           <h1 className="list-title">Menu Items</h1>
           <p className="list-subtitle">Manage your restaurant menu</p>
         </div>
-        <button className="add-item-btn" onClick={() => { setAddOpen(true); setSearchParams({ add: "1" }); }}>
-          <Plus size={17} aria-hidden="true" /> Add Item
-        </button>
+        {!isBranchManager && (
+          <button className="add-item-btn" onClick={() => { setAddOpen(true); setSearchParams({ add: "1" }); }}>
+            <Plus size={17} aria-hidden="true" /> Add Item
+          </button>
+        )}
       </div>
+
+      {isBranchManager && (
+        <div className="list-role-banner">
+          <Info size={18} />
+          <span>
+            <strong>Thực đơn chi nhánh {currentBranch?.name ? `(${currentBranch.name})` : ""}:</strong> Danh mục và giá do chủ thương hiệu quản lý tập trung. Quản lý chi nhánh có quyền <strong>bật / tắt trạng thái món</strong> tại chi nhánh khi tạm hết nguyên liệu.
+          </span>
+        </div>
+      )}
 
       <div className="list-filters">
         <div className="list-search">
@@ -308,24 +386,77 @@ const List = ({ url }) => {
                 <p className="item-name">{item.name}</p>
                 <span className="category-badge">{item.category}</span>
                 <p className="item-price">{formatVND(item.price)}</p>
-                <button type="button" className={`availability-toggle ${item.isAvailable === false ? "sold-out" : ""}`} onClick={() => toggleAvailability(item)} disabled={changingAvailability === item._id} aria-pressed={item.isAvailable !== false}>
-                  <Power size={15} aria-hidden="true" /><span>{changingAvailability === item._id ? "Saving…" : item.isAvailable === false ? "Sold out" : "Available"}</span>
-                </button>
+                {isBranchManager ? (
+                  item.isAvailable === false ? (
+                    <button
+                      type="button"
+                      className="availability-toggle sold-out"
+                      disabled={true}
+                      title="Chủ thương hiệu đã tắt món này trên toàn chuỗi"
+                    >
+                      <Power size={15} aria-hidden="true" />
+                      <span>Hết hàng toàn chuỗi</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`availability-toggle ${
+                        item.isBranchAvailable === false || item.isSoldOutAtBranch ? "sold-out" : ""
+                      }`}
+                      onClick={() => toggleAvailability(item)}
+                      disabled={changingAvailability === item._id}
+                      aria-pressed={item.isBranchAvailable !== false && !item.isSoldOutAtBranch}
+                      title="Bấm để bật/tắt món tại chi nhánh của bạn"
+                    >
+                      <Power size={15} aria-hidden="true" />
+                      <span>
+                        {changingAvailability === item._id
+                          ? "Saving…"
+                          : item.isBranchAvailable === false || item.isSoldOutAtBranch
+                          ? "Tạm hết tại CN"
+                          : "Đang bán tại CN"}
+                      </span>
+                    </button>
+                  )
+                ) : (
+                  <button
+                    type="button"
+                    className={`availability-toggle ${item.isAvailable === false ? "sold-out" : ""}`}
+                    onClick={() => toggleAvailability(item)}
+                    disabled={changingAvailability === item._id}
+                    aria-pressed={item.isAvailable !== false}
+                  >
+                    <Power size={15} aria-hidden="true" />
+                    <span>
+                      {changingAvailability === item._id
+                        ? "Saving…"
+                        : item.isAvailable === false
+                        ? "Sold out"
+                        : "Available"}
+                    </span>
+                  </button>
+                )}
                 <div className="actions">
-                  <button
-                    onClick={() => editFood(item)}
-                    className="action-btn action-btn--edit"
-                    title="Edit"
-                  >
-                    <Pencil size={15} />
-                  </button>
-                  <button
-                    onClick={() => setPendingDelete(item)}
-                    className="action-btn action-btn--delete"
-                    title="Remove"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  {isBranchManager ? (
+                    <span style={{ color: "#94a3b8", fontSize: "12px", fontStyle: "italic" }}>Chỉ xem</span>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => editFood(item)}
+                        className="action-btn action-btn--edit"
+                        title="Edit"
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        onClick={() => setPendingDelete(item)}
+                        className="action-btn action-btn--delete"
+                        title="Remove"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))
