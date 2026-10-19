@@ -18,14 +18,6 @@ const BranchSelector = () => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
 
-  const isManager = user?.role === "branch_manager";
-  const isMerchantOwner = user?.role === "merchant_owner" || user?.role === "admin";
-
-  // Quản lý thương hiệu: Không cần nút chọn chi nhánh (xem toàn chuỗi thống nhất)
-  if (isMerchantOwner) {
-    return null;
-  }
-
   // Đóng dropdown khi click bên ngoài
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -36,6 +28,14 @@ const BranchSelector = () => {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const isManager = user?.role === "branch_manager";
+  const isMerchantOwner = user?.role === "merchant_owner" || user?.role === "admin";
+
+  // Quản lý thương hiệu: Không cần nút chọn chi nhánh (xem toàn chuỗi thống nhất)
+  if (isMerchantOwner) {
+    return null;
+  }
 
   if (loadingBranches && branches.length === 0) {
     return (

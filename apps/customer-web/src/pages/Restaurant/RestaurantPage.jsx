@@ -27,7 +27,6 @@ const RestaurantPage = () => {
   const [branches, setBranches] = useState([]);
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [branchModalOpen, setBranchModalOpen] = useState(false);
-  const [loadingBranches, setLoadingBranches] = useState(false);
   const [restaurantFoods, setRestaurantFoods] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -45,7 +44,6 @@ const RestaurantPage = () => {
     if (!id) return;
     let active = true;
     const fetchBranches = async () => {
-      setLoadingBranches(true);
       try {
         const res = await fetch(`${url}/api/branch/list?merchantId=${id}&status=active`);
         const data = await res.json();
@@ -95,8 +93,6 @@ const RestaurantPage = () => {
         console.error("Fetch branches error:", err);
         setBranches([]);
         setSelectedBranch(null);
-      } finally {
-        if (active) setLoadingBranches(false);
       }
     };
 

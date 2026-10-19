@@ -96,21 +96,24 @@ describe("Email Change with Password & OTP verification", () => {
       const initialEmail = `owner-before-${Date.now()}@test.com`;
       const newEmail = `owner-after-${Date.now()}@test.com`;
 
-      const restaurant = await Restaurant.create({
-        name: "Nhà Hàng Cơm Tấm",
-        email: initialEmail,
-        phone: "0901234567",
-        address: "123 Nguyễn Huệ",
-        isLocked: false,
-      });
-
       const user = await createUser({
         name: "Chủ Quán",
         email: initialEmail,
         password: "password123",
         role: "restaurant_owner",
-        restaurantId: restaurant._id,
       });
+
+      const restaurant = await Restaurant.create({
+        name: "Nhà Hàng Cơm Tấm",
+        email: initialEmail,
+        phone: "0901234567",
+        address: "123 Nguyễn Huệ",
+        owner: user._id,
+        isLocked: false,
+      });
+
+      user.restaurantId = restaurant._id;
+      await user.save();
 
       const token = generateToken(user._id);
 

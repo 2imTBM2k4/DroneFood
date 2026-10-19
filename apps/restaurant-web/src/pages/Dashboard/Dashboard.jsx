@@ -53,7 +53,6 @@ const Dashboard = ({ url }) => {
     merchant,
     selectedBranchId,
     currentBranch,
-    isAllBranches,
     refreshBranches,
     setSelectedBranchId,
   } = useBranch();
@@ -155,7 +154,6 @@ const Dashboard = ({ url }) => {
 
   // Performance calculations per branch for Brand Dashboard
   const branchPerformance = useMemo(() => {
-    const todays = orders.filter((o) => isToday(o.createdAt));
     const totalTodayRevenue = stats.todayRevenue;
 
     return branches.map((branch) => {
