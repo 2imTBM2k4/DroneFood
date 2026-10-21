@@ -65,8 +65,9 @@ const Dashboard = ({ url }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const isBrandOwner = user?.role === "merchant_owner" || user?.role === "admin";
-  const showBrandDashboard = isBrandOwner;
+  const merchantType = merchant?.type || user?.merchantType || "individual";
+  const isBrandOwner = (user?.role === "merchant_owner" || user?.role === "admin") && merchantType === "brand";
+  const showBrandDashboard = isBrandOwner && (!selectedBranchId || selectedBranchId === "all");
 
   useEffect(() => {
     if (currentBranch) {
@@ -521,7 +522,9 @@ const Dashboard = ({ url }) => {
         <div>
           <div className="dash-top-nav-row">
             <p className="dash-eyebrow">
-              {currentBranch ? `Chi nhánh ${currentBranch.code || ""}` : "Bảng điều khiển chi nhánh"}
+              {isBrandOwner || user?.role === "branch_manager"
+                ? (currentBranch ? `Chi nhánh ${currentBranch.code || ""}` : "Bảng điều khiển chi nhánh")
+                : "Bảng điều khiển nhà hàng"}
             </p>
             {isBrandOwner && (
               <button
@@ -534,7 +537,9 @@ const Dashboard = ({ url }) => {
             )}
           </div>
           <h1 className="dash-title">
-            {currentBranch ? currentBranch.name : (merchant?.name || restaurantName || user?.name || "Cửa hàng của bạn")}
+            {isBrandOwner || user?.role === "branch_manager"
+              ? (currentBranch ? currentBranch.name : (merchant?.name || restaurantName || user?.name || "Cửa hàng của bạn"))
+              : (restaurantName || merchant?.name || user?.name || "Cửa hàng của bạn")}
           </h1>
           {currentBranch?.address?.text && (
             <p className="dash-branch-address-text">{currentBranch.address.text}</p>
@@ -568,9 +573,13 @@ const Dashboard = ({ url }) => {
 
       <ConfirmModal
         open={showConfirmClose}
-        title="Tạm đóng chi nhánh?"
-        message="Khách hàng sẽ không thể đặt đơn mới tại chi nhánh này cho đến khi bạn mở lại."
-        confirmText="Tạm đóng chi nhánh"
+        title={isBrandOwner || user?.role === "branch_manager" ? "Tạm đóng chi nhánh?" : "Tạm đóng cửa hàng?"}
+        message={
+          isBrandOwner || user?.role === "branch_manager"
+            ? "Khách hàng sẽ không thể đặt đơn mới tại chi nhánh này cho đến khi bạn mở lại."
+            : "Khách hàng sẽ không thể đặt đơn mới cho đến khi bạn mở lại."
+        }
+        confirmText={isBrandOwner || user?.role === "branch_manager" ? "Tạm đóng chi nhánh" : "Đóng cửa hàng"}
         cancelText="Hủy"
         danger={true}
         isLoading={savingOpen}
@@ -583,7 +592,9 @@ const Dashboard = ({ url }) => {
 
       {!isOpen && (
         <p className="dash-closed-note">
-          Chi nhánh này đang tạm đóng. Khách hàng sẽ không thấy chi nhánh để đặt món — bật công tắc phía trên khi bạn sẵn sàng mở bán lại.
+          {isBrandOwner || user?.role === "branch_manager"
+            ? "Chi nhánh này đang tạm đóng. Khách hàng sẽ không thấy chi nhánh để đặt món — bật công tắc phía trên khi bạn sẵn sàng mở bán lại."
+            : "Cửa hàng của bạn đang tạm đóng. Khách hàng sẽ không thấy nhà hàng để đặt món — bật công tắc phía trên khi bạn sẵn sàng mở bán lại."}
         </p>
       )}
 

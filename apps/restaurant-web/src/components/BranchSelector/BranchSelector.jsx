@@ -8,6 +8,7 @@ const BranchSelector = () => {
   const { user } = useContext(AuthContext);
   const {
     branches,
+    merchant,
     selectedBranchId,
     currentBranch,
     isAllBranches,
@@ -29,11 +30,14 @@ const BranchSelector = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const merchantType = merchant?.type || user?.merchantType || "individual";
+  const isBrandOwner = (user?.role === "merchant_owner" || user?.role === "admin") && merchantType === "brand";
   const isManager = user?.role === "branch_manager";
-  const isMerchantOwner = user?.role === "merchant_owner" || user?.role === "admin";
+  const isSingleRestaurant = !isManager && !isBrandOwner;
 
   // Quản lý thương hiệu: Không cần nút chọn chi nhánh (xem toàn chuỗi thống nhất)
-  if (isMerchantOwner) {
+  // Quán đơn lẻ chưa lên thương hiệu: Không cần nút chọn chi nhánh (chỉ có 1 quán)
+  if (isBrandOwner || isSingleRestaurant) {
     return null;
   }
 

@@ -31,10 +31,11 @@ import {
 
 const EditRestaurant = ({ url = import.meta.env.VITE_API_URL || "http://localhost:4000" }) => {
   const { user, fetchUserInfo } = useContext(AuthContext);
-  const { branches, currentBranch, refreshBranches } = useBranch();
+  const { branches, currentBranch, refreshBranches, merchant: contextMerchant } = useBranch();
 
+  const merchantType = contextMerchant?.type || user?.merchantType || "individual";
   const isBranchManager = user?.role === "branch_manager";
-  const isMerchantOwner = user?.role === "merchant_owner" || user?.role === "admin";
+  const isMerchantOwner = (user?.role === "merchant_owner" || user?.role === "admin") && merchantType === "brand";
   const targetBranch = isBranchManager ? currentBranch || branches[0] : null;
 
   // ── DANH SÁCH TAB ĐƯỢC PHÂN THEO VAI TRÒ ────────────────────────────────
@@ -210,7 +211,7 @@ const EditRestaurant = ({ url = import.meta.env.VITE_API_URL || "http://localhos
       } else {
         setLoading(false);
       }
-    } else if (isMerchantOwner) {
+    } else if (isMerchantOwner || user?.role === "merchant_owner") {
       fetchMerchant();
     } else {
       const restaurantId = getRestaurantId();

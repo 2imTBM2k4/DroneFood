@@ -28,7 +28,7 @@ const Orders = ({ url }) => {
       setLoadError(null);
       const token = localStorage.getItem("token");
       const headers = token ? { token } : {};
-      const params = selectedBranchId ? { branchId: selectedBranchId } : {};
+      const params = selectedBranchId && selectedBranchId !== "all" ? { branchId: selectedBranchId } : {};
       const response = await axios.get(url + "/api/order/list", { headers, params });
       if (response.data.success) {
         // Normalize và sắp xếp order mới nhất lên đầu

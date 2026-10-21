@@ -1,5 +1,6 @@
 import * as restaurantService from "../services/restaurantService.js";
 import * as bankAccountService from "../services/bankAccountService.js";
+import { clearCache } from "../middleware/cache.js";
 import fs from "fs";
 
 export const listRestaurants = async (req, res) => {
@@ -24,6 +25,7 @@ export const updateRestaurant = async (req, res) => {
       req.body,
       req.file
     );
+    clearCache("/api/restaurant");
     res.json(result);
   } catch (error) {
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
@@ -56,6 +58,7 @@ export const createRestaurant = async (req, res) => {
       req.body,
       req.file
     );
+    clearCache("/api/restaurant");
     res.status(201).json(result);
   } catch (error) {
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
@@ -69,6 +72,7 @@ export const deleteRestaurant = async (req, res) => {
   try {
     const { id } = req.body;
     const result = await restaurantService.deleteRestaurant(req.user, id);
+    clearCache("/api/restaurant");
     res.json(result);
   } catch (error) {
     res

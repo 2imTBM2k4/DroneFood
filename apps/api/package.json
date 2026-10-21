@@ -24,6 +24,7 @@
     "verify:migration": "node scripts/verify-migration.cjs",
     "rollback:migration": "node scripts/rollback-migration.cjs",
     "health-check": "node scripts/health-check.cjs",
+    "test:load": "node scripts/load-test.mjs",
     "jobs:expire-shipper-orders": "node jobs/expireShipperOrders.js",
     "lint": "eslint . --max-warnings 0",
     "test:watch": "vitest",

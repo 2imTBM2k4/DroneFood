@@ -8,18 +8,107 @@ import { geocodeAddress } from "../utils/geocode.js";
 import { recordAudit } from "../utils/auditLog.js";
 import { getRestaurantRatingSummaries } from "./orderReviewService.js";
 import { isRestaurantOpenNow } from "../utils/openingHours.js";
+import { Merchant, Branch } from "../models/index.cjs";
 
 export const listRestaurants = async ({ page, limit } = {}) => {
   const result = await restaurantRepo.findAll({ page, limit });
-  const ratingSummaries = await getRestaurantRatingSummaries(
-    result.data.map((restaurant) => restaurant._id)
-  );
+  if (!result?.data || result.data.length === 0) {
+    return { success: true, data: [], ...(result.pagination && { pagination: result.pagination }) };
+  }
+
+  const restaurantIdSet = new Set();
+  const ownerIdSet = new Set();
+
+  for (const restaurant of result.data) {
+    if (restaurant._id) {
+      restaurantIdSet.add(String(restaurant._id));
+    }
+    const o = restaurant.owner?._id || restaurant.owner;
+    if (o) {
+      ownerIdSet.add(String(o));
+    }
+  }
+
+  const restaurantIds = Array.from(restaurantIdSet)
+    .filter((id) => mongoose.isValidObjectId(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+  const ownerIds = Array.from(ownerIdSet)
+    .filter((id) => mongoose.isValidObjectId(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+
+  const [ratingSummaries, merchants] = await Promise.all([
+    getRestaurantRatingSummaries(result.data.map((r) => r._id)),
+    Merchant.find({
+      $or: [
+        { _id: { $in: restaurantIds } },
+        { legacyRestaurantId: { $in: restaurantIds } },
+        { ownerUserId: { $in: ownerIds } },
+      ],
+      status: { $ne: "suspended" },
+    })
+      .select("_id legacyRestaurantId ownerUserId name type brandApplication")
+      .lean(),
+  ]);
+
+  const targetMerchantIds = [
+    ...merchants.map((m) => m._id),
+    ...restaurantIds,
+  ];
+
+  const branches = targetMerchantIds.length > 0
+    ? await Branch.find({
+        merchantId: { $in: targetMerchantIds },
+        status: { $ne: "locked" },
+      })
+        .select("_id merchantId name code address location isOpen droneDeliveryEnabled")
+        .lean()
+    : [];
+
+  const branchesByMerchant = new Map();
+  for (const b of branches) {
+    const key = String(b.merchantId);
+    if (!branchesByMerchant.has(key)) branchesByMerchant.set(key, []);
+    branchesByMerchant.get(key).push(b);
+  }
+
+  const merchantByRestaurant = new Map();
+  for (const m of merchants) {
+    if (m.legacyRestaurantId) merchantByRestaurant.set(String(m.legacyRestaurantId), m);
+    merchantByRestaurant.set(String(m._id), m);
+    if (m.ownerUserId) merchantByRestaurant.set(String(m.ownerUserId), m);
+  }
+
   const data = result.data.map((restaurant) => {
     const obj = typeof restaurant.toObject === "function" ? restaurant.toObject() : restaurant;
+    const restIdStr = String(restaurant._id);
+    const rawOwner = restaurant.owner;
+    const ownerIdStr = rawOwner?._id ? String(rawOwner._id) : (rawOwner ? String(rawOwner) : "");
+    const merchant = merchantByRestaurant.get(restIdStr) || (ownerIdStr ? merchantByRestaurant.get(ownerIdStr) : null);
+
+    const merchantBranches = merchant ? (branchesByMerchant.get(String(merchant._id)) || []) : [];
+    const directBranches = branchesByMerchant.get(restIdStr) || [];
+
+    const branchMap = new Map();
+    for (const b of [...merchantBranches, ...directBranches]) {
+      branchMap.set(String(b._id), b);
+    }
+    const activeBranches = Array.from(branchMap.values());
+
+    const isBrand = Boolean(
+      merchant && (merchant.type === "brand" || merchant.brandApplication?.status === "approved")
+    );
+    // Thể hiện dạng chuỗi/chi nhánh nếu là thương hiệu (kể cả mới có 1 chi nhánh) hoặc có từ 2 chi nhánh trở lên
+    const isMultiBranch = Boolean(
+      (isBrand && activeBranches.length > 0) || activeBranches.length > 1
+    );
+
     return {
       ...obj,
       isOpenNow: isRestaurantOpenNow(restaurant),
-      ...(ratingSummaries.get(String(restaurant._id)) || {}),
+      ...(ratingSummaries.get(restIdStr) || {}),
+      merchantType: merchant?.type || "individual",
+      isMultiBranch,
+      branches: activeBranches,
     };
   });
   return { success: true, data, ...(result.pagination && { pagination: result.pagination }) };

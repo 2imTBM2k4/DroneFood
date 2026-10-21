@@ -154,7 +154,7 @@ const RestaurantWebApp = () => {
           <Route
             path="/orders"
             element={
-              <ProtectedRoute allowedRoles={["branch_manager", "admin"]}>
+              <ProtectedRoute allowedRoles={["branch_manager", "restaurant_owner", "merchant_owner", "admin"]}>
                 <Orders url={url} />
               </ProtectedRoute>
             }
@@ -162,7 +162,7 @@ const RestaurantWebApp = () => {
           <Route
             path="/branches"
             element={
-              <ProtectedRoute allowedRoles={["merchant_owner", "restaurant_owner", "admin"]}>
+              <ProtectedRoute allowedRoles={["merchant_owner", "admin"]}>
                 <Branches url={url} />
               </ProtectedRoute>
             }

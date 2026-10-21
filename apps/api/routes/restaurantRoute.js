@@ -22,6 +22,7 @@ import {
   setOpenStateSchema,
 } from "../validations/restaurantValidation.js";
 import { bankAccountSchema } from "../validations/bankAccountValidation.js";
+import { cacheMiddleware } from "../middleware/cache.js";
 
 const restaurantRouter = express.Router();
 
@@ -37,7 +38,7 @@ const deprecatedWrite = (req, res) => {
   });
 };
 
-restaurantRouter.get("/list", optionalAuth, listRestaurants);
+restaurantRouter.get("/list", optionalAuth, cacheMiddleware(30), listRestaurants);
 
 restaurantRouter.get("/me/bank-account", protect, authorize("restaurant_owner", "merchant_owner"), bankAccount);
 restaurantRouter.put("/me/bank-account", protect, authorize("restaurant_owner", "merchant_owner"), validate(bankAccountSchema), updateBankAccount);

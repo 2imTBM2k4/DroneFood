@@ -266,6 +266,46 @@ describe("Shipper dispatch", () => {
     expect((await Order.findById(active._id)).orderStatus).toBe("pending");
   });
 
+  it("releases reserved vouchers when an unaccepted COD order expires", async () => {
+    const { restaurant } = await createRestaurantOwner();
+    const customer = await createUser({ email: "customer-voucher-expire@test.com" });
+    const { Voucher, VoucherRedemption } = await import("../../models/index.cjs");
+    const voucher = await Voucher.create({
+      code: "TESTEXPIRE10",
+      description: "Test voucher",
+      discountType: "percentage",
+      discountValue: 10,
+      minOrderValue: 0,
+      maxDiscountAmount: 50000,
+      usageLimit: 1,
+      usedCount: 1,
+      target: "food",
+      enabled: true,
+      validFrom: new Date(Date.now() - 3600000),
+      validTo: new Date(Date.now() + 3600000),
+    });
+    const overdue = await makeOrder(customer._id, restaurant._id, {
+      paymentMethod: "COD",
+      deliveryMethod: "shipper",
+      orderStatus: "pending",
+      shipperAssignmentStatus: "unassigned",
+      shipperAssignmentDeadlineAt: new Date(Date.now() - 1000),
+    });
+    await VoucherRedemption.create({
+      voucher: voucher._id,
+      user: customer._id,
+      order: overdue._id,
+      discountAmount: 10000,
+      status: "reserved",
+    });
+
+    await shipperService.expireUnacceptedOrders();
+    const redemption = await VoucherRedemption.findOne({ order: overdue._id });
+    expect(redemption.status).toBe("released");
+    const updatedVoucher = await Voucher.findById(voucher._id);
+    expect(updatedVoucher.usedCount).toBe(0);
+  });
+
   it("keeps a paid PayOS order pending and lets its customer continue searching after timeout", async () => {
     const { restaurant } = await createRestaurantOwner();
     const customer = await createUser({ email: "customer-continue-search@test.com" });

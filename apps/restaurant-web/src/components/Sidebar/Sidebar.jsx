@@ -28,8 +28,9 @@ import { assets } from "../../assets/assets";
 import { AuthContext } from "../../context/AuthContext";
 import { useBranch } from "../../context/BranchContext";
 
-const getMenuSections = (role) => {
+const getMenuSections = (role, merchantType) => {
   const isBranchManager = role === "branch_manager";
+  const isBrandOwner = (role === "merchant_owner" || role === "admin") && merchantType === "brand";
 
   let managementItems = [];
 
@@ -40,7 +41,7 @@ const getMenuSections = (role) => {
       { path: "/orders", icon: ClipboardList, label: "Đơn hàng" },
       { path: "/edit-restaurant", icon: Store, label: "Hồ sơ chi nhánh" },
     ];
-  } else {
+  } else if (isBrandOwner) {
     // Quản lý thương hiệu: Thực đơn gốc, Quản lý chi nhánh, Ví tiền, Hồ sơ thương hiệu
     // (Bỏ phần quản lý đơn hàng - đơn hàng do từng chi nhánh phụ trách)
     managementItems = [
@@ -48,6 +49,15 @@ const getMenuSections = (role) => {
       { path: "/branches", icon: Building2, label: "Chi nhánh" },
       { path: "/wallet", icon: WalletCards, label: "Ví tiền" },
       { path: "/edit-restaurant", icon: Store, label: "Hồ sơ thương hiệu" },
+    ];
+  } else {
+    // Quán đơn lẻ chưa lên thương hiệu (restaurant_owner / individual):
+    // Đơn hàng, Thực đơn, Ví tiền, Hồ sơ nhà hàng
+    managementItems = [
+      { path: "/orders", icon: ClipboardList, label: "Đơn hàng" },
+      { path: "/list", icon: UtensilsCrossed, label: "Thực đơn" },
+      { path: "/wallet", icon: WalletCards, label: "Ví tiền" },
+      { path: "/edit-restaurant", icon: Store, label: "Hồ sơ nhà hàng" },
     ];
   }
 
@@ -71,9 +81,13 @@ const Sidebar = ({
   onMobileClose,
 }) => {
   const { user, logout } = useContext(AuthContext);
-  const { branches, currentBranch, refreshBranches } = useBranch();
+  const { branches, currentBranch, refreshBranches, merchant } = useBranch();
   const navigate = useNavigate();
 
+  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
+  const token = localStorage.getItem("token") || "";
+
+  const merchantType = merchant?.type || user?.merchantType || "individual";
   const isBranchManager = user?.role === "branch_manager";
   const targetBranch = isBranchManager ? currentBranch || branches[0] : null;
   const isBranchOpen = targetBranch ? targetBranch.isOpen !== false : true;
@@ -112,8 +126,6 @@ const Sidebar = ({
   const [isDark, setIsDark] = useState(
     () => localStorage.getItem("mode") === "dark"
   );
-  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
-  const token = localStorage.getItem("token") || "";
   const connectRealtime = useCallback(
     () => io(apiUrl, { auth: { token } }),
     [apiUrl, token]
@@ -186,7 +198,7 @@ const Sidebar = ({
       </header>
 
       <nav id="restaurant-sidebar-navigation" className="sidebar-navigation">
-        {getMenuSections(user?.role).map((section) => (
+        {getMenuSections(user?.role, merchantType).map((section) => (
           <section className="sidebar-section" key={section.label}>
             <p className="sidebar-section-label">{section.label}</p>
             <div className="sidebar-options">

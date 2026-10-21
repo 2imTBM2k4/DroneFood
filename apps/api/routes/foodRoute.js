@@ -11,6 +11,7 @@ import {
 import { uploadMiddleware } from "../config/multer.js";
 import { protect, optionalAuth, authorize } from "../middleware/auth.js";
 import validate from "../middleware/validate.js";
+import { cacheMiddleware } from "../middleware/cache.js";
 import {
   addFoodSchema,
   updateFoodSchema,
@@ -30,7 +31,7 @@ foodRouter.post(
   validate(addFoodSchema),
   addFood
 );
-foodRouter.get("/list", optionalAuth, validate(listFoodQuerySchema, "query"), listFood);
+foodRouter.get("/list", optionalAuth, cacheMiddleware(30), validate(listFoodQuerySchema, "query"), listFood);
 foodRouter.get("/:id", getFoodById);
 foodRouter.post(
   "/remove",

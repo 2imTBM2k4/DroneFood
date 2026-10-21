@@ -120,6 +120,14 @@ app.use((err, req, res, next) => {
       .json({ success: false, message: "JSON không hợp lệ" });
   }
 
+  if (err.name === "VersionError") {
+    return res.status(409).json({
+      success: false,
+      message: "Dữ liệu đang được cập nhật đồng thời, vui lòng thử lại",
+      code: "CONCURRENCY_CONFLICT",
+    });
+  }
+
   const statusCode = err.statusCode || err.status || 500;
   if (statusCode === 500) {
     const log = req.log || logger;

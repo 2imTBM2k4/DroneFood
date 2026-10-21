@@ -1,6 +1,6 @@
 import { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Clock, Star, ChevronRight, Zap } from 'lucide-react';
+import { Clock, Star, Zap } from 'lucide-react';
 import './RestaurantItem.css';
 import { StoreContext } from '../../context/StoreContext';
 import { assets } from '../../assets/assets';
@@ -14,6 +14,8 @@ const RestaurantItem = ({
   distanceKm,
   etaMin,
   rating,
+  branchName,
+  isMultiBranch,
 }) => {
   const { url } = useContext(StoreContext);
   const navigate = useNavigate();
@@ -28,6 +30,7 @@ const RestaurantItem = ({
   };
 
   const imgSrc = getImgSrc(image);
+  const displayName = isMultiBranch && branchName ? branchName : name;
 
   return (
     <div
@@ -41,13 +44,13 @@ const RestaurantItem = ({
       }}
       role="button"
       tabIndex={0}
-      aria-label={`View menu for ${name}`}
+      aria-label={`View menu for ${displayName}`}
     >
       <div className="apple-card-image-wrapper">
         <img
           className="apple-card-image product-render"
           src={imgSrc}
-          alt={name}
+          alt={displayName}
           onError={(e) => {
             e.target.src = assets.logo;
           }}
@@ -60,12 +63,12 @@ const RestaurantItem = ({
 
       <div className="apple-card-content">
         <div className="apple-card-header">
-          <h3 className="apple-card-title">{name}</h3>
+          <h3 className="apple-card-title" title={displayName}>{displayName}</h3>
           <span className="apple-card-rating">
             {typeof rating === "number" ? (
               <>
                 <Star size={12} fill="currentColor" strokeWidth={0} aria-hidden="true" />
-                <span aria-label={`Rating ${rating.toFixed(1)} out of 5`}>
+                <span className="apple-card-rating-value" aria-label={`Rating ${rating.toFixed(1)} out of 5`}>
                   {rating.toFixed(1)}
                 </span>
               </>
@@ -87,19 +90,6 @@ const RestaurantItem = ({
             </span>
           </div>
         )}
-
-        <p className="apple-restaurant-address">
-          <MapPin size={13} className="apple-meta-pin" />
-          <span>{address}</span>
-        </p>
-
-        <div className="apple-card-footer">
-          <span className="apple-status-text">Available now</span>
-          <span className="apple-text-link">
-            View Menu
-            <ChevronRight size={13} />
-          </span>
-        </div>
       </div>
     </div>
   );

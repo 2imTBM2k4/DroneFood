@@ -35,7 +35,8 @@ export const findByUser = async (userId) => {
     .populate("branchId", "name code address phone location droneDeliveryEnabled")
     .populate("merchantId", "name logoUrl coverUrl")
     .populate("shipperId", "name")
-    .sort({ createdAt: -1 }); // Recent first
+    .sort({ createdAt: -1 })
+    .lean();
 };
 
 // Customer-facing detail lookup keeps the ownership condition in the query so
@@ -48,7 +49,8 @@ export const findCustomerDetail = async (userId, orderId) => {
     .populate("restaurantId", "name address lat lng")
     .populate("branchId", "name code address phone location droneDeliveryEnabled")
     .populate("merchantId", "name logoUrl coverUrl")
-    .populate("shipperId", "name phone");
+    .populate("shipperId", "name phone")
+    .lean();
 };
 
 export const findAll = async (filter = {}, { page, limit } = {}) => {
@@ -57,7 +59,8 @@ export const findAll = async (filter = {}, { page, limit } = {}) => {
     .populate("orderItems.product")
     .populate("restaurantId")
     .populate("branchId", "name code address phone")
-    .sort({ createdAt: -1 });
+    .sort({ createdAt: -1 })
+    .lean();
 
   if (page && limit) {
     const total = await Order.countDocuments(filter);

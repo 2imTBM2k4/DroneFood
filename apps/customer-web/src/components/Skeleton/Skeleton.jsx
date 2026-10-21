@@ -23,7 +23,6 @@ export const SkeletonRestaurantCard = () => (
     <div className="skeleton skeleton-card-image" />
     <div className="skeleton-card-body">
       <div className="skeleton skeleton-text" style={{ width: "60%", height: 20 }} />
-      <div className="skeleton skeleton-text" style={{ width: "85%" }} />
       <div className="skeleton skeleton-text" style={{ width: "45%" }} />
     </div>
   </div>

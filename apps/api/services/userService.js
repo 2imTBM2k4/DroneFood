@@ -66,7 +66,14 @@ export const loginUser = async ({ email, password, portal, clientType, ip }) => 
     throw error;
   }
 
-  const userRole = user.role || "user";
+  let userRole = user.role || "user";
+  if (userRole === "merchant_owner") {
+    const { Merchant } = await import("../models/index.cjs");
+    const merchant = await Merchant.findOne({ ownerUserId: user._id });
+    if (merchant && merchant.type !== "brand") {
+      userRole = "restaurant_owner";
+    }
+  }
   const targetPortal = portal || clientType;
   if (targetPortal) {
     if (targetPortal === "admin" && userRole !== "admin") {
@@ -289,6 +296,10 @@ export const getMe = async (userId) => {
     if (merchant) {
       userObj.restaurantId = (merchant.legacyRestaurantId || merchant._id).toString();
       userObj.merchantId = merchant._id.toString();
+      userObj.merchantType = merchant.type || "individual";
+      if (merchant.type !== "brand" && userObj.role === "merchant_owner") {
+        userObj.role = "restaurant_owner";
+      }
       const branches = await Branch.find({ merchantId: merchant._id }).select("_id");
       userObj.managedBranchIds = branches.map((b) => b._id.toString());
     }

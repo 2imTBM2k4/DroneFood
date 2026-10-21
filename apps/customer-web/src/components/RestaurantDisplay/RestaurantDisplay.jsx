@@ -43,6 +43,8 @@ const RestaurantDisplay = () => {
             <RestaurantItem
               id={item._id}
               name={item.name}
+              branchName={item.branchName}
+              isMultiBranch={item.isMultiBranch}
               address={item.address}
               phone={item.phone}
               image={item.image}

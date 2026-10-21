@@ -23,9 +23,11 @@ const List = ({ url }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [addOpen, setAddOpen] = useState(() => searchParams.get("add") === "1");
   const { user } = useContext(AuthContext);
-  const { currentBranch, selectedBranchId, branches } = useBranch();
+  const { currentBranch, selectedBranchId, branches, merchant } = useBranch();
   const navigate = useNavigate();
 
+  const merchantType = merchant?.type || user?.merchantType || "individual";
+  const isBrandOwner = (user?.role === "merchant_owner" || user?.role === "admin") && merchantType === "brand";
   const isBranchManager = user?.role === "branch_manager";
   const targetBranchId = isBranchManager
     ? currentBranch?._id || branches[0]?._id
@@ -226,8 +228,11 @@ const List = ({ url }) => {
             food._id === item._id ? { ...food, isAvailable: response.data.food.isAvailable } : food
           )
         );
+        const successMsg = isBrandOwner
+          ? (item.isAvailable === false ? "Món ăn đã bật bán toàn chuỗi" : "Món ăn đã chuyển sang hết hàng toàn chuỗi")
+          : (item.isAvailable === false ? "Món ăn đã bật bán" : "Món ăn đã chuyển sang hết hàng");
         notificationService.success(
-          item.isAvailable === false ? "Món ăn đã bật bán toàn chuỗi" : "Món ăn đã chuyển sang hết hàng toàn chuỗi",
+          successMsg,
           undefined,
           { audience: "restaurant", key: `food-avail-success-${item._id}` }
         );

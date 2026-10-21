@@ -4,6 +4,7 @@ import crypto from "crypto";
 import AppError from "../utils/AppError.js";
 import { recordAudit } from "../utils/auditLog.js";
 import * as orderService from "./orderService.js";
+import * as voucherRepo from "../repositories/voucherRepository.js";
 import { getShipperWalletSummary, requireShipperCanAcceptOrders, reserveCodLiability } from "./walletService.js";
 import { fetchLiveShipperRoute, shouldRefreshLiveRoute } from "./shipperRouteService.js";
 import { requireShipperWithinMetres } from "./shipperLocationVerificationService.js";
@@ -516,7 +517,14 @@ export const expireUnacceptedOrders = async () => {
         { _id: order._id, shipperAssignmentStatus: "unassigned", orderStatus: { $in: DISPATCHABLE_ORDER_STATUSES } },
         { $set: { orderStatus: "cancelled", shipperAssignmentStatus: "expired", cancellationCode: "NO_SHIPPER_AVAILABLE", reason: "No shipper accepted this order within 15 minutes.", ...refund } }
       );
-      cancelledCount += result.modifiedCount;
+      if (result.modifiedCount > 0) {
+        cancelledCount += result.modifiedCount;
+        try {
+          await voucherRepo.releaseForOrder(order._id, "order_cancelled");
+        } catch (voucherErr) {
+          console.error(`Could not release vouchers for expired order ${order._id}:`, voucherErr.message);
+        }
+      }
     } catch (error) {
       await Order.updateOne({ _id: order._id }, { $set: { refundStatus: "failed" } });
       console.error(`Could not expire order ${order._id}: ${error.message}`);

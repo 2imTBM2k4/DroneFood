@@ -397,6 +397,12 @@ const orderSchema = new mongoose.Schema(
 
 orderSchema.index({ pickupLocation: "2dsphere" });
 orderSchema.index({ deliveryMethod: 1, shipperAssignmentStatus: 1, shipperAssignmentDeadlineAt: 1 });
+orderSchema.index({ user: 1, createdAt: -1 });
+orderSchema.index({ branchId: 1, createdAt: -1 });
+orderSchema.index({ merchantId: 1, createdAt: -1 });
+orderSchema.index({ restaurantId: 1, createdAt: -1 });
+orderSchema.index({ orderStatus: 1, createdAt: -1 });
+orderSchema.index({ shipperId: 1, orderStatus: 1, createdAt: -1 });
 
 orderSchema.pre("validate", function (next) {
   if (!this.orderCode) {

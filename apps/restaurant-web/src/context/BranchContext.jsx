@@ -47,16 +47,23 @@ export const BranchProvider = ({ children }) => {
             localStorage.setItem("selectedBranchId", assignedBranch._id);
           }
         } else {
-          // Chủ sở hữu (merchant_owner / restaurant_owner)
-          const stored = localStorage.getItem("selectedBranchId");
-          if (stored && (stored === "all" || branchList.some((b) => b._id === stored))) {
-            setSelectedBranchIdState(stored);
-          } else if (branchList.length === 1) {
+          // Chủ sở hữu: phân biệt quán đơn lẻ vs chuỗi thương hiệu
+          const mType = (branchList.length > 0 && branchList[0].merchantId?.type) || user.merchantType || "individual";
+          const isBrand = mType === "brand" && branchList.length > 1;
+
+          if (!isBrand && branchList.length > 0) {
+            // Quán đơn lẻ chưa lên thương hiệu: luôn cố định tại chi nhánh duy nhất
             setSelectedBranchIdState(branchList[0]._id);
             localStorage.setItem("selectedBranchId", branchList[0]._id);
           } else {
-            setSelectedBranchIdState("all");
-            localStorage.setItem("selectedBranchId", "all");
+            // Chuỗi thương hiệu: mặc định xem toàn chuỗi hoặc chi nhánh đã chọn
+            const stored = localStorage.getItem("selectedBranchId");
+            if (stored && (stored === "all" || branchList.some((b) => b._id === stored))) {
+              setSelectedBranchIdState(stored);
+            } else {
+              setSelectedBranchIdState("all");
+              localStorage.setItem("selectedBranchId", "all");
+            }
           }
         }
       }

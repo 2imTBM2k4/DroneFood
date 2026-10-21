@@ -789,6 +789,16 @@ export const closeCargoLid = async (droneId, orderId) => {
     { status: "delivered", endTime: new Date() }
   );
 
+  try {
+    const { settleDeliveredOrder } = await import("./walletService.js");
+    await settleDeliveredOrder(orderId, {
+      deliveredAt: order.deliveredAt,
+      paidAt: order.paidAt,
+    });
+  } catch (settleErr) {
+    console.error(`Could not settle delivered drone order ${orderId}:`, settleErr.message);
+  }
+
   return {
     success: true,
     message: "Cargo lid closed and delivery completed successfully",
@@ -849,6 +859,16 @@ export const confirmDelivery = async (user, orderId) => {
         { status: "delivered", endTime: new Date() }
       );
     }
+  }
+
+  try {
+    const { settleDeliveredOrder } = await import("./walletService.js");
+    await settleDeliveredOrder(orderId, {
+      deliveredAt: order.deliveredAt,
+      paidAt: order.paidAt,
+    });
+  } catch (settleErr) {
+    console.error(`Could not settle delivered drone order ${orderId}:`, settleErr.message);
   }
 
   return {

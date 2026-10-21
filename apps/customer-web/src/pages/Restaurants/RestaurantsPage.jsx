@@ -97,6 +97,7 @@ const RestaurantsPage = () => {
     const matchesQuery =
       !query ||
       r.name?.toLowerCase().includes(query) ||
+      r.branchName?.toLowerCase().includes(query) ||
       r.address?.toLowerCase().includes(query) ||
       r.categories.some((c) => c.toLowerCase().includes(query));
     const matchesRating =
@@ -256,6 +257,8 @@ const RestaurantsPage = () => {
             <RestaurantItem
               id={item._id}
               name={item.name}
+              branchName={item.branchName}
+              isMultiBranch={item.isMultiBranch}
               address={item.address}
               phone={item.phone}
               image={item.image}

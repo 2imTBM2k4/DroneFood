@@ -16,10 +16,25 @@ import {
  * Without a saved location we fall back to the major cities.
  */
 export default function useNearbyRestaurants() {
-  const { restaurant_list, food_list, user, liveLocation, fees } =
+  const { restaurant_list, food_list, user, liveLocation, activeAddressId, fees } =
     useContext(StoreContext);
 
   const customer = useMemo(() => {
+    // 1. Prioritize active address selected by customer from navbar/addressBook
+    if (activeAddressId && Array.isArray(user?.addressBook)) {
+      const selected = user.addressBook.find(
+        (entry) => String(entry.id || entry._id) === String(activeAddressId)
+      );
+      if (
+        selected &&
+        typeof selected.lat === "number" &&
+        typeof selected.lng === "number"
+      ) {
+        return { lat: selected.lat, lng: selected.lng };
+      }
+    }
+
+    // 2. Real-time GPS location
     if (
       typeof liveLocation?.lat === "number" &&
       typeof liveLocation?.lng === "number"
@@ -27,11 +42,12 @@ export default function useNearbyRestaurants() {
       return { lat: liveLocation.lat, lng: liveLocation.lng };
     }
 
+    // 3. User default profile address
     const a = user?.address;
     return a && typeof a.lat === "number" && typeof a.lng === "number"
       ? { lat: a.lat, lng: a.lng }
       : null;
-  }, [liveLocation, user]);
+  }, [activeAddressId, liveLocation, user]);
 
   // restaurantId -> the categories that restaurant actually serves.
   const categoriesByRestaurant = useMemo(() => {
@@ -48,9 +64,46 @@ export default function useNearbyRestaurants() {
   const restaurants = useMemo(() => {
     const annotated = restaurant_list
       .map((r) => {
+        let targetCoords =
+          typeof r.lat === "number" && typeof r.lng === "number"
+            ? { lat: r.lat, lng: r.lng }
+            : null;
+        let selectedBranch = null;
+
+        const hasBranches =
+          (r.isMultiBranch || r.merchantType === "brand") &&
+          Array.isArray(r.branches) &&
+          r.branches.length > 0;
+
+        if (hasBranches) {
+          if (customer) {
+            let minDistance = Infinity;
+            for (const b of r.branches) {
+              const bLat = b.address?.lat ?? b.location?.coordinates?.[1];
+              const bLng = b.address?.lng ?? b.location?.coordinates?.[0];
+              if (typeof bLat === "number" && typeof bLng === "number") {
+                const dist = haversineKm(customer, { lat: bLat, lng: bLng });
+                if (dist < minDistance) {
+                  minDistance = dist;
+                  selectedBranch = b;
+                  targetCoords = { lat: bLat, lng: bLng };
+                }
+              }
+            }
+          }
+          if (!selectedBranch) {
+            selectedBranch = r.branches[0];
+            const bLat = selectedBranch?.address?.lat ?? selectedBranch?.location?.coordinates?.[1];
+            const bLng = selectedBranch?.address?.lng ?? selectedBranch?.location?.coordinates?.[0];
+            if (typeof bLat === "number" && typeof bLng === "number") {
+              targetCoords = { lat: bLat, lng: bLng };
+            }
+          }
+        }
+
         const distanceKm =
-          customer && typeof r.lat === "number" && typeof r.lng === "number"
-            ? haversineKm(customer, { lat: r.lat, lng: r.lng })
+          customer && targetCoords
+            ? haversineKm(customer, targetCoords)
             : null;
         const configuredDroneRate = fees?.rates?.droneRatePerKm;
         const estimatedDeliveryFee =
@@ -63,8 +116,21 @@ export default function useNearbyRestaurants() {
           Number.isFinite(rawRating) && rawRating >= 0 && rawRating <= 5
             ? rawRating
             : null;
+        const branchName = selectedBranch ? selectedBranch.name : null;
+        const isMultiBranch = Boolean(
+          r.isMultiBranch ||
+            (r.merchantType === "brand" && selectedBranch) ||
+            (Array.isArray(r.branches) && r.branches.length > 1)
+        );
+        const displayAddress =
+          (selectedBranch?.address?.text || selectedBranch?.address) || r.address;
+
         return {
           ...r,
+          isMultiBranch,
+          branchName,
+          selectedBranchId: selectedBranch?._id,
+          address: displayAddress,
           distanceKm,
           etaMin: estimateEtaMinutes(distanceKm),
           estimatedDeliveryFee,

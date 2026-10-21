@@ -132,6 +132,19 @@ const loadCheckoutCart = async (userId, cartId) => {
   if (restaurantId && lines.some((line) => line.foodId?.restaurantId && String(line.foodId.restaurantId) !== String(restaurantId))) {
     throw new AppError("Cart contains items from another restaurant", 409);
   }
+  for (const line of lines) {
+    const food = line.foodId;
+    if (food.isAvailable === false) {
+      throw new AppError(`Món "${food.name}" hiện đã hết hàng. Vui lòng cập nhật lại giỏ hàng.`, 409);
+    }
+    if (
+      branchId &&
+      Array.isArray(food.unavailableBranchIds) &&
+      food.unavailableBranchIds.some((id) => String(id) === String(branchId))
+    ) {
+      throw new AppError(`Món "${food.name}" hiện đang tạm hết tại chi nhánh này. Vui lòng cập nhật lại giỏ hàng.`, 409);
+    }
+  }
   return { cart, lines, restaurantId, branchId };
 };
 
@@ -719,6 +732,76 @@ export const verifyOrder = async (user, orderId) => {
   return { ...result, success: result.paid, message: "Paid", code: "PAYMENT_CONFIRMED" };
 };
 
+export const retryPayosPayment = async (user, orderId) => {
+  const order = await orderRepo.findById(orderId);
+  if (!order) throw new AppError("Order not found", 404);
+  if (String(order.user?._id || order.user) !== String(user._id)) {
+    throw new AppError("Unauthorized: Not your order", 403);
+  }
+  if (order.isPaid) {
+    throw new AppError("Order is already paid", 400);
+  }
+  if (order.paymentMethod !== "PAYOS" || order.orderStatus !== "pending_payment") {
+    throw new AppError("Only an unpaid PayOS order waiting for payment can be retried", 400);
+  }
+
+  const payos = payosConfig();
+  const nextOrderCode = newPayosOrderCode();
+
+  const claimedOrder = await orderRepo.claimPayosRetry({
+    orderId: order._id,
+    userId: user._id,
+    previousOrderCode: order.payosOrderCode,
+    previousPaymentLinkId: order.payosPaymentLinkId,
+    nextOrderCode,
+  });
+
+  if (!claimedOrder) {
+    throw new AppError("Another payment retry is in progress or order state changed. Please try again.", 409);
+  }
+
+  try {
+    const paymentLink = await payos.payOS.paymentRequests.create({
+      orderCode: nextOrderCode,
+      amount: Math.round(claimedOrder.totalPrice),
+      description: orderPaymentDescription(claimedOrder._id, claimedOrder.orderCode),
+      items: [
+        ...claimedOrder.orderItems.map((item) => ({
+          name: (item.name || "Food").slice(0, 50),
+          quantity: item.quantity,
+          price: Math.round(item.price),
+        })),
+        ...(claimedOrder.shippingPrice > 0 ? [{ name: "Phi giao hang", quantity: 1, price: Math.round(claimedOrder.shippingPrice) }] : []),
+        ...(claimedOrder.serviceFee > 0 ? [{ name: "Phi dich vu", quantity: 1, price: Math.round(claimedOrder.serviceFee) }] : []),
+      ],
+      returnUrl: withOrderId(payos.returnUrl, claimedOrder._id),
+      cancelUrl: withOrderId(payos.cancelUrl, claimedOrder._id),
+    });
+
+    await orderRepo.finishPayosRetry({
+      orderId: claimedOrder._id,
+      nextOrderCode,
+      paymentLinkId: paymentLink.paymentLinkId || paymentLink.id || null,
+    });
+
+    return {
+      success: true,
+      checkoutUrl: paymentLink.checkoutUrl,
+      paymentUrl: paymentLink.checkoutUrl,
+      orderId: claimedOrder._id,
+      orderCode: nextOrderCode,
+    };
+  } catch (error) {
+    await orderRepo.restorePayosRetry({
+      orderId: claimedOrder._id,
+      nextOrderCode,
+      previousOrderCode: order.payosOrderCode,
+      previousPaymentLinkId: order.payosPaymentLinkId,
+    });
+    throw new AppError(`Unable to create PayOS payment link: ${error.message}`, 502);
+  }
+};
+
 export const userOrders = async (userId) => {
   const orders = await orderRepo.findByUser(userId);
   const reviewFlows = await attachReviewFlows(orders);
@@ -875,7 +958,7 @@ export const listOrders = async (user, { page, limit, branchId, merchantId, rest
       merchantMatches.push({ restaurantId: merchant.legacyRestaurantId });
     }
     filter.$or = merchantMatches;
-    if (branchId) {
+    if (branchId && branchId !== "all") {
       const branchBelongs = await Branch.exists({ _id: branchId, merchantId: merchant._id });
       if (!branchBelongs) {
         throw new AppError("Chi nhánh không thuộc thương hiệu của bạn", 403);

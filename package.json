@@ -15,6 +15,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
+    "test:load": "node apps/api/scripts/load-test.mjs",
     "mobile:build": "npm run build --workspace=@drone-food/contracts && npm run build --workspace=@drone-food/api-client && npm run typecheck --workspace=@drone-food/customer-mobile && npm run typecheck --workspace=@drone-food/shipper-mobile && npm run typecheck --workspace=@drone-food/restaurant-mobile",
     "mobile:typecheck": "npm run mobile:build"
   },
@@ -24,6 +25,7 @@
     "trackasia-gl": "^2.0.1"
   },
   "devDependencies": {
+    "playwright": "^1.64.1",
     "typescript": "^5.7.3"
   }
 }

@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { Cart, Food } from "../models/index.cjs";
+import AppError from "../utils/AppError.js";
 
 const populateCart = (query) =>
   query
@@ -52,7 +53,7 @@ export const findOrCreateByBranch = async (userId, branchId, merchantId) => {
   }
 };
 
-export const mutateItems = async (cartId, userId, mutation, retries = 4) => {
+export const mutateItems = async (cartId, userId, mutation, retries = 6) => {
   for (let attempt = 0; attempt < retries; attempt += 1) {
     const cart = await Cart.findOne({ _id: cartId, userId });
     if (!cart) return null;
@@ -72,10 +73,18 @@ export const mutateItems = async (cartId, userId, mutation, retries = 4) => {
       await cart.save();
       return findByIdForUser(cart._id, userId);
     } catch (error) {
-      if (error?.name !== "VersionError" || attempt === retries - 1) throw error;
+      if (error?.name !== "VersionError" || attempt === retries - 1) {
+        if (error?.name === "VersionError") {
+          throw new AppError("Giỏ hàng đang được cập nhật đồng thời, vui lòng thử lại", 409);
+        }
+        throw error;
+      }
+      // Giãn cách ngẫu nhiên (jittered backoff) để giải tỏa tranh chấp ghi đồng thời
+      const delayMs = Math.floor(Math.random() * 25 + 15) * (attempt + 1);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   }
-  throw new Error("Cart changed too many times; please retry");
+  throw new AppError("Giỏ hàng đang được cập nhật đồng thời, vui lòng thử lại", 409);
 };
 
 export const deleteByIdForUser = async (cartId, userId) => {

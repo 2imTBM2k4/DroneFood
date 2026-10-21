@@ -234,6 +234,35 @@ describe("Order API", () => {
       expect((await Order.findById(order._id)).cartCleanupCompletedAt).toBeInstanceOf(Date);
     });
 
+    it("should reject order if an item in the cart is sold out before checkout", async () => {
+      const { restaurant } = await createRestaurantOwner();
+      const user = await createUser({ email: "soldout-order@test.com" });
+      const token = generateToken(user._id);
+      const food = await createFood(restaurant._id, { name: "Special Dish" });
+
+      const cart = await request(app)
+        .post("/api/cart/add")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ itemId: food._id.toString(), quantity: 1 });
+
+      food.isAvailable = false;
+      await food.save();
+
+      const res = await request(app)
+        .post("/api/order/place")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          address: ADDRESS,
+          cartId: cart.body.cartId,
+          cartVersion: cart.body.cartVersion,
+          paymentMethod: "COD",
+          deliveryMethod: "shipper",
+        });
+
+      expect(res.status).toBe(409);
+      expect(res.body.message).toContain("hết hàng");
+    });
+
     it("should reject order without address", async () => {
       const user = await createUser({ email: "noaddr@test.com" });
       const token = generateToken(user._id);

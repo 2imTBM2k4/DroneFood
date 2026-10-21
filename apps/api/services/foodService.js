@@ -46,6 +46,9 @@ export const addFood = async (user, foodData, file) => {
   const result = await cloudinary.uploader.upload(file.path, {
     folder: "foods",
     resource_type: "image",
+    transformation: [
+      { width: 800, height: 800, crop: "limit", quality: "auto", fetch_format: "auto" },
+    ],
   });
   imageUrl = result.secure_url;
   fs.unlinkSync(file.path);
@@ -270,6 +273,9 @@ export const updateFood = async (user, updates, file) => {
     const result = await cloudinary.uploader.upload(file.path, {
       folder: "foods",
       resource_type: "image",
+      transformation: [
+        { width: 800, height: 800, crop: "limit", quality: "auto", fetch_format: "auto" },
+      ],
     });
     updateData.image = result.secure_url;
     fs.unlinkSync(file.path);

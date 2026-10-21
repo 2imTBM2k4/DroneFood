@@ -158,10 +158,11 @@ export const customerOrderDetail = async (req, res) => {
 export const listOrders = async (req, res) => {
   try {
     const { page, limit, branchId, merchantId, restaurantId } = req.query;
+    const cleanBranchId = branchId && branchId !== "all" ? branchId : undefined;
     const pagination = {
       ...(page && { page: parseInt(page, 10) }),
       ...(limit && { limit: parseInt(limit, 10) }),
-      branchId,
+      branchId: cleanBranchId,
       merchantId,
       restaurantId,
     };
