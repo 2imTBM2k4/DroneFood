@@ -807,10 +807,13 @@ export const userOrders = async (userId) => {
   const reviewFlows = await attachReviewFlows(orders);
   return {
     success: true,
-    data: orders.map((order, index) => ({
-      ...order.toObject(),
-      reviewFlow: reviewFlows[index],
-    })),
+    data: orders.map((order, index) => {
+      const raw = typeof order.toObject === "function" ? order.toObject() : order;
+      return {
+        ...raw,
+        reviewFlow: reviewFlows[index],
+      };
+    }),
   };
 };
 

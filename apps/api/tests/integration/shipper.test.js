@@ -11,7 +11,7 @@ vi.mock("../../services/shipperRouteService.js", () => ({
 }));
 
 import { Order, ShipperProfile, ShipperDeposit } from "../../models/index.cjs";
-import { createRestaurantOwner, createUser } from "../helpers.js";
+import { createAdmin, createRestaurantOwner, createUser } from "../helpers.js";
 import * as shipperService from "../../services/shipperService.js";
 import * as orderService from "../../services/orderService.js";
 
@@ -267,22 +267,24 @@ describe("Shipper dispatch", () => {
   });
 
   it("releases reserved vouchers when an unaccepted COD order expires", async () => {
+    const admin = await createAdmin();
     const { restaurant } = await createRestaurantOwner();
     const customer = await createUser({ email: "customer-voucher-expire@test.com" });
     const { Voucher, VoucherRedemption } = await import("../../models/index.cjs");
     const voucher = await Voucher.create({
       code: "TESTEXPIRE10",
-      description: "Test voucher",
-      discountType: "percentage",
-      discountValue: 10,
-      minOrderValue: 0,
+      kind: "percent",
+      value: 10,
+      appliesTo: "items_subtotal",
+      minOrderAmount: 0,
       maxDiscountAmount: 50000,
-      usageLimit: 1,
-      usedCount: 1,
-      target: "food",
+      startsAt: new Date(Date.now() - 3600000),
+      endsAt: new Date(Date.now() + 3600000),
+      totalQuota: 10,
+      perUserQuota: 1,
+      usageCount: 1,
       enabled: true,
-      validFrom: new Date(Date.now() - 3600000),
-      validTo: new Date(Date.now() + 3600000),
+      createdBy: admin._id,
     });
     const overdue = await makeOrder(customer._id, restaurant._id, {
       paymentMethod: "COD",
@@ -303,7 +305,7 @@ describe("Shipper dispatch", () => {
     const redemption = await VoucherRedemption.findOne({ order: overdue._id });
     expect(redemption.status).toBe("released");
     const updatedVoucher = await Voucher.findById(voucher._id);
-    expect(updatedVoucher.usedCount).toBe(0);
+    expect(updatedVoucher.usageCount).toBe(0);
   });
 
   it("keeps a paid PayOS order pending and lets its customer continue searching after timeout", async () => {
