@@ -180,6 +180,7 @@ export type ShipperTracking = {
 
 export type Order = {
   _id: string;
+  orderCode?: number | string;
   orderStatus: OrderStatus;
   totalPrice: number;
   itemsPrice?: number;

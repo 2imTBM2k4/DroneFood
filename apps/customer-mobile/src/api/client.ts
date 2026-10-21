@@ -381,6 +381,7 @@ export const orderApi = {
     const res = await api.post<{
       success: boolean;
       orderId: string;
+      orderCode?: number | string;
       checkoutUrl?: string;
       paymentUrl?: string;
       totalPrice: number;

@@ -68,6 +68,7 @@ export type OrderItem = {
 
 export type Order = {
   _id: string;
+  orderCode?: number | string;
   orderStatus: OrderStatus;
   deliveryMethod: DeliveryMethod;
   totalPrice: number;

@@ -17,8 +17,11 @@ export const cacheMiddleware = (ttlSeconds = 30) => {
   const ttlMs = ttlSeconds * 1000;
 
   return (req, res, next) => {
-    // Only cache GET requests
-    if (req.method !== "GET") return next();
+    // Only cache GET requests and skip in test environment
+    if (req.method !== "GET" || process.env.NODE_ENV === "test") return next();
+
+    // Skip cache for authenticated requests as results may be user-specific
+    if (req.headers.authorization || req.headers.token) return next();
 
     // Skip cache if explicitly requested via headers (e.g., Cache-Control: no-cache)
     if (req.headers["cache-control"] === "no-cache") {

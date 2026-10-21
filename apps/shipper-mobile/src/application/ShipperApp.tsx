@@ -139,7 +139,7 @@ type EarningsReport = {
   monthly: { period: string; amount: number; deliveries: number }[];
 };
 type Order = {
-  _id: string; orderStatus: "pending" | "preparing" | "delivering" | "arrived_at_delivery" | "delivered" | "cancelled";
+  _id: string; orderCode?: number | string; orderStatus: "pending" | "preparing" | "delivering" | "arrived_at_delivery" | "delivered" | "cancelled";
   totalPrice: number; shippingPrice: number; paymentMethod: "COD" | "VNPAY" | "PAYOS"; createdAt: string; deliveryMethod: "shipper";
   deliveredAt?: string; updatedAt?: string;
   shippingAddress: { fullName?: string; address?: string; city?: string; state?: string; phone?: string; lat?: number; lng?: number };

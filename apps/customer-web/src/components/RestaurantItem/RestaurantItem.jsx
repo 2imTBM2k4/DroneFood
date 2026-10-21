@@ -9,7 +9,6 @@ import { formatDistance } from '../../lib/distance';
 const RestaurantItem = ({
   id,
   name,
-  address,
   image,
   distanceKm,
   etaMin,
